@@ -37,4 +37,25 @@ snes9x2005_plus_FLAGS = USE_BLARGG_APU=1
 
 ###############################
 
+# pinned upstream commits
+# each is the commit the matching core in MinUI-20251127-1 was built from
+# (see that release's .system/commits.txt, ten of them are also embedded in the .so)
+# the patches in ./patches apply to these, not to upstream HEAD
+
+fceumm_HASH = 449db5d
+gambatte_HASH = 9d92381
+gpsp_HASH = 36061ca
+pcsx_rearmed_HASH = 92bb759
+picodrive_HASH = b0be121
+snes9x2005_plus_HASH = 74d871d
+mednafen_pce_fast_HASH = 931586f
+mednafen_vb_HASH = 8f837eb
+mednafen_supafaust_HASH = e25f667
+mgba_HASH = 747362c
+race_HASH = 171950e
+pokemini_HASH = 78656d4
+fake-08_HASH = 0d26fd5
+
+###############################
+
 include ../../all/cores/makefile

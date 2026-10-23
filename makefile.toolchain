@@ -6,6 +6,9 @@ ifeq (,$(PLATFORM))
 $(error please specify PLATFORM, eg. make PLATFORM=trimui)
 endif
 
+# pinned toolchain commits, from the release's .system/commits.txt
+rgb30_TOOLCHAIN_HASH = b18a2fa
+
 HOST_WORKSPACE=$(shell pwd)/workspace
 GUEST_WORKSPACE=/root/workspace
 
@@ -21,6 +24,7 @@ $(INIT_IF_NECESSARY): $(GIT_IF_NECESSARY)
 $(GIT_IF_NECESSARY):
 	mkdir -p toolchains
 	git clone https://github.com/shauninman/union-$(PLATFORM)-toolchain/ toolchains/$(PLATFORM)-toolchain
+	$(if $($(PLATFORM)_TOOLCHAIN_HASH),cd toolchains/$(PLATFORM)-toolchain && git checkout $($(PLATFORM)_TOOLCHAIN_HASH))
 
 clean:
 	cd toolchains/$(PLATFORM)-toolchain && make clean

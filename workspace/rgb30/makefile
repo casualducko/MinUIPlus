@@ -27,7 +27,7 @@ clean:
 ###########################################################
 
 $(REQUIRES_COMMANDER):
-	git clone --depth 1 --branch minui-rgb30 https://github.com/shauninman/DinguxCommander.git $(REQUIRES_COMMANDER)
+	git clone --branch minui-rgb30 https://github.com/shauninman/DinguxCommander.git $(REQUIRES_COMMANDER) && cd $(REQUIRES_COMMANDER) && git checkout b60f06a
 
 $(REQUIRES_SDLCOMPAT):
 	git clone --depth 1 --branch minui-rgb30 https://github.com/shauninman/sdl12-compat.git $(REQUIRES_SDLCOMPAT)
