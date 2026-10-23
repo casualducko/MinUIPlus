@@ -69,10 +69,10 @@ static struct Core {
 	int initialized;
 	int need_fullpath;
 	
-	const char tag[8]; // eg. GBC
+	const char tag[64]; // eg. GBC (it is the part of a Roms folder name in parentheses, so anything)
 	const char name[128]; // eg. gambatte
 	const char version[128]; // eg. Gambatte (v0.5.0-netlink 7e02df6)
-	const char extensions[128]; // eg. gb|gbc|dmg
+	const char extensions[512]; // eg. gb|gbc|dmg (some cores list dozens)
 	
 	const char config_dir[MAX_PATH]; // eg. /mnt/sdcard/.userdata/rg35xx/GB-gambatte
 	const char states_dir[MAX_PATH]; // eg. /mnt/sdcard/.userdata/arm-480/GB-gambatte
@@ -206,10 +206,10 @@ static void Game_open(char* path) {
 		int supports_zip = 0;
 		int i = 0;
 		char* ext;
-		char exts[128];
-		char* extensions[32];
-		strcpy(exts,core.extensions);
-		while ((ext=strtok(i?NULL:exts,"|"))) {
+		char exts[sizeof(core.extensions)];
+		char* extensions[64];
+		snprintf(exts, sizeof(exts), "%s", core.extensions);
+		while (i<(int)(sizeof(extensions)/sizeof(*extensions))-1 && (ext=strtok(i?NULL:exts,"|"))) {
 			extensions[i++] = ext;
 			if (!strcmp("zip", ext)) {
 				supports_zip = 1;
@@ -232,7 +232,7 @@ static void Game_open(char* path) {
 			uint16_t len = 0;
 			char filename[MAX_PATH];
 			uint32_t compressed_size = 0;
-			char extension[8];
+			char extension[64];
 			while (1) {
 				if (next) fseek(zip, next, SEEK_CUR);
 				
@@ -254,7 +254,7 @@ static void Game_open(char* path) {
 				
 				int found = 0;
 				for (i=0; extensions[i]; i++) {
-					sprintf(extension, ".%s", extensions[i]);
+					snprintf(extension, sizeof(extension), ".%s", extensions[i]);
 					if (suffixMatch(extension, filename)) {
 						
 						found = 1;
@@ -2914,10 +2914,10 @@ static size_t audio_sample_batch_callback(const int16_t *data, size_t frames) {
 
 ///////////////////////////////////////
 
-void Core_getName(char* in_name, char* out_name) {
-	strcpy(out_name, basename(in_name));
-	char* tmp = strrchr(out_name, '_');
-	tmp[0] = '\0';
+void Core_getName(char* in_name, char* out_name) { // NOTE: out_name is core.name
+	snprintf(out_name, sizeof(core.name), "%s", basename(in_name));
+	char* tmp = strrchr(out_name, '_'); // eg. gambatte_libretro.so
+	if (tmp) tmp[0] = '\0';
 }
 void Core_open(const char* core_path, const char* tag_name) {
 	LOG_info("Core_open\n");
@@ -2960,9 +2960,9 @@ void Core_open(const char* core_path, const char* tag_name) {
 	core.get_system_info(&info);
 	
 	Core_getName((char*)core_path, (char*)core.name);
-	sprintf((char*)core.version, "%s (%s)", info.library_name, info.library_version);
-	strcpy((char*)core.tag, tag_name);
-	strcpy((char*)core.extensions, info.valid_extensions);
+	snprintf((char*)core.version, sizeof(core.version), "%s (%s)", info.library_name, info.library_version);
+	snprintf((char*)core.tag, sizeof(core.tag), "%s", tag_name);
+	snprintf((char*)core.extensions, sizeof(core.extensions), "%s", info.valid_extensions ? info.valid_extensions : "");
 	
 	core.need_fullpath = info.need_fullpath;
 	
@@ -4729,6 +4729,11 @@ static void* coreThread(void *arg) {
 
 int main(int argc , char* argv[]) {
 	LOG_info("MinArch\n");
+	
+	if (argc<3) { // started by hand, the emu paks always pass the core and the rom
+		fprintf(stderr, "usage: minarch.elf CORE.so ROM\n");
+		return 1;
+	}
 
 	setOverclock(overclock); // default to normal
 	// force a stack overflow to ensure asan is linked and actually working
