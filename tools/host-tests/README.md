@@ -15,6 +15,7 @@ device.
 | `test_emuname.c` | `getEmuName()` no longer crashes on a folder name with an unclosed `(` |
 | `test_underrun.c` | audio underrun fill keeps left/right together; counters |
 | `test_truncate.c` | `GFX_truncateText()` underflow and UTF-8 cuts, `GFX_truncateUniqueText()` keeps the alt tag |
+| `test_wraptext.c` | `GFX_wrapText()` still wraps normal text exactly as the original (golden file) and survives a too-wide first word |
 | `test_blitmessage.c` | `GFX_blitMessage()` with a 1000 character row, 20 rows, a failed render |
 | `test_inputclaim.c` | minarch: MENU+button claims its button |
 

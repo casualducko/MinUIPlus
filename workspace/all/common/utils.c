@@ -168,12 +168,15 @@ char* allocFile(char* path) { // caller must free!
 	FILE *file = fopen(path, "r");
 	if (file) {
 		fseek(file, 0L, SEEK_END);
-		size_t size = ftell(file);
+		long end = ftell(file); // -1 if this isn't a regular file
+		size_t size = end<0 ? 0 : end;
 		contents = calloc(size+1, sizeof(char));
-		fseek(file, 0L, SEEK_SET);
-		fread(contents, sizeof(char), size, file);
+		if (contents) {
+			fseek(file, 0L, SEEK_SET);
+			size = fread(contents, sizeof(char), size, file);
+			contents[size] = '\0';
+		}
 		fclose(file);
-		contents[size] = '\0';
 	}
 	return contents;
 }

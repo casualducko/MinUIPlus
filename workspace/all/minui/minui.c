@@ -593,6 +593,7 @@ static int hasCollections(void) {
 	if (!exists(COLLECTIONS_PATH)) return has;
 	
 	DIR *dh = opendir(COLLECTIONS_PATH);
+	if (!dh) return has; // exists but isn't a readable folder
 	struct dirent *dp;
 	while((dp = readdir(dh)) != NULL) {
 		if (hide(dp->d_name)) continue;

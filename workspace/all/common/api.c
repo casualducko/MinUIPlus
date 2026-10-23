@@ -301,7 +301,7 @@ int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines) {
 		
 		TTF_SizeUTF8(font, line, &line_width, NULL);
 
-		if (line_width>=max_width) { // wrap
+		if (line_width>=max_width && prev) { // wrap (a first word that is too wide has no earlier space to wrap at)
 			if (line_width>max_line_width) max_line_width = line_width;
 			tmp[0] = ' ';
 			tmp += 1;
