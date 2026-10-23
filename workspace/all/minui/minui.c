@@ -378,7 +378,7 @@ static Recent* Recent_new(char* path, char* alias) {
 	Recent* self = malloc(sizeof(Recent));
 
 	char sd_path[MAX_PATH]; // only need to get emu name
-	sprintf(sd_path, "%s%s", SDCARD_PATH, path);
+	snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, path); // path might come from a file, a too long one just won't exist
 
 	char emu_name[MAX_PATH];
 	getEmuName(sd_path, emu_name);
@@ -548,7 +548,7 @@ static int hasRecents(void) {
 			}
 			
 			char sd_path[MAX_PATH];
-			sprintf(sd_path, "%s%s", SDCARD_PATH, path);
+			snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, path); // path might come from a file, a too long one just won't exist
 			if (exists(sd_path)) {
 				if (recents->count<MAX_RECENTS) {
 					// this logic replaces an existing disc from a multi-disc game with the last used
@@ -750,7 +750,7 @@ static Array* getRecents(void) {
 		if (!recent->available) continue;
 		
 		char sd_path[MAX_PATH];
-		sprintf(sd_path, "%s%s", SDCARD_PATH, recent->path);
+		snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, recent->path);
 		int type = suffixMatch(".pak", sd_path) ? ENTRY_PAK : ENTRY_ROM; // ???
 		Entry* entry = Entry_new(sd_path, type);
 		if (recent->alias) {
@@ -772,7 +772,7 @@ static Array* getCollection(char* path) {
 			if (strlen(line)==0) continue; // skip empty lines
 			
 			char sd_path[MAX_PATH];
-			sprintf(sd_path, "%s%s", SDCARD_PATH, line);
+			snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, line);
 			if (exists(sd_path)) {
 				int type = suffixMatch(".pak", sd_path) ? ENTRY_PAK : ENTRY_ROM; // ???
 				Array_push(entries, Entry_new(sd_path, type));
@@ -810,7 +810,7 @@ static Array* getDiscs(char* path){
 			if (strlen(line)==0) continue; // skip empty lines
 			
 			char disc_path[MAX_PATH];
-			sprintf(disc_path, "%s%s", base_path, line);
+			snprintf(disc_path, sizeof(disc_path), "%s%s", base_path, line);
 						
 			if (exists(disc_path)) {
 				disc += 1;
@@ -842,7 +842,7 @@ static int getFirstDisc(char* m3u_path, char* disc_path) { // based on getDiscs(
 			trimTrailingNewlines(line);
 			if (strlen(line)==0) continue; // skip empty lines
 			
-			sprintf(disc_path, "%s%s", base_path, line);
+			snprintf(disc_path, sizeof(disc_path), "%s%s", base_path, line);
 						
 			if (exists(disc_path)) found = 1;
 			break;
@@ -1040,7 +1040,7 @@ static int autoResume(void) {
 	
 	// make sure rom still exists
 	char sd_path[MAX_PATH];
-	sprintf(sd_path, "%s%s", SDCARD_PATH, path);
+	snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, path); // path might come from a file, a too long one just won't exist
 	if (!exists(sd_path)) return 0;
 	
 	// make sure emu still exists

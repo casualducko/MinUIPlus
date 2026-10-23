@@ -33,6 +33,14 @@ titles with long names, a 200 character file name, an accented name, an empty
 folder. The folder layout is `Roms/<System> (TAG)/` and an emu pak exists for
 `SFC`, `GB`, `GBC` and `FC` only.
 
+## Stress card
+
+`make-stress-card.sh CARD` adds 3000 ROMs, a malformed `map.txt`, garbage collection files and a
+corrupt `recent.txt` to a card from `make-card.sh`. `run.sh` clears `recent.txt` before each run, so
+to test with it run the binary `run.sh` built (`$WORK/minui`) directly with `SDL_VIDEODRIVER=dummy
+SDL_AUDIODRIVER=dummy HP_OUT=dir HP_SCRIPT=...` from `$WORK`. It found an overflow when a line
+read from `recent.txt` was longer than the path buffer.
+
 ## Gotchas
 
 - AddressSanitizer binaries that link Homebrew's SDL2 hang at startup on at least
