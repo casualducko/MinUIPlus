@@ -965,6 +965,17 @@ static struct SND_Context {
 	
 	SND_Resampler resample;
 	int drc_rate_in; // sample_rate_in nudged by how full the buffer is, see SND_updateRate()
+	int drc_enabled; // off if USERDATA_PATH has a "no-audio-rate-control" file
+	
+	// more diagnostics, logged every few seconds and on exit
+	int peak_in;			// loudest sample written to the buffer since the last log line
+	int peak_out;			// loudest sample the callback took out of it (written by the audio thread)
+	int drc_rate_min;
+	int drc_rate_max;
+	int fill_max;
+	unsigned frames_offered;	// frames the core has handed us
+	unsigned frames_written;	// frames put in the buffer (a bit more or less after rate control)
+	unsigned log_at;			// frames_offered at the last log line
 	
 	// diagnostics, only written by the audio callback and read after audio is closed
 	unsigned callbacks;			// times the callback ran
@@ -987,6 +998,7 @@ static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // pla
 	while (snd.frame_out!=snd.frame_in && len>0) {
 		*out++ = snd.buffer[snd.frame_out].left;
 		*out++ = snd.buffer[snd.frame_out].right;
+		{ int p = abs(snd.buffer[snd.frame_out].left); int q = abs(snd.buffer[snd.frame_out].right); if (q>p) p = q; if (p>snd.peak_out) snd.peak_out = p; }
 		
 		snd.frame_filled = snd.frame_out;
 		
@@ -1054,6 +1066,8 @@ static int SND_resampleNear(SND_Frame frame) { // audio_resample_nearest
 	int consumed = 0;
 
 	if (diff < snd.sample_rate_out) {
+		{ int p = abs(frame.left); int q = abs(frame.right); if (q>p) p = q; if (p>snd.peak_in) snd.peak_in = p; }
+		snd.frames_written++;
 		snd.buffer[snd.frame_in++] = frame;
 		if (snd.frame_in >= snd.frame_count) snd.frame_in = 0;
 		diff += snd.drc_rate_in;
@@ -1081,6 +1095,8 @@ static void SND_selectResampler(void) { // plat_sound_select_resampler
 #define DRC_MAX_DELTA 0.01
 #define DRC_TARGET_DIVISOR 4 // aim for a quarter of the buffer (~1000 frames, 21ms at 48kHz)
 static void SND_updateRate(void) {
+	if (!snd.drc_enabled) { snd.drc_rate_in = snd.sample_rate_in; return; }
+	
 	int fill = snd.frame_in - snd.frame_out;
 	if (fill<0) fill += snd.frame_count;
 	int target = snd.frame_count / DRC_TARGET_DIVISOR;
@@ -1092,6 +1108,9 @@ static void SND_updateRate(void) {
 	
 	// the less input per output frame, the more output frames we make
 	snd.drc_rate_in = snd.sample_rate_in * (1.0 - error * DRC_MAX_DELTA);
+	if (snd.drc_rate_in<snd.drc_rate_min) snd.drc_rate_min = snd.drc_rate_in;
+	if (snd.drc_rate_in>snd.drc_rate_max) snd.drc_rate_max = snd.drc_rate_in;
+	if (fill>snd.fill_max) snd.fill_max = fill;
 }
 size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_sound_write / plat_sound_write_resample
 	
@@ -1102,6 +1121,7 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 	// LOG_info("%8i batching samples (%i frames)\n", ms(), frame_count);
 	
 	SDL_LockAudio();
+	snd.frames_offered += frame_count;
 
 	int consumed = 0;
 	int consumed_frames = 0;
@@ -1126,6 +1146,12 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 			frame_count -= consumed_frames;
 			consumed += consumed_frames;
 		}
+	}
+	if (snd.frames_offered - snd.log_at >= 5u * snd.sample_rate_in) {
+		snd.log_at = snd.frames_offered;
+		int fill = snd.frame_in - snd.frame_out; if (fill<0) fill += snd.frame_count;
+		LOG_info("audio: fill %i (max %i) rate %i..%i of %i, loudest in %i out %i, callbacks %u starved %u underruns %u\n", fill, snd.fill_max, snd.drc_rate_min, snd.drc_rate_max, snd.sample_rate_in, snd.peak_in, snd.peak_out, snd.callbacks, snd.starved, snd.underruns);
+		snd.peak_in = snd.peak_out = 0;
 	}
 	SDL_UnlockAudio();
 	
@@ -1163,12 +1189,15 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	snd.sample_rate_in  = sample_rate;
 	snd.sample_rate_out = spec_out.freq;
 	
+	snd.drc_enabled = !exists(USERDATA_PATH "/no-audio-rate-control");
+	snd.drc_rate_min = snd.drc_rate_max = snd.sample_rate_in;
 	SND_selectResampler();
 	SND_resizeBuffer();
 	
 	SDL_PauseAudio(0);
 
 	LOG_info("sample rate: %i (req) %i (rec) [samples %i]\n", snd.sample_rate_in, snd.sample_rate_out, SAMPLES);
+	LOG_info("audio rate control: %s\n", snd.drc_enabled ? "on" : "off (no-audio-rate-control)");
 	snd.initialized = 1;
 }
 void SND_quit(void) { // plat_sound_finish
@@ -1178,6 +1207,7 @@ void SND_quit(void) { // plat_sound_finish
 	SDL_CloseAudio();
 	
 	LOG_info("audio: %u callbacks, %u starved (buffer empty), %u underruns (%u frames short)\n", snd.callbacks, snd.starved, snd.underruns, snd.underrun_frames);
+	LOG_info("audio: %u frames from the core, %u written (rate control %+i)\n", snd.frames_offered, snd.frames_written, (int)snd.frames_written - (int)snd.frames_offered);
 	
 	if (snd.buffer) {
 		free(snd.buffer);

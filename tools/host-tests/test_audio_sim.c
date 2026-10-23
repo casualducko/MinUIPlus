@@ -33,6 +33,7 @@ static void advance(double dt_us) {
 }
 static void SDL_Delay(unsigned ms) { advance(ms*1000.0); }
 
+static int single_frame_calls; // some cores push one frame at a time (audio_sample_callback)
 typedef struct { unsigned callbacks, starved, underruns, short_frames; double avg_fill; double pitch; } Result;
 
 // core_fps: what the core says it runs at (audio per frame = 48000/core_fps)
@@ -42,6 +43,8 @@ static Result simulate(double core_fps, double pace_fps, double seconds) {
 	snd.frame_rate = core_fps;
 	snd.sample_rate_in = snd.sample_rate_out = 48000;
 	snd.buffer_seconds = 5;
+	snd.drc_enabled = 1; // what SND_init does unless the no-audio-rate-control file exists
+	snd.drc_rate_min = snd.drc_rate_max = snd.sample_rate_in;
 	SND_selectResampler();
 	SND_resizeBuffer();
 	snd.initialized = 1;
@@ -56,7 +59,8 @@ static Result simulate(double core_fps, double pace_fps, double seconds) {
 		for (int i=0;i<n;i++) { chunk[i].left = (int16_t)(8000*sin(frames*0.05)); chunk[i].right = chunk[i].left; frames++; }
 		int fill = snd.frame_in - snd.frame_out; if (fill<0) fill += snd.frame_count;
 		fill_sum += fill; fill_n++;
-		SND_batchSamples(chunk, n);
+		if (single_frame_calls) for (int i=0;i<n;i++) SND_batchSamples(&chunk[i], 1);
+		else SND_batchSamples(chunk, n);
 		t += frame_us;
 	}
 	free(chunk);
@@ -69,10 +73,13 @@ static int fails = 0;
 #define CHECK(c,m) do { int ok=(c); printf("%s  %s\n", ok?"ok  ":"FAIL", m); if(!ok) fails++; } while(0)
 int main(int argc, char** argv) {
 	if (argc>1 && !strcmp(argv[1],"report")) {
-		printf("core fps  paced at  underruns/callbacks   frames short   avg fill  speed\n");
+		for (int mode=0; mode<2; mode++) {
+		single_frame_calls = mode;
+		printf("%s\ncore fps  paced at  underruns/callbacks   frames short   avg fill  speed\n", mode ? "one frame per call:" : "whole batches:");
 		double pairs[][2] = {{60.0988,60.0},{60.0988,59.87},{60.0988,60.2},{59.7275,60.0},{50.0,50.0},{60.0988,60.0988}};
 		for (int i=0;i<6;i++) { Result r = simulate(pairs[i][0],pairs[i][1],60);
 			printf("%8.4f  %8.4f   %6u / %-6u (%4.1f%%)  %8u   %6.0f   %.4f\n", pairs[i][0], pairs[i][1], r.underruns, r.callbacks, 100.0*r.underruns/r.callbacks, r.short_frames, r.avg_fill, r.pitch); }
+		}
 		return 0;
 	}
 	// what your device logged for NES: 8465 callbacks, 169 starved, 2759 underruns, 5468 frames short
@@ -82,6 +89,11 @@ int main(int argc, char** argv) {
 	CHECK(r.short_frames < 400, "NES: very few frames of audio are missing");
 	CHECK(fabs(r.pitch-1.0) < 0.005, "NES: the audio is stretched by well under 0.5%");
 	CHECK(r.avg_fill < 2000, "NES: the buffer stays shallow (under ~40ms of added latency)");
+
+	single_frame_calls = 1;
+	r = simulate(60.0988, 60.0, 60);
+	CHECK(r.underruns < r.callbacks/200 && fabs(r.pitch-1.0) < 0.005, "NES with a core that pushes one frame per call: no underruns, small stretch");
+	single_frame_calls = 0;
 
 	r = simulate(59.7275, 60.0, 60);
 	CHECK(r.underruns < 10, "Game Boy (core slower than the pacing): still no underruns");

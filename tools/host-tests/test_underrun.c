@@ -9,6 +9,7 @@ static struct {
 	size_t frame_count; int frame_in, frame_out, frame_filled;
 	SND_Frame* buffer;
 	unsigned callbacks, starved, underruns, underrun_frames;
+	int peak_out;
 } snd;
 #define LOG_info(...)
 #include "gen/SND_audioCallback.inc"
