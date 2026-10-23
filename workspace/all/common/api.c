@@ -1099,7 +1099,8 @@ static void SND_selectResampler(void) { // plat_sound_select_resampler
 // resampled at by how full the buffer is (at most MAX_DELTA either way, 1% is
 // inaudible) which keeps the buffer around its target instead.
 #define DRC_MAX_DELTA 0.01
-#define DRC_TARGET_DIVISOR 4 // aim for a quarter of the buffer (~1000 frames, 21ms at 48kHz)
+#define DRC_TARGET_DIVISOR 3 // aim for a third of the buffer (~1330 frames, 28ms at 48kHz): with a quarter
+	// a late frame still ran the buffer dry now and then, and the rate swung back and forth more
 static void SND_updateRate(void) {
 	if (!snd.drc_enabled) { snd.drc_rate_in = snd.sample_rate_in; return; }
 	

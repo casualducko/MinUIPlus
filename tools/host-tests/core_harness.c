@@ -100,7 +100,18 @@ int main(int argc, char** argv) {
 	pthread_t th; pthread_create(&th, NULL, audio_thread, NULL);
 	double t = now_ns(), frame_ns = 1e9/pace_fps;
 	long frames = (long)(seconds*pace_fps);
-	for (frame_no=0; frame_no<frames; frame_no++) { run(); t += frame_ns; sleep_until(t); }
+	// JITTER_MS: each frame is up to this many ms late (the device's frame pacing is not
+	// exact); HICCUP_MS and HICCUP_PER_1000: now and then a frame is much later
+	double jitter_ns = getenv("JITTER_MS") ? atof(getenv("JITTER_MS"))*1e6 : 0;
+	double hiccup_ns = getenv("HICCUP_MS") ? atof(getenv("HICCUP_MS"))*1e6 : 0;
+	int hiccup_per_1000 = getenv("HICCUP_PER_1000") ? atoi(getenv("HICCUP_PER_1000")) : 0;
+	srand(1);
+	for (frame_no=0; frame_no<frames; frame_no++) {
+		run(); t += frame_ns;
+		double late = jitter_ns * (rand()/(double)RAND_MAX);
+		if (hiccup_per_1000 && rand()%1000 < hiccup_per_1000) late += hiccup_ns;
+		sleep_until(t + late); // the schedule itself does not drift, only this frame
+	}
 	running = 0; pthread_join(th, NULL);
 
 	printf("callbacks %u, starved %u, underruns %u (%u frames short)\n", snd.callbacks, snd.starved, snd.underruns, snd.underrun_frames);
