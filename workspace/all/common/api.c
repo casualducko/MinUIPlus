@@ -656,7 +656,7 @@ void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_
 	char* tmp;
 	rows[row_count++] = msg;
 	while ((tmp=strchr(rows[row_count-1], '\n'))!=NULL) {
-		if (row_count+1>=TEXT_BOX_MAX_ROWS) return; // TODO: bail
+		if (row_count>=TEXT_BOX_MAX_ROWS) break; // too many rows, draw the ones that fit
 		rows[row_count++] = tmp+1;
 	}
 	
@@ -666,24 +666,22 @@ void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_
 	
 	char line[256];
 	for (int i=0; i<row_count; i++) {
-		int len;
-		if (i+1<row_count) {
-			len = rows[i+1]-rows[i]-1;
-			if (len) strncpy(line, rows[i], len);
-			line[len] = '\0';
-		}
-		else {
-			len = strlen(rows[i]);
-			strcpy(line, rows[i]);
-		}
-		
+		// a row ends at the next newline (or the end of the message)
+		// and is cut to fit, cores provide some of these strings
+		char* end = strchr(rows[i], '\n');
+		int len = end ? end-rows[i] : strlen(rows[i]);
+		if (len>=sizeof(line)) len = sizeof(line)-1;
+		if (len) memcpy(line, rows[i], len);
+		line[len] = '\0';
 		
 		if (len) {
 			text = TTF_RenderUTF8_Blended(font, line, COLOR_WHITE);
-			int x = dst_rect->x;
-			x += (dst_rect->w - text->w) / 2;
-			SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){x,y});
-			SDL_FreeSurface(text);
+			if (text) {
+				int x = dst_rect->x;
+				x += (dst_rect->w - text->w) / 2;
+				SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){x,y});
+				SDL_FreeSurface(text);
+			}
 		}
 		y += SCALE1(LINE_HEIGHT);
 	}
