@@ -491,6 +491,7 @@ static void State_read(void) { // from picoarch
 	int was_ff = fast_forward;
 	fast_forward = 0;
 
+	FILE *state_file = NULL; // declared before the first goto error
 	void *state = calloc(1, state_size);
 	if (!state) {
 		LOG_error("Couldn't allocate memory for state\n");
@@ -500,7 +501,7 @@ static void State_read(void) { // from picoarch
 	char filename[MAX_PATH];
 	State_getPath(filename);
 	
-	FILE *state_file = fopen(filename, "r");
+	state_file = fopen(filename, "r");
 	if (!state_file) {
 		if (state_slot!=8) { // st8 is a default state in MiniUI and may not exist, that's okay
 			LOG_error("Error opening state file: %s (%s)\n", filename, strerror(errno));
@@ -533,6 +534,7 @@ static void State_write(void) { // from picoarch
 	int was_ff = fast_forward;
 	fast_forward = 0;
 
+	FILE *state_file = NULL; // declared before the first goto error
 	void *state = calloc(1, state_size);
 	if (!state) {
 		LOG_error("Couldn't allocate memory for state\n");
@@ -542,7 +544,7 @@ static void State_write(void) { // from picoarch
 	char filename[MAX_PATH];
 	State_getPath(filename);
 	
-	FILE *state_file = fopen(filename, "w");
+	state_file = fopen(filename, "w");
 	if (!state_file) {
 		LOG_error("Error opening state file: %s (%s)\n", filename, strerror(errno));
 		goto error;
@@ -1441,9 +1443,10 @@ static void OptionList_init(const struct retro_core_option_definition *defs) {
 			item->key = calloc(len, sizeof(char));
 			strcpy(item->key, def->key);
 			
-			len = strlen(def->desc) + 1;
+			const char* desc = def->desc ? def->desc : def->key; // desc is required but not every core sets it
+			len = strlen(desc) + 1;
 			item->name = calloc(len, sizeof(char));
-			strcpy(item->name, getOptionNameFromKey(def->key,def->desc));
+			strcpy(item->name, getOptionNameFromKey(def->key,desc));
 			
 			if (def->info) {
 				len = strlen(def->info) + 1;
