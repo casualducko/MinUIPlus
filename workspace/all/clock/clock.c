@@ -137,7 +137,7 @@ int main(int argc , char* argv[]) {
 		else if (seconds_selected < 0) seconds_selected += 60;
 	}
 	
-	int option_count = 7;
+	int option_count = (show_24hour ? CURSOR_SECOND : CURSOR_AMPM) + 1; // no AM/PM field in 24 hour mode
 
 	int dirty = 1;
 	int show_setting = 0;
@@ -285,7 +285,7 @@ int main(int argc , char* argv[]) {
 			x = blit(CHAR_COLON, x,y);
 			x = blitNumber(seconds_selected, x,y);
 			
-			int ampm_w;
+			int ampm_w = 0;
 			if (!show_24hour) {
 				x += SCALE1(10); // space
 				SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, am_selected ? "AM" : "PM", COLOR_WHITE);
