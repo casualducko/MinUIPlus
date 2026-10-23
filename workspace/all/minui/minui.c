@@ -930,6 +930,12 @@ static Array* getEntries(char* path){
 				strcpy(tmp, dp->d_name);
 			
 				if (!prefixMatch(collated_path, full_path)) continue;
+				
+				// only collate folders that have an emu pak, getRoot() only checks that one of them does
+				char emu_name[256];
+				getEmuName(full_path, emu_name);
+				if (!hasEmu(emu_name)) continue;
+				
 				addEntries(entries, full_path);
 			}
 			closedir(dh);
