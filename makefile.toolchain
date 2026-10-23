@@ -6,24 +6,30 @@ ifeq (,$(PLATFORM))
 $(error please specify PLATFORM, eg. make PLATFORM=trimui)
 endif
 
+# rk2023 is an RK3566 device and builds with the rgb30 (MOSS RK3566) toolchain
+TOOLCHAIN=$(PLATFORM)
+ifeq ($(PLATFORM),rk2023)
+TOOLCHAIN=rgb30
+endif
+
 HOST_WORKSPACE=$(shell pwd)/workspace
 GUEST_WORKSPACE=/root/workspace
 
-GIT_IF_NECESSARY=toolchains/$(PLATFORM)-toolchain
-INIT_IF_NECESSARY=toolchains/$(PLATFORM)-toolchain/.build
+GIT_IF_NECESSARY=toolchains/$(TOOLCHAIN)-toolchain
+INIT_IF_NECESSARY=toolchains/$(TOOLCHAIN)-toolchain/.build
 
 all: $(INIT_IF_NECESSARY)
-	docker run -it --rm -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) $(PLATFORM)-toolchain /bin/bash
+	docker run -it --rm -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) $(TOOLCHAIN)-toolchain /bin/bash
 
 $(INIT_IF_NECESSARY): $(GIT_IF_NECESSARY)
-	cd toolchains/$(PLATFORM)-toolchain && make .build
+	cd toolchains/$(TOOLCHAIN)-toolchain && make .build
 
 $(GIT_IF_NECESSARY):
 	mkdir -p toolchains
-	git clone https://github.com/shauninman/union-$(PLATFORM)-toolchain/ toolchains/$(PLATFORM)-toolchain
+	git clone https://github.com/shauninman/union-$(TOOLCHAIN)-toolchain/ toolchains/$(TOOLCHAIN)-toolchain
 
 clean:
-	cd toolchains/$(PLATFORM)-toolchain && make clean
+	cd toolchains/$(TOOLCHAIN)-toolchain && make clean
 
 build: $(INIT_IF_NECESSARY)
-	docker run -it --rm -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) $(PLATFORM)-toolchain /bin/bash -c '. ~/.bashrc && cd /root/workspace && make'
+	docker run -it --rm -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) $(TOOLCHAIN)-toolchain /bin/bash -c '. ~/.bashrc && cd /root/workspace && make PLATFORM=$(PLATFORM)'
