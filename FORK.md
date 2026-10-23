@@ -41,7 +41,7 @@ timestamps. Write the short hash you want in the version string to
 | minui | a ROM with a long name overflowed the stack when listed or launched (256 byte path buffers, now `MAX_PATH` 1024) |
 | minui | leaked a surface per duplicate-named row per redraw; the selected row could show a `001) ` sort prefix |
 | minarch | MENU+button no longer also sends the plain button to the game; binding the same MENU+button twice is refused |
-| audio | the underrun fill paired the left channel with the previous frame's right; underruns are now counted and logged on exit |
+| audio | NES/SNES crackle: frames are paced at ~60.0 fps but the core makes audio for 60.0988, so the buffer drained (measured: 2759 of 8465 callbacks ran dry). Dynamic rate control now nudges the playback rate (~0.14%, max 1%) to keep the buffer level. Also: the underrun fill paired left with the previous frame's right; underruns are counted and logged on exit (`audio:` line) |
 | api | `GFX_truncateText` wrote before its buffer; `GFX_blitMessage` overflowed on long rows and dropped messages of 16+ rows |
 | clock | cursor could land on a non-existent AM/PM field in 24 hour mode (uninitialized width) |
 | minarch | `State_read`/`State_write` closed an uninitialized `FILE*` if the first allocation failed; a core option without a description crashed the options menu; undefined `1 << -1` for unbound buttons |
@@ -54,8 +54,7 @@ volume key direction, the audio change, and the minarch input change.
 
 ## Still open
 
-- **Audio crackle** (fceumm, snes9x2005_plus). The underrun counters are there to
-  measure it: play something, quit, read the `audio:` line in the logs.
+- **Audio crackle**: the cause is fixed in the simulation (`tools/host-tests/test_audio_sim.c`), not yet confirmed by ear on the device. The `audio:` line in the logs says how many underruns are left.
 - **Clock set in MinUI is offset by the timezone after a reboot.** Moss defaults to
   UTC and MinUI has no timezone setting; needs `date`/`hwclock` readings from the
   device to pin down.
