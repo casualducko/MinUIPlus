@@ -104,6 +104,7 @@ int main(int argc, char** argv) {
 	running = 0; pthread_join(th, NULL);
 
 	printf("callbacks %u, starved %u, underruns %u (%u frames short)\n", snd.callbacks, snd.starved, snd.underruns, snd.underrun_frames);
+	printf("rate control: %u frames repeated, %u left out, rate %d..%d of %d, fill max %d\n", snd.frames_duplicated, snd.frames_dropped, snd.drc_rate_min, snd.drc_rate_max, snd.sample_rate_in, snd.fill_max);
 	printf("second: rms of the left channel / count of silent frames\n");
 	for (size_t s=0; (s+1)*48000 <= pcm_frames; s++) {
 		double sum=0; int zero=0;

@@ -19,6 +19,10 @@ device.
 | `test_blitmessage.c` | `GFX_blitMessage()` with a 1000 character row, 20 rows, a failed render |
 | `test_inputclaim.c` | minarch: MENU+button claims its button |
 
+`core_harness.c` / `run_core_harness.sh` run a real libretro core (eg. fceumm from a card) through the real
+audio code on aarch64 with the device toolchain, to check what the audio thread would get.
+It is not part of `run.sh` because it needs Docker and a core and a game.
+
 What these can't cover is anything that needs the hardware (audio crackle, the
 volume key direction, the timezone offset). `tools/host-harness` runs the real
 launcher UI on a Mac for the visual behavior.

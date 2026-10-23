@@ -975,6 +975,8 @@ static struct SND_Context {
 	int fill_max;
 	unsigned frames_offered;	// frames the core has handed us
 	unsigned frames_written;	// frames put in the buffer (a bit more or less after rate control)
+	unsigned frames_duplicated;	// frames written twice by the rate control
+	unsigned frames_dropped;	// frames left out by the rate control
 	unsigned log_at;			// frames_offered at the last log line
 	
 	// diagnostics, only written by the audio callback and read after audio is closed
@@ -1064,10 +1066,12 @@ static void SND_resizeBuffer(void) { // plat_sound_resize_buffer
 static int SND_resampleNear(SND_Frame frame) { // audio_resample_nearest
 	static int diff = 0;
 	int consumed = 0;
+	int wrote = 0;
 
 	if (diff < snd.sample_rate_out) {
 		{ int p = abs(frame.left); int q = abs(frame.right); if (q>p) p = q; if (p>snd.peak_in) snd.peak_in = p; }
 		snd.frames_written++;
+		wrote = 1;
 		snd.buffer[snd.frame_in++] = frame;
 		if (snd.frame_in >= snd.frame_count) snd.frame_in = 0;
 		diff += snd.drc_rate_in;
@@ -1077,6 +1081,8 @@ static int SND_resampleNear(SND_Frame frame) { // audio_resample_nearest
 		consumed++;
 		diff -= snd.sample_rate_out;
 	}
+	if (wrote && !consumed) snd.frames_duplicated++;
+	else if (!wrote && consumed) snd.frames_dropped++;
 
 	return consumed;
 }
@@ -1198,6 +1204,12 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 
 	LOG_info("sample rate: %i (req) %i (rec) [samples %i]\n", snd.sample_rate_in, snd.sample_rate_out, SAMPLES);
 	LOG_info("audio rate control: %s\n", snd.drc_enabled ? "on" : "off (no-audio-rate-control)");
+	
+	// where the sound chip is set up, for the next time the device is silent although
+	// the buffers are full (volume and speaker/headphone path); quiet where there is no amixer
+	fflush(stdout);
+	system("amixer sget 'Master' 2>/dev/null | tail -3; amixer cget name='Playback Path' 2>/dev/null | tail -3");
+	fflush(stdout);
 	snd.initialized = 1;
 }
 void SND_quit(void) { // plat_sound_finish
@@ -1207,7 +1219,7 @@ void SND_quit(void) { // plat_sound_finish
 	SDL_CloseAudio();
 	
 	LOG_info("audio: %u callbacks, %u starved (buffer empty), %u underruns (%u frames short)\n", snd.callbacks, snd.starved, snd.underruns, snd.underrun_frames);
-	LOG_info("audio: %u frames from the core, %u written (rate control %+i)\n", snd.frames_offered, snd.frames_written, (int)snd.frames_written - (int)snd.frames_offered);
+	LOG_info("audio: %u frames from the core, %u written (rate control %+i: %u frames repeated, %u left out)\n", snd.frames_offered, snd.frames_written, (int)snd.frames_written - (int)snd.frames_offered, snd.frames_duplicated, snd.frames_dropped);
 	
 	if (snd.buffer) {
 		free(snd.buffer);
