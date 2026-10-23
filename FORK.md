@@ -44,6 +44,9 @@ timestamps. Write the short hash you want in the version string to
 | audio | the underrun fill paired the left channel with the previous frame's right; underruns are now counted and logged on exit |
 | api | `GFX_truncateText` wrote before its buffer; `GFX_blitMessage` overflowed on long rows and dropped messages of 16+ rows |
 | clock | cursor could land on a non-existent AM/PM field in 24 hour mode (uninitialized width) |
+| minarch | `State_read`/`State_write` closed an uninitialized `FILE*` if the first allocation failed; a core option without a description crashed the options menu; undefined `1 << -1` for unbound buttons |
+| api | `GFX_wrapText` wrote through NULL when the first word was wider than the room (e.g. a core description starting with a URL); `allocFile` and `hasCollections` didn't check for failure |
+| Wi-Fi.pak | a `wifi.txt` saved on Windows (CRLF) left a `\r` on the network name and password, so it never connected |
 
 Everything above is covered by a host test or the harness except what needs the
 hardware, which is marked "not tested on hardware" in its commit message: the

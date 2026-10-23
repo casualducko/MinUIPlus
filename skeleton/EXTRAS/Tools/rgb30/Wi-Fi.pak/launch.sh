@@ -9,6 +9,10 @@ IFS=$OLDIFS
 WIFI_NAME=${WIFI[0]}
 WIFI_PASS=${WIFI[1]}
 
+# wifi.txt saved on Windows has CRLF line endings, don't make the \r part of the name or password
+WIFI_NAME=${WIFI_NAME%$'\r'}
+WIFI_PASS=${WIFI_PASS%$'\r'}
+
 ##############
 
 . /etc/profile # NOTE: this nukes MinUI's PATH modifications
