@@ -941,6 +941,12 @@ static struct SND_Context {
 	int frame_filled; // max_buf_w
 	
 	SND_Resampler resample;
+	
+	// diagnostics, only written by the audio callback and read after audio is closed
+	unsigned callbacks;			// times the callback ran
+	unsigned starved;			// callbacks that found the buffer completely empty
+	unsigned underruns;			// callbacks that ran out of frames part way through
+	unsigned underrun_frames;	// frames those callbacks were short by
 } snd = {0};
 static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // plat_sound_callback
 	
@@ -966,14 +972,35 @@ static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // pla
 		if (snd.frame_out>=snd.frame_count) snd.frame_out = 0;
 	}
 	
+	snd.callbacks++;
+	
 	int zero = len>0 && len==SAMPLES;
-	if (zero) return (void)memset(out,0,len*(sizeof(int16_t) * 2));
+	if (zero) {
+		snd.starved++;
+		return (void)memset(out,0,len*(sizeof(int16_t) * 2));
+	}
 	// else if (len>=5) LOG_info("%8i BUFFER UNDERRUN (%i/%i frames)\n", ms(), len,full_len);
-
-	int16_t *in = out-1;
+	
+	if (len>0) {
+		snd.underruns++;
+		snd.underrun_frames += len;
+	}
+	
+	// ran out of frames, mirror the ones just written (a whole frame at a time,
+	// left with left and right with right) so the waveform stays continuous
+	// instead of dropping to silence, and fall back to silence once they run out
+	int16_t* frames = (int16_t*)stream;
+	int src = (out-frames) / 2 - 1; // last frame written
 	while (len>0) {
-		*out++ = (void*)in>(void*)stream ? *--in : 0;
-		*out++ = (void*)in>(void*)stream ? *--in : 0;
+		if (src>=0) {
+			*out++ = frames[src*2];
+			*out++ = frames[src*2+1];
+			src -= 1;
+		}
+		else {
+			*out++ = 0;
+			*out++ = 0;
+		}
 		len -= 1;
 	}
 }
@@ -1109,6 +1136,8 @@ void SND_quit(void) { // plat_sound_finish
 	
 	SDL_PauseAudio(1);
 	SDL_CloseAudio();
+	
+	LOG_info("audio: %u callbacks, %u starved (buffer empty), %u underruns (%u frames short)\n", snd.callbacks, snd.starved, snd.underruns, snd.underrun_frames);
 	
 	if (snd.buffer) {
 		free(snd.buffer);
