@@ -28,7 +28,9 @@ timestamps. Write the short hash you want in the version string to
 - `tools/host-tests/run.sh`: regression tests for the fixes below, with
   AddressSanitizer. No device or SDL needed.
 - `tools/host-harness/run.sh`: runs the real launcher on a Mac against a fake SD
-  card with scripted input and screenshots.
+  card with scripted input and screenshots (`make-stress-card.sh` adds hostile content).
+- `tools/host-tests/run_core_harness.sh`: runs a real libretro core through the real
+  audio code on aarch64 with the device toolchain (needs Docker, a core and a game).
 
 ## Changes from upstream
 
@@ -46,6 +48,10 @@ timestamps. Write the short hash you want in the version string to
 | clock | cursor could land on a non-existent AM/PM field in 24 hour mode (uninitialized width) |
 | minarch | `State_read`/`State_write` closed an uninitialized `FILE*` if the first allocation failed; a core option without a description crashed the options menu; undefined `1 << -1` for unbound buttons |
 | api | `GFX_wrapText` wrote through NULL when the first word was wider than the room (e.g. a core description starting with a URL); `allocFile` and `hasCollections` didn't check for failure |
+| minui | paths built from text read out of `recent.txt`, collections, `.m3u` files or the auto-resume file overflowed the stack for a line near the buffer size (found by running the launcher on a stress card) |
+| minarch | the core's tag (from a folder name in parentheses), version and extension list were `strcpy`'d into fixed fields of `struct Core`, a core with more than 31 extensions or one longer than 6 characters overflowed the zip handling, `Core_getName` crashed on a core with no underscore in its file name, `main` crashed with no arguments |
+| msettings | a corrupt or short `msettings.bin` could apply a volume of 9999% or leave the brightness uninitialized; now clamped, a short file means defaults |
+| audio | the buffer target is a third of the buffer (was a quarter): fewer underruns and less back-and-forth sample dropping for 7 ms more latency; each game start logs the mixer state, and `no-audio-rate-control` in `.userdata/rgb30` turns the rate control off for comparison |
 | Wi-Fi.pak | a `wifi.txt` saved on Windows (CRLF) left a `\r` on the network name and password, so it never connected |
 
 Everything above is covered by a host test or the harness except what needs the
