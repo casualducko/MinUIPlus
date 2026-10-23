@@ -1687,13 +1687,13 @@ static void input_poll_callback(void) {
 		for (int i=0; i<SHORTCUT_COUNT; i++) {
 			ButtonMapping* mapping = &config.shortcuts[i];
 			if (!mapping->mod || mapping->local<0) continue;
-			int btn = 1 << mapping->local;
+			int btn = mapping->local<0 ? BTN_NONE : 1 << mapping->local; // -1 is unbound
 			if (PAD_isPressed(btn)) claimed |= btn;
 		}
 		for (int i=0; config.controls[i].name; i++) {
 			ButtonMapping* mapping = &config.controls[i];
 			if (!mapping->mod || mapping->local<0) continue;
-			int btn = 1 << mapping->local;
+			int btn = mapping->local<0 ? BTN_NONE : 1 << mapping->local; // -1 is unbound
 			if (gamepad_type==0) {
 				switch(btn) {
 					case BTN_DPAD_UP: 		btn = BTN_UP; break;
@@ -1709,7 +1709,7 @@ static void input_poll_callback(void) {
 	static int toggled_ff_on = 0; // this logic only works because TOGGLE_FF is before HOLD_FF in the menu...
 	for (int i=0; i<SHORTCUT_COUNT; i++) {
 		ButtonMapping* mapping = &config.shortcuts[i];
-		int btn = 1 << mapping->local;
+		int btn = mapping->local<0 ? BTN_NONE : 1 << mapping->local; // -1 is unbound
 		if (btn==BTN_NONE) continue; // not bound
 		if (!mapping->mod && (claimed & btn)) continue; // claimed by a MENU+button mapping
 		if (!mapping->mod || PAD_isPressed(BTN_MENU)) {
@@ -1782,7 +1782,7 @@ static void input_poll_callback(void) {
 	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {
 		ButtonMapping* mapping = &config.controls[i];
-		int btn = 1 << mapping->local;
+		int btn = mapping->local<0 ? BTN_NONE : 1 << mapping->local; // -1 is unbound
 		if (btn==BTN_NONE) continue; // present buttons can still be unbound
 		if (gamepad_type==0) {
 			switch(btn) {
@@ -3389,7 +3389,7 @@ int OptionControls_bind(MenuList* list, int i) {
 		
 		// NOTE: off by one because of the initial NONE value
 		for (int id=0; id<=LOCAL_BUTTON_COUNT; id++) {
-			if (PAD_justPressed(1 << (id-1))) {
+			if (id>0 && PAD_justPressed(1 << (id-1))) { // id 0 is the NONE entry
 				item->value = id;
 				button->local = id - 1;
 				if (PAD_isPressed(BTN_MENU)) {
@@ -3503,7 +3503,7 @@ static int OptionShortcuts_bind(MenuList* list, int i) {
 		
 		// NOTE: off by one because of the initial NONE value
 		for (int id=0; id<=LOCAL_BUTTON_COUNT; id++) {
-			if (PAD_justPressed(1 << (id-1))) {
+			if (id>0 && PAD_justPressed(1 << (id-1))) { // id 0 is the NONE entry
 				item->value = id;
 				button->local = id - 1;
 				if (PAD_isPressed(BTN_MENU)) {
