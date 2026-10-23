@@ -227,18 +227,43 @@ FALLBACK_IMPLEMENTATION void PLAT_setEffectColor(int next_color) { }
 
 int GFX_truncateText(TTF_Font* font, const char* in_name, char* out_name, int max_width, int padding) {
 	int text_width;
-	strcpy(out_name, in_name);
+	snprintf(out_name, 256, "%s", in_name); // NOTE: out_name needs to be at least 256 bytes
 	TTF_SizeUTF8(font, out_name, &text_width, NULL);
 	text_width += padding;
 	
 	while (text_width>max_width) {
 		int len = strlen(out_name);
-		strcpy(&out_name[len-4], "...\0");
+		if (len<=3) break; // nothing left to trim but the ellipsis itself
+		
+		int cut = len-4;
+		while (cut>0 && (out_name[cut] & 0xC0)==0x80) cut -= 1; // don't split a multi-byte character
+		strcpy(&out_name[cut], "...");
+		
 		TTF_SizeUTF8(font, out_name, &text_width, NULL);
 		text_width += padding;
 	}
 	
 	return text_width;
+}
+int GFX_truncateUniqueText(TTF_Font* font, const char* name, const char* unique, char* out_name, char* out_unique, int max_width, int padding) {
+	// unique is usually name followed by something that tells it apart from other
+	// entries with the same name, eg. " (GBC)", so truncate the name to leave room
+	// for that and put it back after, otherwise the tag is the first thing to go
+	size_t name_len = strlen(name);
+	const char* alt = unique + name_len;
+	if (strncmp(unique, name, name_len)!=0 || !alt[0]) { // unrelated (eg. an alias) or nothing to protect
+		GFX_truncateText(font, name, out_name, max_width, padding);
+		return GFX_truncateText(font, unique, out_unique, max_width, padding);
+	}
+	
+	int alt_width;
+	TTF_SizeUTF8(font, alt, &alt_width, NULL);
+	GFX_truncateText(font, name, out_name, max_width-alt_width, padding);
+	snprintf(out_unique, 256, "%s%s", out_name, alt);
+	
+	int text_width;
+	TTF_SizeUTF8(font, out_unique, &text_width, NULL);
+	return text_width + padding;
 }
 int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines) {
 	if (!str) return 0;

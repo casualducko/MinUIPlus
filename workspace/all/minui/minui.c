@@ -196,19 +196,10 @@ static int getIndexChar(char* str) {
 	return i;
 }
 
-static void getUniqueName(Entry* entry, char* out_name) {
-	char* filename = strrchr(entry->path, '/')+1;
+static void getUniqueName(Entry* entry, char* out_name) { // NOTE: out_name needs to be 256 bytes
 	char emu_tag[256];
 	getEmuName(entry->path, emu_tag);
-	
-	char *tmp;
-	strcpy(out_name, entry->name);
-	tmp = out_name + strlen(out_name);
-	strcpy(tmp, " (");
-	tmp = out_name + strlen(out_name);
-	strcpy(tmp, emu_tag);
-	tmp = out_name + strlen(out_name);
-	strcpy(tmp, ")");
+	snprintf(out_name, 256, "%s (%s)", entry->name, emu_tag);
 }
 
 static void Directory_index(Directory* self) {
@@ -1606,7 +1597,13 @@ int main (int argc, char *argv[]) {
 						trimSortingMeta(&entry_name);
 					
 						char display_name[256];
-						int text_width = GFX_truncateText(font.large, entry_unique ? entry_unique : entry_name, display_name, available_width, SCALE1(BUTTON_PADDING*2));
+						char unique_name[256];
+						int text_width;
+						if (entry_unique) {
+							trimSortingMeta(&entry_unique);
+							text_width = GFX_truncateUniqueText(font.large, entry_name, entry_unique, display_name, unique_name, available_width, SCALE1(BUTTON_PADDING*2));
+						}
+						else text_width = GFX_truncateText(font.large, entry_name, display_name, available_width, SCALE1(BUTTON_PADDING*2));
 						int max_width = MIN(available_width, text_width);
 						if (j==selected_row) {
 							GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){
@@ -1616,12 +1613,9 @@ int main (int argc, char *argv[]) {
 								SCALE1(PILL_SIZE)
 							});
 							text_color = COLOR_BLACK;
+							if (entry_unique) strcpy(display_name, unique_name); // the selected row shows all of it
 						}
-						else if (entry->unique) {
-							trimSortingMeta(&entry_unique);
-							char unique_name[256];
-							GFX_truncateText(font.large, entry_unique, unique_name, available_width, SCALE1(BUTTON_PADDING*2));
-						
+						else if (entry_unique) {
 							SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, unique_name, COLOR_DARK_TEXT);
 							SDL_BlitSurface(text, &(SDL_Rect){
 								0,
@@ -1632,8 +1626,7 @@ int main (int argc, char *argv[]) {
 								SCALE1(PADDING+BUTTON_PADDING),
 								SCALE1(PADDING+(j*PILL_SIZE)+4)
 							});
-						
-							GFX_truncateText(font.large, entry_name, display_name, available_width, SCALE1(BUTTON_PADDING*2));
+							SDL_FreeSurface(text);
 						}
 						SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, display_name, text_color);
 						SDL_BlitSurface(text, &(SDL_Rect){
