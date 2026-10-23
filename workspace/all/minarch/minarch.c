@@ -327,9 +327,9 @@ static void Game_open(char* path) {
 	
 	// m3u-based?
 	char* tmp;
-	char m3u_path[256];
-	char base_path[256];
-	char dir_name[256];
+	char m3u_path[MAX_PATH];
+	char base_path[MAX_PATH];
+	char dir_name[MAX_PATH];
 
 	strcpy(m3u_path, game.path);
 	tmp = strrchr(m3u_path, '/') + 1;
@@ -3060,11 +3060,11 @@ static struct {
 	SDL_Surface* overlay;
 	char* items[MENU_ITEM_COUNT];
 	char* disc_paths[9]; // up to 9 paths, Arc the Lad Collection is 7 discs
-	char minui_dir[256];
-	char slot_path[256];
-	char base_path[256];
-	char bmp_path[256];
-	char txt_path[256];
+	char minui_dir[MAX_PATH];
+	char slot_path[MAX_PATH];
+	char base_path[MAX_PATH];
+	char bmp_path[MAX_PATH];
+	char txt_path[MAX_PATH];
 	int disc;
 	int total_discs;
 	int slot;
@@ -3091,7 +3091,7 @@ void Menu_init(void) {
 	SDLX_SetAlpha(menu.overlay, SDL_SRCALPHA, 0x80);
 	SDL_FillRect(menu.overlay, NULL, 0);
 	
-	char emu_name[256];
+	char emu_name[MAX_PATH];
 	getEmuName(game.path, emu_name);
 	sprintf(menu.minui_dir, SHARED_USERDATA_PATH "/.minui/%s", emu_name);
 	mkdir(menu.minui_dir, 0755);
@@ -3115,7 +3115,7 @@ void Menu_init(void) {
 				trimTrailingNewlines(line);
 				if (strlen(line)==0) continue; // skip empty lines
 		
-				char disc_path[256];
+				char disc_path[MAX_PATH];
 				strcpy(disc_path, menu.base_path);
 				tmp = disc_path + strlen(disc_path);
 				strcpy(tmp, line);
@@ -4177,7 +4177,7 @@ static void Menu_updateState(void) {
 	int last_slot = state_slot;
 	state_slot = menu.slot;
 
-	char save_path[256];
+	char save_path[MAX_PATH];
 	State_getPath(save_path);
 
 	state_slot = last_slot;
@@ -4221,10 +4221,10 @@ static void Menu_loadState(void) {
 	
 	if (menu.save_exists) {
 		if (menu.total_discs) {
-			char slot_disc_name[256];
-			getFile(menu.txt_path, slot_disc_name, 256);
+			char slot_disc_name[MAX_PATH];
+			getFile(menu.txt_path, slot_disc_name, MAX_PATH);
 		
-			char slot_disc_path[256];
+			char slot_disc_path[MAX_PATH];
 			if (slot_disc_name[0]=='/') strcpy(slot_disc_path, slot_disc_name);
 			else sprintf(slot_disc_path, "%s%s", menu.base_path, slot_disc_name);
 		
@@ -4243,7 +4243,7 @@ static void Menu_loadState(void) {
 static char* getAlias(char* path, char* alias) {
 	// LOG_info("alias path: %s\n", path);
 	char* tmp;
-	char map_path[256];
+	char map_path[MAX_PATH];
 	strcpy(map_path, path);
 	tmp = strrchr(map_path, '/');
 	if (tmp) {
@@ -4317,7 +4317,7 @@ static void Menu_loop(void) {
 	
 	// path and string things
 	char* tmp;
-	char rom_name[256]; // without extension or cruft
+	char rom_name[MAX_PATH]; // without extension or cruft
 	getDisplayName(game.name, rom_name);
 	getAlias(game.path, rom_name);
 	
@@ -4461,7 +4461,7 @@ static void Menu_loop(void) {
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			int max_width = screen->w - SCALE1(PADDING * 2) - ow;
 			
-			char display_name[256];
+			char display_name[MAX_PATH];
 			int text_width = GFX_truncateText(font.large, rom_name, display_name, max_width, SCALE1(BUTTON_PADDING*2));
 			max_width = MIN(max_width, text_width);
 

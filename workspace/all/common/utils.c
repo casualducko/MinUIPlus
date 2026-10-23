@@ -35,7 +35,7 @@ int hide(char* file_name) {
 
 void getDisplayName(const char* in_name, char* out_name) {
 	char* tmp;
-	char work_name[256];
+	char work_name[MAX_PATH];
 	strcpy(work_name, in_name);
 	strcpy(out_name, in_name);
 	

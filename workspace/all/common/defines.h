@@ -8,7 +8,7 @@
 #define BRIGHTNESS_MIN 	0
 #define BRIGHTNESS_MAX 	10
 
-#define MAX_PATH 512
+#define MAX_PATH 1024 // paths are built from names that can be 255 bytes each, and escaped quotes grow
 
 #define ROMS_PATH SDCARD_PATH "/Roms"
 #define ROOT_SYSTEM_PATH SDCARD_PATH "/.system/"
