@@ -18,6 +18,7 @@ FLAGS="-g -Wall -Wno-unused-function -fsanitize=address,undefined -fno-sanitize-
 x() { python3 "$here/extract.py" "$@"; } # FILE START END
 
 x "$all/common/utils.c" 'void getEmuName' 'void getEmuPath' > "$out/gen/getEmuName.inc"
+x "$all/common/api.c" '#define MAX_SAMPLE_RATE' 'void SND_init' > "$out/gen/SND_core.inc"
 x "$all/common/api.c" 'static void SND_audioCallback' 'static void SND_resizeBuffer' > "$out/gen/SND_audioCallback.inc"
 x "$all/common/api.c" 'int GFX_truncateText' 'int GFX_wrapText' > "$out/gen/GFX_truncate.inc"
 x "$all/common/api.c" 'int GFX_wrapText' '///////////////////////////////
@@ -29,9 +30,9 @@ x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
 
 failed=0
-for t in emuname underrun truncate wraptext blitmessage inputclaim; do
+for t in emuname underrun audio_sim truncate wraptext blitmessage inputclaim; do
 	echo "== $t"
-	$CC $FLAGS -I"$out" -o "$out/test_$t" "$here/test_$t.c"
+	$CC $FLAGS -I"$out" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi
 done
 echo

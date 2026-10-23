@@ -964,6 +964,7 @@ static struct SND_Context {
 	int frame_filled; // max_buf_w
 	
 	SND_Resampler resample;
+	int drc_rate_in; // sample_rate_in nudged by how full the buffer is, see SND_updateRate()
 	
 	// diagnostics, only written by the audio callback and read after audio is closed
 	unsigned callbacks;			// times the callback ran
@@ -1044,13 +1045,9 @@ static void SND_resizeBuffer(void) { // plat_sound_resize_buffer
 	snd.frame_in = 0;
 	snd.frame_out = 0;
 	snd.frame_filled = snd.frame_count - 1;
+	snd.drc_rate_in = snd.sample_rate_in;
 	
 	SDL_UnlockAudio();
-}
-static int SND_resampleNone(SND_Frame frame) { // audio_resample_passthrough
-	snd.buffer[snd.frame_in++] = frame;
-	if (snd.frame_in >= snd.frame_count) snd.frame_in = 0;
-	return 1;
 }
 static int SND_resampleNear(SND_Frame frame) { // audio_resample_nearest
 	static int diff = 0;
@@ -1059,7 +1056,7 @@ static int SND_resampleNear(SND_Frame frame) { // audio_resample_nearest
 	if (diff < snd.sample_rate_out) {
 		snd.buffer[snd.frame_in++] = frame;
 		if (snd.frame_in >= snd.frame_count) snd.frame_in = 0;
-		diff += snd.sample_rate_in;
+		diff += snd.drc_rate_in;
 	}
 
 	if (diff >= snd.sample_rate_out) {
@@ -1070,12 +1067,31 @@ static int SND_resampleNear(SND_Frame frame) { // audio_resample_nearest
 	return consumed;
 }
 static void SND_selectResampler(void) { // plat_sound_select_resampler
-	if (snd.sample_rate_in==snd.sample_rate_out) {
-		snd.resample =  SND_resampleNone;
-	}
-	else {
-		snd.resample = SND_resampleNear;
-	}
+	// always, even when the rates match: with drc_rate_in equal to sample_rate_out this
+	// is a straight copy, and SND_updateRate() needs it to be able to stretch the audio
+	snd.resample = SND_resampleNear;
+}
+// Dynamic rate control. Frames are paced by the video (a fixed budget plus vsync, about
+// 60fps) but a core produces audio for its own frame rate (NES 60.0988, so about 0.16%
+// more than 60 paced frames would play), and the device consumes it at a fixed 48kHz.
+// Whenever the two disagree the buffer slowly fills or drains, and when it drains the
+// callback runs dry every few calls: crackling. So nudge the rate the core's audio is
+// resampled at by how full the buffer is (at most MAX_DELTA either way, 1% is
+// inaudible) which keeps the buffer around its target instead.
+#define DRC_MAX_DELTA 0.01
+#define DRC_TARGET_DIVISOR 4 // aim for a quarter of the buffer (~1000 frames, 21ms at 48kHz)
+static void SND_updateRate(void) {
+	int fill = snd.frame_in - snd.frame_out;
+	if (fill<0) fill += snd.frame_count;
+	int target = snd.frame_count / DRC_TARGET_DIVISOR;
+	if (target<1) target = 1;
+	
+	double error = (double)(target - fill) / target; // positive when low, we need more audio
+	if (error>1) error = 1;
+	else if (error<-1) error = -1;
+	
+	// the less input per output frame, the more output frames we make
+	snd.drc_rate_in = snd.sample_rate_in * (1.0 - error * DRC_MAX_DELTA);
 }
 size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_sound_write / plat_sound_write_resample
 	
@@ -1091,6 +1107,7 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 	int consumed_frames = 0;
 	while (frame_count > 0) {
 		int tries = 0;
+		SND_updateRate();
 		int amount = MIN(BATCH_SIZE, frame_count);
 		
 		while (tries < 10 && snd.frame_in==snd.frame_filled) {
