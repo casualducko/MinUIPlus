@@ -61,9 +61,10 @@
 #define CODE_MENU_ALT	CODE_NA
 #define CODE_POWER		102 // 116 in SDL1?
 
-// TODO: these were swapped from keymon?
-#define CODE_PLUS		129 // 114 in SDL1?
-#define CODE_MINUS		128 // 115 in SDL1?
+// SDL_SCANCODE_VOLUMEUP and SDL_SCANCODE_VOLUMEDOWN
+// (unused here, platform.c reads the raw evdev codes RAW_PLUS and RAW_MINUS instead)
+#define CODE_PLUS		128
+#define CODE_MINUS		129
 
 ///////////////////////////////
 

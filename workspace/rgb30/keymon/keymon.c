@@ -19,8 +19,13 @@
 #define CODE_MENU 317 // 11 in SDL for some reason...
 #define CODE_MENU_ALT 318 // 12 in SDL...
 
-#define CODE_PLUS 114
-#define CODE_MINUS 115
+// linux KEY_VOLUMEUP and KEY_VOLUMEDOWN, as labeled in the device tree
+#define CODE_PLUS 115
+#define CODE_MINUS 114
+
+// if this file exists in USERDATA_PATH the codes above are swapped
+// (the original rgb30 behavior, for units wired the other way around)
+#define SWAP_VOLUME_KEYS_FILE "swap-volume-keys"
 
 #define VOLUME_MIN 		0
 #define VOLUME_MAX 		20
@@ -85,7 +90,11 @@ int main (int argc, char *argv[]) {
 		inputs[i] = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
 	}
 	inputs[5] = open("/dev/input/js0", O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-	
+
+	char swap_path[256];
+	sprintf(swap_path, "%s/" SWAP_VOLUME_KEYS_FILE, getenv("USERDATA_PATH"));
+	int swap_volume_keys = access(swap_path, F_OK)==0;
+
 	uint32_t input;
 	uint32_t val;
 	uint32_t menu_pressed = 0;
@@ -119,7 +128,12 @@ int main (int argc, char *argv[]) {
 				val = ev.value;
 				if (( ev.type != EV_KEY ) || ( val > REPEAT )) continue;
 				// printf("value: %i code: %i\n", val, ev.code); fflush(stdout);
-				switch (ev.code) {
+				int code = ev.code;
+				if (swap_volume_keys) {
+					if (code==CODE_PLUS) code = CODE_MINUS;
+					else if (code==CODE_MINUS) code = CODE_PLUS;
+				}
+				switch (code) {
 					case CODE_MENU:
 					case CODE_MENU_ALT:
 						menu_pressed = val;
