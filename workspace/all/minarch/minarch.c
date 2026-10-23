@@ -1680,11 +1680,38 @@ static void input_poll_callback(void) {
 		}
 	}
 	
+	// a MENU+button mapping claims its button while it is held so that the same
+	// button on its own (as a shortcut or a control) doesn't also trigger
+	int claimed = 0;
+	if (PAD_isPressed(BTN_MENU)) {
+		for (int i=0; i<SHORTCUT_COUNT; i++) {
+			ButtonMapping* mapping = &config.shortcuts[i];
+			if (!mapping->mod || mapping->local<0) continue;
+			int btn = 1 << mapping->local;
+			if (PAD_isPressed(btn)) claimed |= btn;
+		}
+		for (int i=0; config.controls[i].name; i++) {
+			ButtonMapping* mapping = &config.controls[i];
+			if (!mapping->mod || mapping->local<0) continue;
+			int btn = 1 << mapping->local;
+			if (gamepad_type==0) {
+				switch(btn) {
+					case BTN_DPAD_UP: 		btn = BTN_UP; break;
+					case BTN_DPAD_DOWN: 	btn = BTN_DOWN; break;
+					case BTN_DPAD_LEFT: 	btn = BTN_LEFT; break;
+					case BTN_DPAD_RIGHT: 	btn = BTN_RIGHT; break;
+				}
+			}
+			if (PAD_isPressed(btn)) claimed |= btn;
+		}
+	}
+	
 	static int toggled_ff_on = 0; // this logic only works because TOGGLE_FF is before HOLD_FF in the menu...
 	for (int i=0; i<SHORTCUT_COUNT; i++) {
 		ButtonMapping* mapping = &config.shortcuts[i];
 		int btn = 1 << mapping->local;
 		if (btn==BTN_NONE) continue; // not bound
+		if (!mapping->mod && (claimed & btn)) continue; // claimed by a MENU+button mapping
 		if (!mapping->mod || PAD_isPressed(BTN_MENU)) {
 			if (i==SHORTCUT_TOGGLE_FF) {
 				if (PAD_justPressed(btn)) {
@@ -1765,6 +1792,7 @@ static void input_poll_callback(void) {
 				case BTN_DPAD_RIGHT: 	btn = BTN_RIGHT; break;
 			}
 		}
+		if (!mapping->mod && (claimed & btn)) continue; // claimed by a MENU+button mapping
 		if (PAD_isPressed(btn) && (!mapping->mod || PAD_isPressed(BTN_MENU))) {
 			buttons |= 1 << mapping->retro;
 			if (mapping->mod) ignore_menu = 1;
@@ -3316,6 +3344,35 @@ static int OptionEmulator_openMenu(MenuList* list, int i) {
 	return MENU_CALLBACK_NOP;
 }
 
+// a MENU+button can only drive one thing, find what else (if anything) is bound to the same one
+static char* findModConflict(ButtonMapping* self) {
+	if (!self->mod || self->local<0) return NULL;
+	for (int i=0; config.controls[i].name; i++) {
+		ButtonMapping* mapping = &config.controls[i];
+		if (mapping==self || mapping->ignore) continue;
+		if (mapping->mod && mapping->local==self->local) return mapping->name;
+	}
+	for (int i=0; config.shortcuts[i].name; i++) {
+		ButtonMapping* mapping = &config.shortcuts[i];
+		if (mapping==self) continue;
+		if (mapping->mod && mapping->local==self->local) return mapping->name;
+	}
+	return NULL;
+}
+// reset a binding that conflicts and tell the user, returns 1 if it did
+static int rejectModConflict(MenuItem* item, ButtonMapping* button) {
+	char* other = findModConflict(button);
+	if (!other) return 0;
+	
+	char message[256];
+	snprintf(message, sizeof(message), "MENU+%s is already bound to\n%s.\nClear that first.", button_labels[button->local+1], other);
+	button->local = -1;
+	button->mod = 0;
+	item->value = 0;
+	Menu_message(message, (char*[]){ "A","OKAY", NULL });
+	return 1;
+}
+
 int OptionControls_bind(MenuList* list, int i) {
 	MenuItem* item = &list->items[i];
 	if (item->values!=button_labels) {
@@ -3349,6 +3406,7 @@ int OptionControls_bind(MenuList* list, int i) {
 		GFX_sync();
 		hdmimon();
 	}
+	if (rejectModConflict(item, button)) return MENU_CALLBACK_NOP;
 	return MENU_CALLBACK_NEXT_ITEM;
 }
 static int OptionControls_unbind(MenuList* list, int i) {
@@ -3462,6 +3520,7 @@ static int OptionShortcuts_bind(MenuList* list, int i) {
 		GFX_sync();
 		hdmimon();
 	}
+	if (rejectModConflict(item, button)) return MENU_CALLBACK_NOP;
 	return MENU_CALLBACK_NEXT_ITEM;
 }
 static int OptionShortcuts_unbind(MenuList* list, int i) {
