@@ -34,6 +34,19 @@ static Settings DefaultSettings = {
 };
 static Settings* settings;
 
+static int clampInt(int value, int min, int max) {
+	return value<min ? min : (value>max ? max : value);
+}
+// the file is rewritten in place, so a power cut or a bad card can leave anything in it,
+// and a volume of 9999 would otherwise be applied as `amixer sset 'Master' 49995%`
+static void SanitizeSettings(Settings* s) {
+	s->brightness = clampInt(s->brightness, 0, 10);
+	s->headphones = clampInt(s->headphones, 0, 20);
+	s->speaker = clampInt(s->speaker, 0, 20);
+	s->jack = s->jack ? 1 : 0;
+	s->hdmi = s->hdmi ? 1 : 0;
+}
+
 #define SHM_KEY "/SharedSettings"
 static char SettingsPath[256];
 static int shm_fd = -1;
@@ -74,9 +87,11 @@ void InitSettings(void) {
 		
 		int fd = open(SettingsPath, O_RDONLY);
 		if (fd>=0) {
-			read(fd, settings, shm_size);
+			ssize_t got = read(fd, settings, shm_size);
 			// TODO: use settings->version for future proofing?
 			close(fd);
+			if (got!=shm_size) memcpy(settings, &DefaultSettings, shm_size); // cut short, don't trust half of it
+			SanitizeSettings(settings);
 		}
 		else {
 			// load defaults
