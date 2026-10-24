@@ -115,3 +115,6 @@ Screenshots are scaled up by a whole number so the longest side is at most 1080 
 
 ## Audio buffer setting
 `.userdata/rgb30/audio-buffer` (milliseconds, 20 to 500, nothing or 0 = default about 28 ms) sets how much sound is kept ready. The buffer grows to three times that (the rate control aims for a third of it) and starts with the cushion already in place. A bigger cushion covers occasional busy frames (simulated: a 45 ms busy frame every 15 s drops sound with the default and not with 80); it cannot cover sustained slowness, because the rate control can only win back about 1% of the time. Set it in Tools > Power & Audio (the tool was "Sleep & Power"). Evidence from the device: Zelda on snes9x2005_plus starved in bursts, CPU fixed at 1.416 GHz (the TCS4525 CPU regulator doesn't bind, so cpufreq never starts).
+
+## mGBA core update
+`mgba_HASH` 747362c (Nov 2024) -> 517e518 (3 Aug 2026), 817 commits newer. It is the last upstream commit with `Makefile.libretro`; upstream then moved libretro to CMake, so anything newer needs a different build. The patch applies unchanged. Save states are core-version specific: back up `.userdata/rgb30/MGBA-mgba` and `Saves/` first. The previous core is `mgba_libretro.so` in the install backup (sha256 0c63f769...). Not yet tested on the device.
