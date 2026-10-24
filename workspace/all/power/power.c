@@ -1,5 +1,6 @@
-// Sleep and power-off timings. Writes .userdata/<platform>/sleep-timeout and poweroff-timeout
-// (seconds, 0 for never); the launcher and the emulator read them when they start.
+// Sleep, power-off and audio-buffer settings. Writes .userdata/<platform>/sleep-timeout and
+// poweroff-timeout (seconds, 0 for never) and audio-buffer (milliseconds, 0 for the default);
+// the launcher and the emulator read them when they start.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,7 @@
 
 #define SLEEP_PATH USERDATA_PATH "/sleep-timeout"
 #define POWEROFF_PATH USERDATA_PATH "/poweroff-timeout"
+#define AUDIO_PATH USERDATA_PATH "/audio-buffer"
 #define DEFAULT_SECONDS 120 // what the system uses when there is no file
 
 typedef struct { int seconds; const char* label; } Choice;
@@ -24,26 +26,33 @@ static const Choice poweroff_choices[] = {
 	{600,"10 minutes"}, {1800,"30 minutes"}, {3600,"1 hour"}, {-1,NULL}
 };
 
+static const Choice audio_choices[] = {
+	{0,"Default"}, {40,"40 ms"}, {60,"60 ms"}, {80,"80 ms"}, {120,"120 ms"}, {200,"200 ms"}, {-1,NULL}
+};
+
 typedef struct {
 	const char* name;
 	const char* path;
 	const Choice* choices;
-	int seconds; // what is set now
+	int fallback;	// what the system uses when the file is missing or unreadable
+	int min, max;	// accepted values besides 0 (and, for the timings, "10 seconds or more")
+	int seconds;	// what is set now (milliseconds for the audio row)
 } Row;
 static Row rows[] = {
-	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS},
-	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS},
+	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
+	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
+	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))
 
-static int readSeconds(const char* path) { // same rules as the system: a bad file means the default
+static int readValue(const Row* row) { // same rules as the system: a bad file means the default
 	char text[32] = "";
-	getFile((char*)path, text, sizeof(text));
-	if (!text[0]) return DEFAULT_SECONDS;
+	getFile((char*)row->path, text, sizeof(text));
+	if (!text[0]) return row->fallback;
 	char* end = NULL;
 	long n = strtol(text, &end, 10);
 	while (end && (*end==' ' || *end=='\n' || *end=='\r')) end++;
-	if (end==text || (end && *end) || n<0 || n>86400 || (n!=0 && n<10)) return DEFAULT_SECONDS;
+	if (end==text || (end && *end) || n<0 || n>row->max || (n!=0 && n<row->min)) return row->fallback;
 	return (int)n;
 }
 static int choiceIndex(const Row* row) { // -1 when the file holds something that isn't in the list
@@ -53,7 +62,7 @@ static int choiceIndex(const Row* row) { // -1 when the file holds something tha
 static void describe(const Row* row, char* out, size_t cap) {
 	int i = choiceIndex(row);
 	if (i>=0) snprintf(out, cap, "%s", row->choices[i].label);
-	else snprintf(out, cap, "%i seconds", row->seconds);
+	else snprintf(out, cap, row->choices==audio_choices ? "%i ms" : "%i seconds", row->seconds);
 }
 static void step(Row* row, int dir) {
 	int count = 0;
@@ -99,7 +108,7 @@ int main(int argc, char* argv[]) {
 	InitSettings();
 	mkdirs(USERDATA_PATH);
 
-	for (int i=0; i<ROW_COUNT; i++) rows[i].seconds = readSeconds(rows[i].path);
+	for (int i=0; i<ROW_COUNT; i++) rows[i].seconds = readValue(&rows[i]);
 
 	int quit = 0, dirty = 1, show_setting = 0, sel = 0;
 	while (!quit) {
@@ -116,7 +125,7 @@ int main(int argc, char* argv[]) {
 		if (dirty) {
 			GFX_clear(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
-			char title[64] = "Sleep & Power";
+			char title[64] = "Power & Audio";
 			char out[64];
 			GFX_truncateText(font.large, title, out, screen->w - SCALE1(PADDING*2) - ow, SCALE1(BUTTON_PADDING*2));
 			SDL_Surface* t = TTF_RenderUTF8_Blended(font.large, out, COLOR_LIGHT_TEXT);
@@ -128,10 +137,9 @@ int main(int argc, char* argv[]) {
 
 			// what the settings mean, in small text under the rows
 			static const char* notes[] = {
-				"Never keeps it on until you press power.",
-				"Sleep turns the screen off; power wakes it.",
 				"Power off counts only while asleep, not charging.",
 				"Games don't sleep by themselves; power still does.",
+				"Bigger audio buffer: fewer dropouts, more delay.",
 				"Applies when a game or the launcher next starts.",
 				NULL
 			};

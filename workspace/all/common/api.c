@@ -1028,6 +1028,7 @@ static struct SND_Context {
 	SND_Resampler resample;
 	int drc_rate_in; // sample_rate_in nudged by how full the buffer is, see SND_updateRate()
 	int drc_enabled; // off if USERDATA_PATH has a "no-audio-rate-control" file
+	int target_ms; // 0: the default cushion (a third of the buffer); else the audio-buffer file's milliseconds
 	
 	// more diagnostics, logged every few seconds and on exit
 	int peak_in;			// loudest sample written to the buffer since the last log line
@@ -1122,8 +1123,14 @@ static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // pla
 	SND_audioFill(userdata, stream, len);
 	SND_fadeIn((int16_t*)stream, len / (int)(sizeof(int16_t) * 2));
 }
+#define DRC_TARGET_DIVISOR 3 // aim for a third of the buffer (~1330 frames, 28ms at 48kHz): with a quarter
+	// a late frame still ran the buffer dry now and then, and the rate swung back and forth more
 static void SND_resizeBuffer(void) { // plat_sound_resize_buffer
 	snd.frame_count = snd.buffer_seconds * snd.sample_rate_in / snd.frame_rate;
+	if (snd.target_ms>0) { // a bigger cushion needs a bigger buffer: the rate control aims for a third of it
+		size_t want = (size_t)DRC_TARGET_DIVISOR * snd.target_ms * snd.sample_rate_in / 1000;
+		if (want>snd.frame_count) snd.frame_count = want;
+	}
 	if (snd.frame_count==0) return;
 	
 	// LOG_info("frame_count: %i (%i * %i / %f)\n", snd.frame_count, snd.buffer_seconds, snd.sample_rate_in, snd.frame_rate);
@@ -1136,7 +1143,7 @@ static void SND_resizeBuffer(void) { // plat_sound_resize_buffer
 	
 	memset(snd.buffer, 0, buffer_bytes);
 	
-	snd.frame_in = 0;
+	snd.frame_in = snd.target_ms>0 ? snd.frame_count / DRC_TARGET_DIVISOR : 0; // start with the cushion already there (silence, under the fade-in)
 	snd.frame_out = 0;
 	snd.frame_filled = snd.frame_count - 1;
 	snd.drc_rate_in = snd.sample_rate_in;
@@ -1179,8 +1186,6 @@ static void SND_selectResampler(void) { // plat_sound_select_resampler
 // resampled at by how full the buffer is (at most MAX_DELTA either way, 1% is
 // inaudible) which keeps the buffer around its target instead.
 #define DRC_MAX_DELTA 0.01
-#define DRC_TARGET_DIVISOR 3 // aim for a third of the buffer (~1330 frames, 28ms at 48kHz): with a quarter
-	// a late frame still ran the buffer dry now and then, and the rate swung back and forth more
 static void SND_updateRate(void) {
 	if (!snd.drc_enabled) { snd.drc_rate_in = snd.sample_rate_in; return; }
 	
@@ -1265,6 +1270,17 @@ static void SND_logState(const char* when) {
 	fflush(stdout);
 }
 
+// .userdata/<platform>/audio-buffer: how many milliseconds of sound to keep ready (20 to 500).
+// More rides out a busy moment in a game instead of dropping a sound, at the cost of that much delay.
+// Nothing, 0 or anything unreadable keeps the default (about 28ms).
+static int SND_parseBufferMs(const char* text) {
+	if (!text || *text<'0' || *text>'9') return 0;
+	int n = 0;
+	while (*text>='0' && *text<='9' && n<10000) n = n*10 + (*text++ - '0');
+	while (*text==' ' || *text=='\t' || *text=='\r' || *text=='\n') text++;
+	if (*text) return 0;
+	return (n>=20 && n<=500) ? n : 0;
+}
 void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	LOG_info("SND_init\n");
 	
@@ -1293,6 +1309,12 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	if (SDL_OpenAudio(&spec_in, &spec_out)<0) LOG_info("SDL_OpenAudio error: %s\n", SDL_GetError());
 	
 	snd.buffer_seconds = 5;
+	{
+		char text[16] = "";
+		FILE* f = fopen(USERDATA_PATH "/audio-buffer", "r");
+		if (f) { if (!fgets(text, sizeof(text), f)) text[0] = '\0'; fclose(f); }
+		snd.target_ms = SND_parseBufferMs(text);
+	}
 	snd.sample_rate_in  = sample_rate;
 	snd.sample_rate_out = spec_out.freq;
 	
@@ -1307,6 +1329,7 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 
 	LOG_info("sample rate: %i (req) %i (rec) [samples %i]\n", snd.sample_rate_in, snd.sample_rate_out, SAMPLES);
 	LOG_info("audio rate control: %s\n", snd.drc_enabled ? "on" : "off (no-audio-rate-control)");
+	LOG_info("audio buffer: %i frames, cushion %s\n", (int)snd.frame_count, snd.target_ms ? "set by audio-buffer" : "default");
 	
 	SND_logState("start");
 	snd.initialized = 1;

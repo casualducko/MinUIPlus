@@ -33,6 +33,9 @@ static void advance(double dt_us) {
 }
 static void SDL_Delay(unsigned ms) { advance(ms*1000.0); }
 
+static int sim_target_ms;   // the audio-buffer setting (0: default)
+static double sim_spike_ms;  // a busy moment: one frame takes this much longer...
+static double sim_spike_every_s; // ...this often
 static int single_frame_calls; // some cores push one frame at a time (audio_sample_callback)
 typedef struct { unsigned callbacks, starved, underruns, short_frames; double avg_fill; double pitch; } Result;
 
@@ -43,6 +46,7 @@ static Result simulate(double core_fps, double pace_fps, double seconds) {
 	snd.frame_rate = core_fps;
 	snd.sample_rate_in = snd.sample_rate_out = 48000;
 	snd.buffer_seconds = 5;
+	snd.target_ms = sim_target_ms;
 	snd.drc_enabled = 1; // what SND_init does unless the no-audio-rate-control file exists
 	snd.drc_rate_min = snd.drc_rate_max = snd.sample_rate_in;
 	SND_selectResampler();
@@ -51,7 +55,7 @@ static Result simulate(double core_fps, double pace_fps, double seconds) {
 	now_us = 0; next_cb_us = cb_period_us;
 
 	double per_frame = 48000.0 / core_fps, owed = 0, t = 0, frame_us = 1e6 / pace_fps;
-	long frames = 0; double fill_sum = 0; long fill_n = 0;
+	long frames = 0; double fill_sum = 0; long fill_n = 0; double next_spike = sim_spike_every_s*1e6;
 	SND_Frame* chunk = calloc(2000, sizeof(SND_Frame));
 	while (t < seconds*1e6) {
 		advance(t - now_us > 0 ? t - now_us : 0);
@@ -59,9 +63,11 @@ static Result simulate(double core_fps, double pace_fps, double seconds) {
 		for (int i=0;i<n;i++) { chunk[i].left = (int16_t)(8000*sin(frames*0.05)); chunk[i].right = chunk[i].left; frames++; }
 		int fill = snd.frame_in - snd.frame_out; if (fill<0) fill += snd.frame_count;
 		fill_sum += fill; fill_n++;
+		if (getenv("SIM_TRACE") && fill_n%60==0) printf("  t=%5.1fs fill=%5d rate_in=%d\n", t/1e6, fill, snd.drc_rate_in);
 		if (single_frame_calls) for (int i=0;i<n;i++) SND_batchSamples(&chunk[i], 1);
 		else SND_batchSamples(chunk, n);
 		t += frame_us;
+		if (sim_spike_ms>0 && t>=next_spike) { t += sim_spike_ms*1000; next_spike += sim_spike_every_s*1e6; }
 	}
 	free(chunk);
 	// frames played per frame the core made: 1.0 is untouched, 1.002 is the audio stretched 0.2%
@@ -104,5 +110,22 @@ int main(int argc, char** argv) {
 
 	r = simulate(60.0988, 60.0988, 60);
 	CHECK(r.underruns < 10, "pacing exactly matches the core: fine");
+
+	// busy moments (the Zelda case): now and then one frame takes much longer to make
+	sim_spike_ms = 45; sim_spike_every_s = 15; // the rate control can only win back about 1% of the time, so these have to be occasional
+	r = simulate(60.0988, 60.0, 60);
+	printf("      45ms busy frame every 15s, default cushion: %u starved? underruns %u of %u, %u frames short\n", snd.starved, r.underruns, r.callbacks, r.short_frames);
+	unsigned base_short = r.short_frames;
+	CHECK(r.underruns > 0, "default cushion: a 45ms busy frame does run the buffer dry (the problem)");
+	sim_target_ms = 80;
+	r = simulate(60.0988, 60.0, 60);
+	printf("      same, audio-buffer 80:   underruns %u of %u, %u frames short, avg fill %.0f\n", r.underruns, r.callbacks, r.short_frames, r.avg_fill);
+	CHECK(r.underruns==0 && r.short_frames==0, "audio-buffer 80: the same busy frames are covered, nothing is dropped");
+	CHECK(r.short_frames < base_short, "less audio is missing than with the default");
+	sim_target_ms = 80; sim_spike_ms = 0;
+	r = simulate(60.0988, 60.0, 60);
+	CHECK(r.underruns==0 && fabs(r.pitch-1.0) < 0.005, "audio-buffer 80 without busy frames: still clean, stretch under 0.5%");
+	CHECK(r.avg_fill > 3000 && r.avg_fill < 5000, "audio-buffer 80: the cushion is about 80ms (3840 frames at 48kHz)");
+	sim_target_ms = 0;
 	return fails!=0;
 }
