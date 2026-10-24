@@ -83,3 +83,6 @@ A Tools pak that browses a romulus server (the API described in ROMULUS_HANDOFF.
 - A: download (asks first if you already have it), X or Fn: search (on-screen keyboard), B: back, L1/R1: page. Zips are unpacked (first file the emulator takes, base name only, CRC checked); odd file names are cleaned for FAT; a download never leaves a partial ROM.
 - Tests: `tools/host-tests/test_romulus.c` (+ `mock_romulus.py`, `make_zips.py`) run in `run.sh` under ASan/UBSan; `tools/host-harness/romulus-run.sh` drives the real UI against the mock server with screenshots.
 - Not tried on the device or against the real server.
+
+## Autosleep timeout
+- Idle autosleep was a fixed 30 seconds (`SLEEP_DELAY` in `PWR_update`). It is now 120 seconds by default, and `.userdata/rgb30/sleep-timeout` (a number of seconds on one line) overrides it: `0` = never, otherwise 10 to 86400, anything else is ignored. Read once at start and logged (`autosleep after N seconds`). Applies wherever `PWR_update` runs (launcher, tools, the in-game menu); sleeping on a long download is still prevented by the tools. Test: `test_sleeptimeout.c`.

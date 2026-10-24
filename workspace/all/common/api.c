@@ -1698,6 +1698,40 @@ int PWR_ignoreSettingInput(int btn, int show_setting) {
 	return show_setting && (btn==BTN_MOD_PLUS || btn==BTN_MOD_MINUS);
 }
 
+// How long with no input before the device goes to sleep by itself. It was a fixed 30 seconds.
+// Now 2 minutes unless USERDATA_PATH/sleep-timeout says otherwise: a number of seconds,
+// 0 for never (10 to 86400 otherwise, anything else is ignored and the default is used).
+#define SLEEP_TIMEOUT_DEFAULT 120
+static int PWR_parseSleepSeconds(const char* text) { // seconds, 0 for never
+	if (!text) return SLEEP_TIMEOUT_DEFAULT;
+	while (*text==' ' || *text=='\t') text++;
+	if (*text<'0' || *text>'9') return SLEEP_TIMEOUT_DEFAULT;
+	long n = 0;
+	for (; *text>='0' && *text<='9'; text++) {
+		n = n*10 + (*text-'0');
+		if (n>86400) return SLEEP_TIMEOUT_DEFAULT;
+	}
+	while (*text==' ' || *text=='\t' || *text=='\r' || *text=='\n') text++;
+	if (*text) return SLEEP_TIMEOUT_DEFAULT; // trailing junk, eg. "2 minutes"
+	if (n!=0 && n<10) return SLEEP_TIMEOUT_DEFAULT; // a typo should not make it sleep at once
+	return (int)n;
+}
+static uint32_t PWR_sleepDelay(void) { // milliseconds, 0 for never; read once
+	static int seconds = -1;
+	if (seconds<0) {
+		char text[32] = "";
+		FILE* f = fopen(USERDATA_PATH "/sleep-timeout", "r");
+		if (f) {
+			if (!fgets(text, sizeof(text), f)) text[0] = '\0';
+			fclose(f);
+			seconds = PWR_parseSleepSeconds(text);
+		}
+		else seconds = SLEEP_TIMEOUT_DEFAULT;
+		LOG_info("autosleep after %i seconds\n", seconds);
+	}
+	return (uint32_t)seconds * 1000;
+}
+
 void PWR_update(int* _dirty, int* _show_setting, PWR_callback_t before_sleep, PWR_callback_t after_sleep) {
 	int dirty = _dirty ? *_dirty : 0;
 	int show_setting = _show_setting ? *_show_setting : 0;
@@ -1735,12 +1769,12 @@ void PWR_update(int* _dirty, int* _show_setting, PWR_callback_t before_sleep, PW
 		power_pressed_at = now;
 	}
 	
-	#define SLEEP_DELAY 30000 // 30 seconds
-	if (now-last_input_at>=SLEEP_DELAY && PWR_preventAutosleep()) last_input_at = now;
+	uint32_t sleep_delay = PWR_sleepDelay(); // 0: never
+	if (sleep_delay && now-last_input_at>=sleep_delay && PWR_preventAutosleep()) last_input_at = now;
 	
 	if (
 		pwr.requested_sleep || // hardware requested sleep
-		now-last_input_at>=SLEEP_DELAY || // autosleep
+		(sleep_delay && now-last_input_at>=sleep_delay) || // autosleep
 		(pwr.can_sleep && PAD_justReleased(BTN_SLEEP)) // manual sleep
 	) {
 		pwr.requested_sleep = 0;
