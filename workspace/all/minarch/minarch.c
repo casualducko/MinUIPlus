@@ -1,6 +1,11 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE // dladdr(), the registers in ucontext
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
+#include <stdint.h>
 #include <msettings.h>
 
 #include <unistd.h>
@@ -12,6 +17,9 @@
 #include <errno.h>
 #include <zlib.h>
 #include <pthread.h>
+#include <signal.h>
+#include <execinfo.h>
+#include <ucontext.h>
 
 #include "libretro.h"
 #include "defines.h"
@@ -4825,8 +4833,75 @@ static void* coreThread(void *arg) {
 	pthread_exit(NULL);
 }
 
+// A crash (in the frontend or in the core) writes where it happened to the log, then dies as before:
+// the signal, the address it touched, and the places it was called from as "module(+offset)" which
+// addr2line can turn into a function with the core's unstripped build. Only async-signal-safe calls
+// (no stdio, no malloc) except backtrace(), which is warmed up first so it doesn't need to load anything.
+static void crash_say(const char* text) { size_t n = strlen(text); if (write(STDOUT_FILENO, text, n)<0) {} }
+static void crash_hex(unsigned long long v) {
+	char buf[24]; int i = 0;
+	buf[i++] = '0'; buf[i++] = 'x';
+	int started = 0;
+	for (int shift=60; shift>=0; shift-=4) {
+		int d = (v >> shift) & 0xF;
+		if (d || started || shift==0) { buf[i++] = "0123456789abcdef"[d]; started = 1; }
+	}
+	buf[i] = '\0';
+	crash_say(buf);
+}
+static void crash_where(const char* label, void* addr) {
+	Dl_info info;
+	crash_say(label);
+	crash_hex((unsigned long long)(uintptr_t)addr);
+	if (dladdr(addr, &info) && info.dli_fname) {
+		crash_say("  ");
+		crash_say(info.dli_fname);
+		crash_say("+");
+		crash_hex((unsigned long long)((char*)addr - (char*)info.dli_fbase));
+	}
+	crash_say("\n");
+}
+static void crash_handler(int sig, siginfo_t* info, void* ctx) {
+	crash_say("\nCRASH: signal ");
+	crash_hex((unsigned long long)sig);
+	crash_say(" (hex: 4=ILL 6=ABRT 7=BUS 8=FPE b=SEGV)\n");
+	crash_where("  at address ", info ? info->si_addr : NULL);
+#if defined(__aarch64__)
+	if (ctx) {
+		ucontext_t* uc = (ucontext_t*)ctx;
+		crash_where("  pc ", (void*)uc->uc_mcontext.pc);
+		crash_where("  lr ", (void*)uc->uc_mcontext.regs[30]);
+	}
+#else
+	(void)ctx;
+#endif
+	void* frames[32];
+	int count = backtrace(frames, 32);
+	crash_say("  backtrace:\n");
+	backtrace_symbols_fd(frames, count, STDOUT_FILENO);
+	signal(sig, SIG_DFL);
+	raise(sig);
+}
+static void crash_init(void) {
+	static char altstack[64*1024]; // a stack overflow can't run a handler on the stack that overflowed
+	void* warm[2]; backtrace(warm, 2);
+	stack_t ss = { .ss_sp = altstack, .ss_size = sizeof(altstack), .ss_flags = 0 };
+	sigaltstack(&ss, NULL);
+	struct sigaction sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_sigaction = crash_handler;
+	sa.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGSEGV, &sa, NULL);
+	sigaction(SIGBUS, &sa, NULL);
+	sigaction(SIGABRT, &sa, NULL);
+	sigaction(SIGFPE, &sa, NULL);
+	sigaction(SIGILL, &sa, NULL);
+}
+
 int main(int argc , char* argv[]) {
 	LOG_info("MinArch\n");
+	crash_init();
 	
 	if (argc<3) { // started by hand, the emu paks always pass the core and the rom
 		fprintf(stderr, "usage: minarch.elf CORE.so ROM\n");
