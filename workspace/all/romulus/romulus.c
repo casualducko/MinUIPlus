@@ -252,8 +252,11 @@ static void finish_page(void) {
 	free(body);
 	if (added<0) { roms_failed = 1; say("The server's game list made no sense", 0); return; }
 	roms_total = total;
-	roms_offset += raw;
-	if (raw==0 || roms_offset>=roms_total) roms_exhausted = 1;
+	// The server leaves disc sets out after it has cut the page, so a page can come back short
+	// while more remain: page by the size asked for, not by what came back (no repeats, no gaps).
+	(void)raw;
+	roms_offset += PAGE_LIMIT;
+	if (roms_offset>=roms_total) roms_exhausted = 1;
 	dirty = 1;
 }
 

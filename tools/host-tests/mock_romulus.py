@@ -17,6 +17,8 @@ def add(platform, n, ext, region="USA"):
                          file_name=f"{platform.upper()} Game {i:03d}.{ext}"))
 add("nes", 70, "nes"); add("gba", 30, "gba"); add("gb", 20, "gb"); add("ps2", 5, "iso")
 # a few special ones
+for r in ROMS:
+    if r["platform"] == "gb" and r["id"] % 5 == 0: r["is_dir"] = True # disc sets: counted, never listed
 ROMS.append(dict(id=900, name="Zipped (World)", platform="nes", region="World", file_name="Zipped (World).zip"))
 ROMS.append(dict(id=901, name="Big Slow", platform="gba", region="", file_name="Big Slow.gba"))
 ROMS.append(dict(id=902, name="Café テスト \U0001F600", platform="nes", region="", file_name="Café テスト.nes"))
@@ -60,7 +62,7 @@ class H(BaseHTTPRequestHandler):
             text = q.get("q", [""])[0].lower()
             offset = int(q.get("offset", ["0"])[0]); limit = int(q.get("limit", ["50"])[0])
             rows = [r for r in ROMS if (plats is None or r["platform"] in plats) and text in r["name"].lower()]
-            page = rows[offset:offset + limit]
+            page = [r for r in rows[offset:offset + limit] if not r.get("is_dir")] # cut first, then drop disc sets, as the real one does
             return self.send_json({"total": len(rows), "roms": page})
         m = re.fullmatch(r"/api/roms/(\d+)/download", u.path)
         if m:

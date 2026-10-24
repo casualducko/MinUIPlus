@@ -252,6 +252,18 @@ static void test_server(void) {
 	CHECK(!dup, "no game twice across pages");
 	rromlist_free(&list);
 
+	// disc sets are left out after the page is cut: 20 gb games, 4 of them dirs, pages of 10
+	rapi_roms_path(path, sizeof(path), "gb", NULL, "", 0, 10);
+	run_job(&job, path, out, 0); body = slurp(out, &n);
+	added = rapi_parse_roms(body, n, &list, &total, &raw); free(body); rjob_cleanup(&job);
+	int first = added;
+	rapi_roms_path(path, sizeof(path), "gb", NULL, "", 10, 10);
+	run_job(&job, path, out, 0); body = slurp(out, &n);
+	added = rapi_parse_roms(body, n, &list, &total, &raw); free(body); rjob_cleanup(&job);
+	int dup2 = 0; for (int i=0;i<list.count;i++) for (int j=i+1;j<list.count;j++) if (list.items[i].id==list.items[j].id) dup2 = 1;
+	CHECK(first==8 && added==8 && total==20 && !dup2 && list.count==16, "short pages (disc sets dropped): paging by the page size gives every game once");
+	rromlist_free(&list);
+	
 	rapi_roms_path(path, sizeof(path), NULL, "nes,gba", "game 01", 0, 50);
 	run_job(&job, path, out, 0); body = slurp(out, &n);
 	added = rapi_parse_roms(body, n, &list, &total, &raw); free(body); rjob_cleanup(&job);

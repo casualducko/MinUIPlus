@@ -106,9 +106,11 @@ static const SysDef systems[] = {
 	{ {"genesis","megadrive","mega-drive","md","sega-genesis","segagenesis"}, "Genesis", "MD", {"MD"}, {"md","gen","smd","bin"} },
 	{ {"sms","mastersystem","master-system","sega-master-system"}, "Sega Master System", "SMS", {"SMS"}, {"sms"} },
 	{ {"gg","gamegear","game-gear","sega-game-gear"}, "Sega Game Gear", "GG", {"GG"}, {"gg"} },
-	{ {"pce","tg16","turbografx","turbografx-16","pc-engine"}, "TurboGrafx-16", "PCE", {"PCE"}, {"pce"} },
+	{ {"pce","tg16","turbografx","turbografx-16","pc-engine","supergrafx"}, "TurboGrafx-16", "PCE", {"PCE"}, {"pce"} },
 	{ {"ngp","ngpc","neo-geo-pocket","neo-geo-pocket-color"}, "Neo Geo Pocket", "NGPC", {"NGPC","NGP"}, {"ngp","ngc"} },
 	{ {"vb","virtualboy","virtual-boy"}, "Virtual Boy", "VB", {"VB"}, {"vb","vboy"} },
+	{ {"psx","ps","ps1","playstation","sony-playstation"}, "Playstation", "PS", {"PS"}, {"chd","pbp"} },
+	{ {"pokemon-mini","pokemini"}, "Pokemon Mini", "PKM", {"PKM"}, {"min"} },
 };
 const SysDef* sys_for_slug(const char* slug) {
 	if (!slug) return NULL;
