@@ -400,8 +400,16 @@ static void finish_download(void) {
 
 	const char* folder = strrchr(dir, '/');
 	char msg[400];
-	snprintf(msg, sizeof(msg), "Saved %s\nin %s", final_name, folder ? folder+1 : dir);
-	say(msg, 2500);
+	char title[256], place[128];
+	snprintf(title, sizeof(title), "%s", final_name);
+	char* tdot = strrchr(title, '.');
+	if (tdot && strlen(tdot)<=5) *tdot = '\0'; // no extension
+	snprintf(place, sizeof(place), "%s", folder ? folder+1 : dir);
+	char* tag = strstr(place, " (");
+	if (tag) *tag = '\0'; // "Super Nintendo (SFC)" -> "Super Nintendo"
+	GFX_wrapText(font.large, title, screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2), 2);
+	snprintf(msg, sizeof(msg), "Downloaded\n\n%s\n\nSaved to %s", title, place);
+	say(msg, 3000);
 }
 
 static void start_download(int index) {
@@ -593,7 +601,7 @@ static void draw_progress(void) {
 }
 static void draw_modal(void) {
 	int w = screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2);
-	int h = ROW_H*4;
+	int h = ROW_H*5;
 	int x = (screen->w-w)/2, y = (screen->h-h)/2;
 	char text[320];
 	snprintf(text, sizeof(text), "%s", modal_msg);
