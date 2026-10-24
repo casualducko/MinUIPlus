@@ -121,3 +121,6 @@ Tried `517e518` (3 Aug 2026, 817 commits past the old pin): **crashed on the dev
 
 ## Crash reporter (minarch)
 A fatal signal (SEGV, BUS, ABRT, FPE, ILL) now writes to the game's log: `CRASH: signal 0xb`, the address touched, `pc` and `lr` as `module+offset`, and a backtrace, then the process dies as before. Use `addr2line -f -e <unstripped core or minarch.elf> <offset>` (aarch64 toolchain in the docker image) on the offsets. Added after the new mGBA cores segfaulted on the device with no way to see where.
+
+## audio-dump diagnostic
+If `.userdata/<platform>/audio-dump` exists, minarch writes the core's raw audio (S16 stereo, the core's rate, before resampling or rate control) to `/tmp/audio-dump-<rate>.raw`, up to 40 MB (about 5 minutes). Used to tell whether a sound that is not heard was ever produced (Zelda pot-break noise missing with both snes9x2005_plus and Supafaust, clean timing and counters).

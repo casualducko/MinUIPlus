@@ -1028,6 +1028,8 @@ static struct SND_Context {
 	SND_Resampler resample;
 	int drc_rate_in; // sample_rate_in nudged by how full the buffer is, see SND_updateRate()
 	int drc_enabled; // off if USERDATA_PATH has a "no-audio-rate-control" file
+	FILE* dump;			// audio-dump file in USERDATA_PATH: the core's raw audio goes to /tmp/audio-dump-<rate>.raw (diagnostic)
+	size_t dump_bytes;
 	int target_ms; // 0: the default cushion (a third of the buffer); else the audio-buffer file's milliseconds
 	
 	// more diagnostics, logged every few seconds and on exit
@@ -1214,6 +1216,9 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 	
 	SDL_LockAudio();
 	snd.frames_offered += frame_count;
+	if (snd.dump && snd.dump_bytes < 40u*1024*1024) { // about 5 minutes, then it stops
+		snd.dump_bytes += fwrite(frames, sizeof(SND_Frame), frame_count, snd.dump) * sizeof(SND_Frame);
+	}
 
 	int consumed = 0;
 	int consumed_frames = 0;
@@ -1317,6 +1322,12 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	}
 	snd.sample_rate_in  = sample_rate;
 	snd.sample_rate_out = spec_out.freq;
+	if (exists(USERDATA_PATH "/audio-dump")) { // diagnostic: what the core produced, before any of our processing
+		char path[64];
+		snprintf(path, sizeof(path), "/tmp/audio-dump-%i.raw", (int)sample_rate);
+		snd.dump = fopen(path, "wb");
+		LOG_info("audio dump: %s (%s)\n", path, snd.dump ? "recording" : "can't open");
+	}
 	
 	snd.fade_pos = 0;
 	snd.fade_len = snd.sample_rate_out / 20; // 50ms
@@ -1344,6 +1355,10 @@ void SND_quit(void) { // plat_sound_finish
 	LOG_info("audio: %u callbacks, %u starved (buffer empty), %u underruns (%u frames short)\n", snd.callbacks, snd.starved, snd.underruns, snd.underrun_frames);
 	LOG_info("audio: %u frames from the core, %u written (rate control %+i: %u frames repeated, %u left out)\n", snd.frames_offered, snd.frames_written, (int)snd.frames_written - (int)snd.frames_offered, snd.frames_duplicated, snd.frames_dropped);
 	
+	if (snd.dump) {
+		fclose(snd.dump);
+		snd.dump = NULL;
+	}
 	if (snd.buffer) {
 		free(snd.buffer);
 		snd.buffer = NULL;
