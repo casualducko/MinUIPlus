@@ -337,6 +337,7 @@ void PLAT_enableOverlay(int enable);
 	
 #define PWR_LOW_CHARGE 10
 void PLAT_getBatteryStatus(int* is_charging, int* charge); // 0,1 and 0,10,20,40,60,80,100
+int PLAT_getBatteryPercent(void); // exact 0-100, -1 if unknown (a weak default says -1)
 void PLAT_enableBacklight(int enable);
 void PLAT_powerOff(void);
 	

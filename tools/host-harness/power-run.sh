@@ -16,7 +16,7 @@ rm -rf "$WORK/platform"
 cp -R "$repo/workspace/macos/platform" "$WORK/platform"
 python3 "$here/platform-patch.py" "$WORK/platform" "$CARD"
 mkdir -p "$CARD/.userdata/macos"
-rm -f "$CARD/.userdata/macos/sleep-timeout" "$CARD/.userdata/macos/poweroff-timeout" "$CARD/.userdata/macos/audio-buffer"
+rm -f "$CARD/.userdata/macos/sleep-timeout" "$CARD/.userdata/macos/poweroff-timeout" "$CARD/.userdata/macos/audio-buffer" "$CARD/.userdata/macos/low-battery-shutdown"
 [ -n "$SLEEP_FILE" ] && printf '%s' "$SLEEP_FILE" > "$CARD/.userdata/macos/sleep-timeout"
 [ -n "$AUDIO_FILE" ] && printf '%s' "$AUDIO_FILE" > "$CARD/.userdata/macos/audio-buffer"
 [ -n "$POWEROFF_FILE" ] && printf '%s' "$POWEROFF_FILE" > "$CARD/.userdata/macos/poweroff-timeout"
@@ -33,4 +33,4 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy HP_OUT="$OUT" HP_SCRIPT="$script" \
 	perl -e 'alarm 60; exec @ARGV' ./power > "$OUT/log.txt" 2> "$OUT/err.txt" && status=0 || status=$?
 for f in "$OUT"/*.bmp; do [ -f "$f" ] || continue; sips -s format png "$f" --out "${f%.bmp}.png" >/dev/null 2>&1 && rm "$f"; done
 echo "exit status $status"; ls "$OUT" | grep png || true
-for f in sleep-timeout poweroff-timeout audio-buffer; do printf '%s: ' $f; cat "$CARD/.userdata/macos/$f" 2>/dev/null || printf '(none)'; echo; done
+for f in sleep-timeout poweroff-timeout audio-buffer low-battery-shutdown; do printf '%s: ' $f; cat "$CARD/.userdata/macos/$f" 2>/dev/null || printf '(none)'; echo; done

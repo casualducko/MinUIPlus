@@ -82,6 +82,7 @@ static struct PWR_Context {
 	int is_charging;
 	int charge;
 	int should_warn;
+	int low_battery; // powering off because the battery is nearly flat (changes the message)
 
 	SDL_Surface* overlay;
 } pwr = {0};
@@ -859,6 +860,8 @@ SDL_Surface* GFX_renderToastHud(const char* text) {
 }
 // platforms that can draw it override this (see rgb30)
 __attribute__((weak)) void PLAT_setHud(SDL_Surface* hud) {}
+// the exact charge, 0-100 (PLAT_getBatteryStatus only has steps), -1 if the platform can't tell
+__attribute__((weak)) int PLAT_getBatteryPercent(void) { return -1; }
 
 void GFX_blitHardwareHints(SDL_Surface* dst, int show_setting) {
 	if (BTN_MOD_VOLUME==BTN_SELECT && BTN_MOD_BRIGHTNESS==BTN_START) {
@@ -1824,6 +1827,38 @@ static uint32_t PWR_poweroffDelay(void) { // how long it stays asleep before pow
 	return (uint32_t)seconds * 1000;
 }
 
+// Nearly flat battery: below this percent, and not charging, the game is quicksaved and the device powers
+// off, instead of dying in the middle of a write. .userdata/<platform>/low-battery-shutdown, 0 for never.
+#define LOW_BATTERY_DEFAULT 5
+#define LOW_BATTERY_MAX 20
+#define LOW_BATTERY_GRACE_MS 60000 // after starting: time to plug a charger in
+static int PWR_parseLowBattery(const char* text) {
+	if (!text || *text<'0' || *text>'9') return LOW_BATTERY_DEFAULT;
+	int n = 0;
+	while (*text>='0' && *text<='9' && n<1000) n = n*10 + (*text++ - '0');
+	if (*text=='%') text++;
+	while (*text==' ' || *text=='\t' || *text=='\r' || *text=='\n') text++;
+	if (*text || n>LOW_BATTERY_MAX) return LOW_BATTERY_DEFAULT;
+	return n;
+}
+static int PWR_lowBatteryLimit(void) { // percent, 0 for never; read once
+	static int percent = -1;
+	if (percent<0) {
+		char text[16] = "";
+		FILE* f = fopen(USERDATA_PATH "/low-battery-shutdown", "r");
+		if (f) { if (!fgets(text, sizeof(text), f)) text[0] = '\0'; fclose(f); percent = PWR_parseLowBattery(text); }
+		else percent = LOW_BATTERY_DEFAULT;
+		LOG_info("power off at %i%% battery\n", percent);
+	}
+	return percent;
+}
+// Is the battery flat? Only after `needed` readings in a row at or below the limit, never while
+// charging or when the charge isn't known (-1), so one odd reading can't shut the device down.
+static int PWR_lowBatteryCheck(int percent, int charging, int limit, int* strikes, int needed) {
+	if (limit<=0 || percent<0 || charging || percent>limit) { *strikes = 0; return 0; }
+	return ++(*strikes) >= needed;
+}
+
 void PWR_update(int* _dirty, int* _show_setting, PWR_callback_t before_sleep, PWR_callback_t after_sleep) {
 	int dirty = _dirty ? *_dirty : 0;
 	int show_setting = _show_setting ? *_show_setting : 0;
@@ -1855,6 +1890,19 @@ void PWR_update(int* _dirty, int* _show_setting, PWR_callback_t before_sleep, PW
 	if (PAD_justReleased(BTN_POWEROFF) || (power_pressed_at && now-power_pressed_at>=1000)) {
 		if (before_sleep) before_sleep();
 		PWR_powerOff();
+	}
+	
+	static uint32_t battery_checked_at = 0;
+	static int low_strikes = 0;
+	if (now-battery_checked_at>=5000) {
+		battery_checked_at = now;
+		int percent = PLAT_getBatteryPercent();
+		if (now>=LOW_BATTERY_GRACE_MS && PWR_lowBatteryCheck(percent, pwr.is_charging, PWR_lowBatteryLimit(), &low_strikes, 3)) {
+			LOG_info("battery at %i%%, saving and powering off\n", percent);
+			pwr.low_battery = 1;
+			if (before_sleep) before_sleep();
+			PWR_powerOff();
+		}
 	}
 	
 	if (PAD_justPressed(BTN_POWER)) {
@@ -1947,7 +1995,8 @@ void PWR_powerOff(void) {
 		gfx.screen = GFX_resize(w,h,p);
 		
 		char* msg;
-		if (HAS_POWER_BUTTON || HAS_POWEROFF_BUTTON) msg = exists(AUTO_RESUME_PATH) ? "Quicksave created,\npowering off" : "Powering off";
+		if (pwr.low_battery) msg = exists(AUTO_RESUME_PATH) ? "Battery empty,\nquicksave created,\npowering off" : "Battery empty,\npowering off";
+		else if (HAS_POWER_BUTTON || HAS_POWEROFF_BUTTON) msg = exists(AUTO_RESUME_PATH) ? "Quicksave created,\npowering off" : "Powering off";
 		else msg = exists(AUTO_RESUME_PATH) ? "Quicksave created,\npower off now" : "Power off now";
 		
 		// LOG_info("PWR_powerOff %s (%ix%i)\n", gfx.screen, gfx.screen->w, gfx.screen->h);
@@ -1991,12 +2040,21 @@ static void PWR_exitSleep(void) {
 static void PWR_waitForWake(void) {
 	uint32_t sleep_ticks = SDL_GetTicks();
 	uint32_t off_delay = PWR_poweroffDelay(); // 0: stay asleep until woken
+	uint32_t battery_checked_at = sleep_ticks;
+	int low_strikes = 0;
 	while (!PAD_wake()) {
 		if (pwr.requested_wake) {
 			pwr.requested_wake = 0;
 			break;
 		}
 		SDL_Delay(200);
+		if (SDL_GetTicks()-battery_checked_at>=30000) { // asleep still drains the battery: the game was saved going to sleep
+			battery_checked_at = SDL_GetTicks();
+			if (PWR_lowBatteryCheck(PLAT_getBatteryPercent(), pwr.is_charging, PWR_lowBatteryLimit(), &low_strikes, 2)) {
+				pwr.low_battery = 1;
+				PWR_powerOff();
+			}
+		}
 		if (off_delay && pwr.can_poweroff && SDL_GetTicks()-sleep_ticks>=off_delay) {
 			if (pwr.is_charging) sleep_ticks += 60000; // check again in a minute
 			else PWR_powerOff();

@@ -414,6 +414,59 @@ static void SRAM_read(void) {
 
 	fclose(sram_file);
 }
+// Older versions of the save are kept in <saves>/.backups/<game>.sav.1 (newest) to .3 (oldest). A version
+// is kept before it is replaced, but not more often than every SRAM_SNAPSHOT_GAP seconds, so three
+// versions reach back over three sessions and not three menu visits.
+#define SRAM_BACKUPS 3
+#define SRAM_SNAPSHOT_GAP 600
+static void SRAM_backupDir(char* out, size_t cap) { snprintf(out, cap, "%s/.backups", core.saves_dir); }
+static void SRAM_backupBase(char* out, size_t cap) { snprintf(out, cap, "%s.sav", game.name); }
+static void SRAM_backupPath(char* out, size_t cap, int n) { snprintf(out, cap, "%s/.backups/%s.sav.%i", core.saves_dir, game.name, n); }
+static int SRAM_backupTime(int n, time_t* when) { // 1 if version n (1 is the newest) exists
+	char path[MAX_PATH];
+	struct stat st;
+	SRAM_backupPath(path, sizeof(path), n);
+	if (stat(path, &st)!=0 || !S_ISREG(st.st_mode)) return 0;
+	if (when) *when = st.st_mtime;
+	return 1;
+}
+static int SRAM_wantsSnapshot(const char* filename) {
+	struct stat cur;
+	if (stat(filename, &cur)!=0) return 0;
+	time_t newest;
+	if (!SRAM_backupTime(1, &newest)) return 1; // nothing kept yet
+	return cur.st_mtime - newest >= SRAM_SNAPSHOT_GAP || cur.st_mtime < newest; // (a clock that went backwards: keep it)
+}
+// Go back to version n: what is there now is kept first, whatever its age. 0 if it worked.
+static int SRAM_restore(int n) {
+	size_t size = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
+	void* sram = core.get_memory_data(RETRO_MEMORY_SAVE_RAM);
+	if (!size || !sram) return -1;
+	char path[MAX_PATH], current[MAX_PATH], dir[MAX_PATH], base[MAX_PATH];
+	SRAM_backupPath(path, sizeof(path), n);
+	SRAM_getPath(current);
+	SRAM_backupDir(dir, sizeof(dir));
+	SRAM_backupBase(base, sizeof(base));
+	
+	struct stat st;
+	if (stat(path, &st)!=0 || (size_t)st.st_size!=size) return -1; // missing, or from a different core
+	uint8_t* data = malloc(size);
+	if (!data) return -1;
+	FILE* f = fopen(path, "rb");
+	size_t got = f ? fread(data, 1, size, f) : 0;
+	if (f) fclose(f);
+	if (got!=size) { free(data); return -1; }
+	
+	// what the game has now (it may be newer than the file) is saved, then kept as the newest older version
+	if (!exists(current) || !fileEquals(current, sram, size)) writeFileAtomic(current, sram, size);
+	if (backupRotate(current, dir, base, SRAM_BACKUPS)) { free(data); return -1; }
+	
+	int result = writeFileAtomic(current, data, size);
+	if (result==0) memcpy(sram, data, size);
+	free(data);
+	sync();
+	return result;
+}
 static void SRAM_write(void) {
 	size_t sram_size = core.get_memory_size(RETRO_MEMORY_SAVE_RAM);
 	if (!sram_size) return;
@@ -426,6 +479,16 @@ static void SRAM_write(void) {
 	if (!sram) {
 		LOG_error("No SRAM data to write\n");
 		return;
+	}
+
+	if (exists(filename)) {
+		if (fileEquals(filename, sram, sram_size)) return; // nothing new: leave the file (and the card) alone
+		if (SRAM_wantsSnapshot(filename)) { // the save about to be replaced goes into the older versions
+			char dir[MAX_PATH], base[MAX_PATH];
+			SRAM_backupDir(dir, sizeof(dir));
+			SRAM_backupBase(base, sizeof(base));
+			if (backupRotate(filename, dir, base, SRAM_BACKUPS)) LOG_error("Couldn't keep the previous save (%s)\n", strerror(errno));
+		}
 	}
 
 	// temp file and rename: a failed or interrupted write keeps the previous save
@@ -3321,6 +3384,35 @@ static int Menu_message(char* message, char** pairs) {
 	return MENU_CALLBACK_NOP; // TODO: this should probably be an arg
 }
 
+// like Menu_message but A answers yes (1) and B no (0)
+static int Menu_confirm(char* message, char** pairs) {
+	GFX_setMode(MODE_MAIN);
+	int dirty = 1;
+	int answer = 0;
+	while (1) {
+		GFX_startFrame();
+		PAD_poll();
+
+		if (PAD_justPressed(BTN_A)) { answer = 1; break; }
+		if (PAD_justPressed(BTN_B)) break;
+		
+		PWR_update(&dirty, NULL, Menu_beforeSleep, Menu_afterSleep);
+		
+		if (dirty) {
+			GFX_clear(screen);
+			GFX_blitMessage(font.medium, message, screen, &(SDL_Rect){0,SCALE1(PADDING),screen->w,screen->h-SCALE1(PILL_SIZE+PADDING)});
+			GFX_blitButtonGroup(pairs, 1, screen, 1);
+			GFX_flip(screen);
+			dirty = 0;
+		}
+		else GFX_sync();
+		
+		hdmimon();
+	}
+	GFX_setMode(MODE_MENU);
+	return answer;
+}
+
 static int Menu_options(MenuList* list);
 
 static int MenuList_freeItems(MenuList* list, int i) {
@@ -3731,6 +3823,65 @@ static int OptionQuicksave_onConfirm(MenuList* list, int i) {
 	PWR_powerOff();
 }
 
+static char restore_labels[SRAM_BACKUPS][64];
+static char restore_desc[64];
+static int OptionRestoreSave_onConfirm(MenuList* list, int i) {
+	time_t when;
+	if (!SRAM_backupTime(i+1, &when)) {
+		Menu_message("There is no earlier save there.", (char*[]){ "A","OKAY", NULL });
+		return MENU_CALLBACK_NOP;
+	}
+	char stamp[48] = "";
+	struct tm* tm = localtime(&when);
+	if (tm) strftime(stamp, sizeof(stamp), "%b %d, %H:%M", tm);
+	char message[256];
+	snprintf(message, sizeof(message), "Go back to the save from %s?\nThe save you have now is kept\nas an earlier one, and the game restarts.", stamp);
+	if (!Menu_confirm(message, (char*[]){ "B","CANCEL","A","RESTORE", NULL })) return MENU_CALLBACK_NOP;
+	
+	if (SRAM_restore(i+1)==0) {
+		core.reset(); // the game reads its save when it starts
+		Menu_message("Restored. The game restarted\nwith that save.", (char*[]){ "A","OKAY", NULL });
+	}
+	else Menu_message("Couldn't restore that save.", (char*[]){ "A","OKAY", NULL });
+	return MENU_CALLBACK_EXIT;
+}
+static MenuList OptionRestoreSave_menu = {
+	.type = MENU_LIST,
+	.on_confirm = OptionRestoreSave_onConfirm,
+	.items = (MenuItem[]){
+		{restore_labels[0]},
+		{restore_labels[1]},
+		{restore_labels[2]},
+		{NULL},
+	}
+};
+static int OptionRestoreSave_openMenu(MenuList* list, int i) {
+	if (!core.get_memory_size(RETRO_MEMORY_SAVE_RAM)) {
+		Menu_message("This game has no save file.", (char*[]){ "B","BACK", NULL });
+		return MENU_CALLBACK_NOP;
+	}
+	int count = 0;
+	for (int n=1; n<=SRAM_BACKUPS; n++) {
+		time_t when;
+		if (SRAM_backupTime(n, &when)) {
+			char stamp[40] = "";
+			struct tm* tm = localtime(&when);
+			if (tm) strftime(stamp, sizeof(stamp), "%b %d, %H:%M", tm);
+			snprintf(restore_labels[n-1], sizeof(restore_labels[0]), "Save from %s", stamp);
+			count++;
+		}
+		else snprintf(restore_labels[n-1], sizeof(restore_labels[0]), "(empty)");
+	}
+	if (!count) {
+		Menu_message("No earlier saves yet.\nThey are kept when a save changes.", (char*[]){ "B","BACK", NULL });
+		return MENU_CALLBACK_NOP;
+	}
+	snprintf(restore_desc, sizeof(restore_desc), "%i earlier save%s kept", count, count==1 ? "" : "s");
+	OptionRestoreSave_menu.desc = restore_desc;
+	Menu_options(&OptionRestoreSave_menu);
+	return MENU_CALLBACK_NOP;
+}
+
 static MenuList options_menu = {
 	.type = MENU_LIST,
 	.items = (MenuItem[]) {
@@ -3739,7 +3890,7 @@ static MenuList options_menu = {
 		{"Controls",.on_confirm=OptionControls_openMenu},
 		{"Shortcuts",.on_confirm=OptionShortcuts_openMenu}, 
 		{"Save Changes",.on_confirm=OptionSaveChanges_openMenu},
-		{NULL},
+		{"Restore Save","Go back to an earlier save",.on_confirm=OptionRestoreSave_openMenu},
 		{NULL},
 		{NULL},
 	}

@@ -127,6 +127,59 @@ int writeFileAtomic(const char* path, const void* data, size_t size) {
 	return 0;
 }
 
+// Keeping older versions of a file (saves). The copies keep the file's modification time, so
+// each one says when that version was written.
+int fileEquals(const char* path, const void* data, size_t size) { // 1 if the file holds exactly these bytes
+	FILE* f = fopen(path, "rb");
+	if (!f) return 0;
+	struct stat st;
+	if (fstat(fileno(f), &st)!=0 || !S_ISREG(st.st_mode) || (size_t)st.st_size!=size) { fclose(f); return 0; }
+	char buf[4096];
+	size_t at = 0;
+	int same = 1;
+	while (at<size) {
+		size_t want = size-at<sizeof(buf) ? size-at : sizeof(buf);
+		size_t got = fread(buf, 1, want, f);
+		if (got!=want || memcmp(buf, (const char*)data+at, got)!=0) { same = 0; break; }
+		at += got;
+	}
+	fclose(f);
+	return same;
+}
+// file becomes dir/base.1, what was .1 becomes .2, and so on up to .keep (the oldest is dropped).
+// The copy is made first: if it fails nothing has moved. Returns 0 or -1.
+int backupRotate(const char* file, const char* dir, const char* base, int keep) {
+	if (keep<1 || mkdirs(dir)!=0) return -1;
+	char tmp[MAX_PATH+8], a[MAX_PATH+16], b[MAX_PATH+16];
+	struct stat st;
+	if (stat(file, &st)!=0 || !S_ISREG(st.st_mode)) return -1;
+	snprintf(tmp, sizeof(tmp), "%s/%s.new", dir, base);
+	FILE* in = fopen(file, "rb");
+	if (!in) return -1;
+	FILE* out = fopen(tmp, "wb");
+	if (!out) { fclose(in); return -1; }
+	char buf[8192];
+	size_t got;
+	int ok = 1;
+	while ((got = fread(buf, 1, sizeof(buf), in))>0) if (fwrite(buf, 1, got, out)!=got) { ok = 0; break; }
+	if (ferror(in)) ok = 0;
+	fclose(in);
+	if (fflush(out)!=0) ok = 0;
+	if (ok) fsync(fileno(out));
+	if (fclose(out)!=0) ok = 0;
+	if (!ok) { unlink(tmp); return -1; }
+	struct timeval tv[2] = { {st.st_atime, 0}, {st.st_mtime, 0} };
+	utimes(tmp, tv); // best effort
+	for (int n=keep-1; n>=1; n--) {
+		snprintf(a, sizeof(a), "%s/%s.%i", dir, base, n);
+		snprintf(b, sizeof(b), "%s/%s.%i", dir, base, n+1);
+		if (rename(a, b)!=0 && errno!=ENOENT) { /* keep going: a stuck slot must not lose the new copy */ }
+	}
+	snprintf(a, sizeof(a), "%s/%s.1", dir, base);
+	if (rename(tmp, a)!=0) { unlink(tmp); return -1; }
+	return 0;
+}
+
 int mkdirs(const char* path) {
 	char tmp[MAX_PATH];
 	if (!path || !*path || strlen(path)>=sizeof(tmp)) return -1;

@@ -682,6 +682,15 @@ void PLAT_enableOverlay(int enable) {
 ///////////////////////////////
 
 static int online = 0;
+int PLAT_getBatteryPercent(void) {
+	FILE* f = fopen("/sys/class/power_supply/battery/capacity", "r");
+	if (!f) return -1;
+	int percent = -1;
+	if (fscanf(f, "%i", &percent)!=1) percent = -1;
+	fclose(f);
+	return (percent<0 || percent>100) ? -1 : percent;
+}
+
 void PLAT_getBatteryStatus(int* is_charging, int* charge) {
 	// *is_charging = 0;
 	// *charge = PWR_LOW_CHARGE;

@@ -1,5 +1,6 @@
-// Sleep, power-off and audio-buffer settings. Writes .userdata/<platform>/sleep-timeout and
-// poweroff-timeout (seconds, 0 for never) and audio-buffer (milliseconds, 0 for the default);
+// Sleep, power-off, audio-buffer and low-battery settings. Writes .userdata/<platform>/sleep-timeout and
+// poweroff-timeout (seconds, 0 for never), audio-buffer (milliseconds, 0 for the default) and
+// low-battery-shutdown (percent, 0 for off);
 // the launcher and the emulator read them when they start.
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,7 @@
 #define SLEEP_PATH USERDATA_PATH "/sleep-timeout"
 #define POWEROFF_PATH USERDATA_PATH "/poweroff-timeout"
 #define AUDIO_PATH USERDATA_PATH "/audio-buffer"
+#define BATTERY_PATH USERDATA_PATH "/low-battery-shutdown"
 #define DEFAULT_SECONDS 120 // what the system uses when there is no file
 
 typedef struct { int seconds; const char* label; } Choice;
@@ -30,6 +32,10 @@ static const Choice audio_choices[] = {
 	{0,"Default"}, {40,"40 ms"}, {60,"60 ms"}, {80,"80 ms"}, {120,"120 ms"}, {200,"200 ms"}, {-1,NULL}
 };
 
+static const Choice battery_choices[] = {
+	{0,"Off"}, {3,"3%"}, {5,"5%"}, {8,"8%"}, {10,"10%"}, {-1,NULL}
+};
+
 typedef struct {
 	const char* name;
 	const char* path;
@@ -42,6 +48,7 @@ static Row rows[] = {
 	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
+	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))
 
@@ -62,7 +69,7 @@ static int choiceIndex(const Row* row) { // -1 when the file holds something tha
 static void describe(const Row* row, char* out, size_t cap) {
 	int i = choiceIndex(row);
 	if (i>=0) snprintf(out, cap, "%s", row->choices[i].label);
-	else snprintf(out, cap, row->choices==audio_choices ? "%i ms" : "%i seconds", row->seconds);
+	else snprintf(out, cap, row->choices==audio_choices ? "%i ms" : row->choices==battery_choices ? "%i%%" : "%i seconds", row->seconds);
 }
 static void step(Row* row, int dir) {
 	int count = 0;
@@ -137,9 +144,8 @@ int main(int argc, char* argv[]) {
 
 			// what the settings mean, in small text under the rows
 			static const char* notes[] = {
-				"Power off counts only while asleep, not charging.",
 				"Games don't sleep by themselves; power still does.",
-				"Bigger audio buffer: fewer dropouts, more delay.",
+				"Low battery: quicksave, then power off.",
 				"Applies when a game or the launcher next starts.",
 				NULL
 			};

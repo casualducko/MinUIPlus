@@ -22,9 +22,11 @@ x "$all/common/api.c" '#define MAX_SAMPLE_RATE' 'void SND_init' > "$out/gen/SND_
 x "$all/common/api.c" 'static void SND_audioFill' 'static void SND_resizeBuffer' > "$out/gen/SND_audioCallback.inc"
 x "$all/common/api.c" 'int GFX_truncateText' 'int GFX_wrapText' > "$out/gen/GFX_truncate.inc"
 x "$all/common/utils.c" 'void getFile' 'char* allocFile' > "$out/gen/getFile.inc"
-x "$all/common/utils.c" '// Saves must never be destroyed' 'int mkdirs' > "$out/gen/writeFileAtomic.inc"
+x "$all/common/utils.c" '// Saves must never be destroyed' '// Keeping older versions' > "$out/gen/writeFileAtomic.inc"
+x "$all/common/utils.c" '// Keeping older versions' 'int mkdirs' > "$out/gen/backup.inc"
 x "$all/common/utils.c" 'void putFile' 'void getFile' > "$out/gen/putFile.inc"
 x "$all/common/utils.c" 'int mkdirs' 'void normalizeNewline' > "$out/gen/mkdirs.inc"
+x "$all/minarch/minarch.c" '// Older versions of the save are kept' 'static void RTC_getPath' > "$out/gen/SRAM_versions.inc"
 x "$all/minui/minui.c" 'static void splitVersion' 'static int getFirstDisc' > "$out/gen/splitVersion.inc"
 x "$all/minui/minui.c" 'static int getFirstDisc' 'static void addEntries' > "$out/gen/getFirstDisc.inc"
 x "$all/common/api.c" '#define SLEEP_TIMEOUT_DEFAULT' 'void PWR_update' > "$out/gen/PWR_sleep.inc"
@@ -41,7 +43,7 @@ x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
 
 failed=0
-for t in bufferms deadzone emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
+for t in sram lowbattery backup bufferms deadzone emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
 	echo "== $t"
 	$CC $FLAGS -I"$out" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi
