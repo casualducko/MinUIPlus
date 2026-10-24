@@ -19,6 +19,9 @@ void SetJack(int value); // 0-1
 int GetHDMI(void);
 void SetHDMI(int value); // 0-1
 
+void SetRawRumble(int strength);
+int GetRumbleBackend(void);
+
 int GetMute(void);
 
 #endif  // __msettings_h__

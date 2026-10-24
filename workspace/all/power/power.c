@@ -68,6 +68,7 @@ static int readValue(const Row* row) { // same rules as the system: a bad file m
 	if (end==text || (end && *end) || n<0 || n>row->max || (n!=0 && n<row->min)) return row->fallback;
 	return (int)n;
 }
+static uint32_t rumble_off_at = 0; // when the short buzz after changing the rumble setting stops (0: not buzzing)
 static int choiceIndex(const Row* row) { // -1 when the file holds something that isn't in the list
 	for (int i=0; row->choices[i].label; i++) if (row->choices[i].seconds==row->seconds) return i;
 	return -1;
@@ -87,6 +88,10 @@ static void step(Row* row, int dir) {
 	char text[16];
 	snprintf(text, sizeof(text), "%i\n", row->seconds);
 	putFile((char*)row->path, text);
+	if (row->choices==rumble_choices && row->seconds>0) { // so you can feel what you chose
+		PLAT_setRumble(65535 * row->seconds / 100);
+		rumble_off_at = SDL_GetTicks() + 300;
+	}
 }
 
 static void drawRow(SDL_Surface* screen, int j, int selected, const Row* row) {
@@ -122,12 +127,15 @@ int main(int argc, char* argv[]) {
 	mkdirs(USERDATA_PATH);
 
 	for (int i=0; i<ROW_COUNT; i++) rows[i].seconds = readValue(&rows[i]);
+	SetRawRumble(0); // only to find out whether there is a motor to drive (it does not move it)
+	int rumble_backend = GetRumbleBackend();
 
 	int quit = 0, dirty = 1, show_setting = 0, sel = 0;
 	while (!quit) {
 		GFX_startFrame();
 		PAD_poll();
 		PWR_update(&dirty, &show_setting, NULL, NULL);
+		if (rumble_off_at && SDL_GetTicks()>=rumble_off_at) { PLAT_setRumble(0); rumble_off_at = 0; }
 
 		if (PAD_justPressed(BTN_B)) quit = 1;
 		else if (PAD_justRepeated(BTN_UP)) { sel = (sel+ROW_COUNT-1) % ROW_COUNT; dirty = 1; }
@@ -147,6 +155,14 @@ int main(int argc, char* argv[]) {
 				SDL_FreeSurface(t);
 			}
 			for (int i=0; i<ROW_COUNT; i++) drawRow(screen, i, i==sel, &rows[i]);
+			{
+				static const char* motor[] = { "No rumble motor found.", "Rumble motor: found (force feedback).", "Rumble motor: found (PWM)." };
+				SDL_Surface* m = TTF_RenderUTF8_Blended(font.small, motor[rumble_backend], rumble_backend ? COLOR_GRAY : COLOR_WHITE);
+				if (m) {
+					SDL_BlitSurface(m, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE)});
+					SDL_FreeSurface(m);
+				}
+			}
 
 			// what the settings mean, in small text under the rows
 			static const char* notes[] = {
@@ -154,7 +170,7 @@ int main(int argc, char* argv[]) {
 				"Changes apply when a game or the launcher starts.",
 				NULL
 			};
-			int y = SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE) + SCALE1(8);
+			int y = SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE) + SCALE1(36);
 			for (int i=0; notes[i]; i++) {
 				SDL_Surface* n = TTF_RenderUTF8_Blended(font.small, notes[i], COLOR_GRAY);
 				if (!n) continue;
@@ -169,6 +185,7 @@ int main(int argc, char* argv[]) {
 		else GFX_sync();
 	}
 
+	PLAT_setRumble(0);
 	QuitSettings();
 	PWR_quit();
 	PAD_quit();

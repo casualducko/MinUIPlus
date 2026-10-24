@@ -34,6 +34,8 @@ int GetJack(void) { return 0; }
 void SetJack(int value) {}
 
 int GetHDMI(void) { return 0; }
+void SetRawRumble(int strength) { (void)strength; }
+int GetRumbleBackend(void) { return 0; }
 void SetHDMI(int value) {}
 
 int GetMute(void) { return 0; }
