@@ -198,7 +198,7 @@ void rom_safe_name(const char* in, const SysDef* sys, char* out, size_t cap) {
 		for (int i=0; sys && i<10 && sys->exts[i]; i++) if (!strcasecmp(dot+1, sys->exts[i])) known = 1;
 	}
 	if (!known && sys && sys->exts[0]) {
-		if (n+1+strlen(sys->exts[0])<sizeof(tmp)) { strcat(tmp, "."); strcat(tmp, sys->exts[0]); n = strlen(tmp); }
+		if (n+1+strlen(sys->exts[0])<sizeof(tmp)) { strcat(tmp, "."); strcat(tmp, sys->exts[0]); }
 	}
 	snprintf(out, cap, "%s", tmp);
 	// snprintf may have cut in the middle of a UTF-8 character
@@ -300,6 +300,7 @@ int rjob_start(RJob* job, const RConfig* cfg, const char* api_path, const char* 
 		if (nul>=0) dup2(nul, 0);
 		if (code>=0) dup2(code, 1);
 		if (err>=0) dup2(err, 2);
+		for (int fd=3; fd<256; fd++) close(fd); // not the input devices, the log, or the framebuffer
 		execvp("curl", (char* const*)argv);
 		_exit(127);
 	}

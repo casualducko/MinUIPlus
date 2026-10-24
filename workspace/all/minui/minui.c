@@ -842,7 +842,7 @@ static int getFirstDisc(char* m3u_path, char* disc_path) { // based on getDiscs(
 			trimTrailingNewlines(line);
 			if (strlen(line)==0) continue; // skip empty lines
 			
-			snprintf(disc_path, sizeof(disc_path), "%s%s", base_path, line);
+			snprintf(disc_path, MAX_PATH, "%s%s", base_path, line); // callers pass a MAX_PATH buffer (sizeof here would be a pointer's 8)
 						
 			if (exists(disc_path)) found = 1;
 			break;

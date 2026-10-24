@@ -30,7 +30,7 @@
 
 #define CFG_PATH		USERDATA_PATH "/romulus.cfg"
 #define LEDGER_PATH		USERDATA_PATH "/romulus-downloaded.txt"
-#define LAST_PATH		USERDATA_PATH "/romulus-last.txt"
+#define ROMULUS_LAST_PATH		USERDATA_PATH "/romulus-last.txt"
 #define DOWNLOAD_TMP	USERDATA_PATH "/romulus-download.tmp"
 #define PAGE_LIMIT		50
 #define MAX_PLATS		40
@@ -98,7 +98,19 @@ static int has_emu(const char* tag, void* ctx) {
 	return exists(pak_path);
 }
 static int dest_dir(const char* slug, int create, char* dir, size_t cap) {
-	return rom_dest_dir(&cfg, slug, sys_for_slug(slug), ROMS_PATH, has_emu, NULL, create, dir, cap);
+	// the answer doesn't change while we run, and the list asks for every visible row on every redraw
+	static struct { char slug[48]; char dir[MAX_PATH]; } cache[16];
+	static int cached = 0;
+	if (!create) {
+		for (int i=0; i<cached; i++) if (!strcmp(cache[i].slug, slug)) { snprintf(dir, cap, "%s", cache[i].dir); return 0; }
+	}
+	int r = rom_dest_dir(&cfg, slug, sys_for_slug(slug), ROMS_PATH, has_emu, NULL, create, dir, cap);
+	if (r==0 && cached<16 && strlen(slug)<sizeof(cache[0].slug) && strlen(dir)<sizeof(cache[0].dir)) {
+		int known = 0;
+		for (int i=0; i<cached; i++) if (!strcmp(cache[i].slug, slug)) known = 1;
+		if (!known) { snprintf(cache[cached].slug, sizeof(cache[0].slug), "%s", slug); snprintf(cache[cached].dir, sizeof(cache[0].dir), "%s", dir); cached++; }
+	}
+	return r;
 }
 static int is_saved(const RRom* rom) {
 	if (ledger_has(LEDGER_PATH, rom->id)) return 1;
@@ -180,6 +192,7 @@ static void start_wifictl(void) { // `wifictl enable` like the Wi-Fi tool does, 
 	if (pid==0) {
 		int nul = open("/dev/null", O_RDWR);
 		if (nul>=0) { dup2(nul, 0); dup2(nul, 1); dup2(nul, 2); }
+		for (int fd=3; fd<256; fd++) close(fd);
 		execlp(cmd, cmd, "enable", (char*)NULL);
 		_exit(127);
 	}
@@ -217,14 +230,14 @@ static void new_search(void) { // restart the list for the current platform and 
 }
 
 static void save_last(void) {
-	FILE* f = fopen(LAST_PATH, "w");
+	FILE* f = fopen(ROMULUS_LAST_PATH, "w");
 	if (!f) return;
 	fputs(cur_slug, f);
 	fclose(f);
 }
 static void restore_last(void) {
 	char last[64] = "";
-	FILE* f = fopen(LAST_PATH, "r");
+	FILE* f = fopen(ROMULUS_LAST_PATH, "r");
 	if (!f) return;
 	if (fgets(last, sizeof(last), f)) last[strcspn(last, "\r\n")] = '\0';
 	fclose(f);
@@ -311,8 +324,6 @@ static void finish_page(void) {
 	dirty = 1;
 }
 
-static void sync_dir_of(const char* path) { (void)path; sync(); }
-
 static int copy_file(const char* from, const char* to) {
 	FILE* in = fopen(from, "rb");
 	if (!in) return -1;
@@ -324,6 +335,7 @@ static int copy_file(const char* from, const char* to) {
 	while ((n = fread(buf, 1, sizeof(buf), in))>0) {
 		if (fwrite(buf, 1, n, out)!=n) { ok = 0; break; }
 	}
+	if (ferror(in)) ok = 0; // a read error is not the end of the file
 	fclose(in);
 	if (fclose(out)!=0) ok = 0;
 	if (!ok) remove(to);
@@ -383,7 +395,7 @@ static void finish_download(void) {
 			unlink(DOWNLOAD_TMP);
 		}
 	}
-	sync_dir_of(final_path);
+	sync(); // a ROM the user can see is a ROM that is on the card, even if the power goes now
 	ledger_add(LEDGER_PATH, rom.id);
 
 	const char* folder = strrchr(dir, '/');
@@ -422,9 +434,9 @@ static void start_download(int index) {
 
 static int list_rows(void) { return MAIN_ROW_COUNT - 1; } // the first row is the title
 
-static void blit_text(TTF_Font* font, const char* text, SDL_Color color, int x, int y, int max_w) {
+static void blit_text(TTF_Font* ttf, const char* text, SDL_Color color, int x, int y, int max_w) {
 	if (!text || !*text) return;
-	SDL_Surface* s = TTF_RenderUTF8_Blended(font, text, color);
+	SDL_Surface* s = TTF_RenderUTF8_Blended(ttf, text, color);
 	if (!s) return;
 	SDL_BlitSurface(s, &(SDL_Rect){0,0,MIN(s->w, max_w),s->h}, screen, &(SDL_Rect){x,y});
 	SDL_FreeSurface(s);
@@ -518,8 +530,6 @@ static void draw_games(int ow) {
 			draw_row(j, i==sel, r->name, right, saved && i!=sel);
 		}
 	}
-	char count[64];
-	if (roms_total>0) snprintf(count, sizeof(count), "%ld", roms_total); else count[0] = '\0';
 	GFX_blitButtonGroup((char*[]){"FN","SEARCH",NULL}, 0, screen, 0);
 	GFX_blitButtonGroup((char*[]){"B","BACK","A","DOWNLOAD",NULL}, 1, screen, 1);
 }
@@ -732,6 +742,8 @@ int main(int argc, char* argv[]) {
 	const char* tmp = getenv("TMPDIR");
 	snprintf(list_tmp, sizeof(list_tmp), "%s/romulus-list-%d.json", (tmp && *tmp) ? tmp : "/tmp", (int)getpid());
 
+	unlink(DOWNLOAD_TMP); // left over if the device lost power in the middle of a download
+	
 	int cfg_state = rcfg_load(CFG_PATH, &cfg);
 	if (cfg_state==RCFG_MISSING) {
 		rcfg_write_template(CFG_PATH);
