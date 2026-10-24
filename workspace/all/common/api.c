@@ -1229,6 +1229,26 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 	return consumed;
 }
 
+// Where the sound is routed, for the next time the device is silent although the buffers
+// are healthy. The mixer SDL/ALSA reaches by default is PipeWire's, not the codec's, so the
+// codec (card 0) and PipeWire are both read. The ALSA stream state is read at once (cheap),
+// the PipeWire queries run in the background so they don't hold up the game.
+static void SND_logState(const char* when) {
+	fflush(stdout);
+	char cmd[1024];
+	snprintf(cmd, sizeof(cmd),
+		"echo '-- audio state (%s)'; "
+		"amixer -c 0 cget name='Playback Path' 2>&1 | tail -4; "
+		"amixer -c 0 scontents 2>&1 | head -24; "
+		"for f in /proc/asound/card*/pcm*p/sub0/status; do echo $f; cat $f 2>&1; done; "
+		"( echo '-- pipewire (%s)'; pactl info 2>&1 | grep -i 'default sink\\|server name'; "
+		"pactl list short sinks 2>&1; pactl get-sink-mute @DEFAULT_SINK@ 2>&1; pactl get-sink-volume @DEFAULT_SINK@ 2>&1; "
+		"systemctl is-active pipewire pipewire-pulse wireplumber 2>&1 | tr '\\n' ' '; echo ) &",
+		when, when);
+	system(cmd);
+	fflush(stdout);
+}
+
 void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	LOG_info("SND_init\n");
 	
@@ -1272,16 +1292,13 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	LOG_info("sample rate: %i (req) %i (rec) [samples %i]\n", snd.sample_rate_in, snd.sample_rate_out, SAMPLES);
 	LOG_info("audio rate control: %s\n", snd.drc_enabled ? "on" : "off (no-audio-rate-control)");
 	
-	// where the sound chip is set up, for the next time the device is silent although
-	// the buffers are full (volume and speaker/headphone path); quiet where there is no amixer
-	fflush(stdout);
-	system("amixer sget 'Master' 2>/dev/null | tail -3; amixer cget name='Playback Path' 2>/dev/null | tail -3");
-	fflush(stdout);
+	SND_logState("start");
 	snd.initialized = 1;
 }
 void SND_quit(void) { // plat_sound_finish
 	if (!snd.initialized) return;
 	
+	SND_logState("quit"); // stream still open
 	SDL_PauseAudio(1);
 	SDL_CloseAudio();
 	
