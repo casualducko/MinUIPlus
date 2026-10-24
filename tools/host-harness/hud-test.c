@@ -48,5 +48,28 @@ int main(int argc, char** argv) {
 			SDL_SaveBMP(screen, path);
 		}
 	}
+	// the in-game Options list as minarch draws it (MENU_LIST: the main menu's big rows)
+	{
+		const char* names[] = {"Frontend","Emulator","Controls","Shortcuts","Save Changes","Restore Save",NULL};
+		GFX_clear(screen);
+		GFX_blitHardwareGroup(screen, 0);
+		int ox = SCALE1(PADDING), oy = SCALE1(PADDING + PILL_SIZE);
+		for (int i=0; names[i]; i++) {
+			SDL_Color color = COLOR_WHITE;
+			if (i==1) {
+				int w = 0;
+				TTF_SizeUTF8(font.large, names[i], &w, NULL);
+				w += SCALE1(BUTTON_PADDING*2);
+				GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){ox, oy+SCALE1(i*PILL_SIZE), w, SCALE1(PILL_SIZE)});
+				color = COLOR_BLACK;
+			}
+			SDL_Surface* t = TTF_RenderUTF8_Blended(font.large, names[i], color);
+			SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){ox+SCALE1(BUTTON_PADDING), oy+SCALE1(i*PILL_SIZE)+4});
+			SDL_FreeSurface(t);
+		}
+		char path[512];
+		snprintf(path, sizeof(path), "%s/options-list.bmp", out);
+		SDL_SaveBMP(screen, path);
+	}
 	return 0;
 }

@@ -3913,6 +3913,7 @@ static int Menu_options(MenuList* list) {
 	
 	// dependent on option list offset top and bottom, eg. the gray triangles
 	int max_visible_options = (screen->h - ((SCALE1(PADDING + PILL_SIZE) * 2) + SCALE1(BUTTON_SIZE))) / SCALE1(BUTTON_SIZE); // 7 for 480, 10 for 720
+	if (type==MENU_LIST) max_visible_options = (screen->h - SCALE1((PADDING + PILL_SIZE) * 2)) / SCALE1(PILL_SIZE); // the big list below has taller rows
 	
 	int count;
 	for (count=0; items[count].name; count++);
@@ -4068,48 +4069,30 @@ static int Menu_options(MenuList* list) {
 			SDL_Surface* text;
 
 			if (type==MENU_LIST) {
-				int mw = list->max_width;
-				if (!mw) {
-					// get the width of the widest item
-					for (int i=0; i<count; i++) {
-						MenuItem* item = &items[i];
-						int w = 0;
-						TTF_SizeUTF8(font.small, item->name, &w, NULL);
-						w += SCALE1(OPTION_PADDING*2);
-						if (w>mw) mw = w;
-					}
-					// cache the result
-					list->max_width = mw = MIN(mw, screen->w - SCALE1(PADDING *2));
-				}
-				
-				int ox = (screen->w - mw) / 2;
+				// the same big rows as the main menu (this list is short, and the small ones were hard to read on this panel)
+				int ox = SCALE1(PADDING);
 				int oy = SCALE1(PADDING + PILL_SIZE);
 				int selected_row = selected - start;
 				for (int i=start,j=0; i<end; i++,j++) {
 					MenuItem* item = &items[i];
 					SDL_Color text_color = COLOR_WHITE;
-
-					// int ox = (screen->w - w) / 2; // if we're centering these (but I don't think we should after seeing it)
 					if (j==selected_row) {
-						// move out of conditional if centering
 						int w = 0;
-						TTF_SizeUTF8(font.small, item->name, &w, NULL);
-						w += SCALE1(OPTION_PADDING*2);
-						
-						GFX_blitPill(ASSET_BUTTON, screen, &(SDL_Rect){
+						TTF_SizeUTF8(font.large, item->name, &w, NULL);
+						w += SCALE1(BUTTON_PADDING*2);
+						GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){
 							ox,
-							oy+SCALE1(j*BUTTON_SIZE),
+							oy+SCALE1(j*PILL_SIZE),
 							w,
-							SCALE1(BUTTON_SIZE)
+							SCALE1(PILL_SIZE)
 						});
 						text_color = COLOR_BLACK;
-						
 						if (item->desc) desc = item->desc;
 					}
-					text = TTF_RenderUTF8_Blended(font.small, item->name, text_color);
+					text = TTF_RenderUTF8_Blended(font.large, item->name, text_color);
 					SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
-						ox+SCALE1(OPTION_PADDING),
-						oy+SCALE1((j*BUTTON_SIZE)+1)
+						ox+SCALE1(BUTTON_PADDING),
+						oy+SCALE1(j*PILL_SIZE)+4
 					});
 					SDL_FreeSurface(text);
 				}
@@ -4267,8 +4250,8 @@ static int Menu_options(MenuList* list) {
 			
 			if (desc) {
 				int w,h;
-				GFX_sizeText(font.tiny, desc, SCALE1(12), &w,&h);
-				GFX_blitText(font.tiny, desc, SCALE1(12), COLOR_WHITE, screen, &(SDL_Rect){
+				GFX_sizeText(font.small, desc, SCALE1(12), &w,&h);
+				GFX_blitText(font.small, desc, SCALE1(12), COLOR_WHITE, screen, &(SDL_Rect){
 					(screen->w - w) / 2,
 					screen->h - SCALE1(PADDING) - h,
 					w,h
