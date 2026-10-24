@@ -466,7 +466,7 @@ static void draw_games(int ow) {
 	}
 	char count[64];
 	if (roms_total>0) snprintf(count, sizeof(count), "%ld", roms_total); else count[0] = '\0';
-	GFX_blitButtonGroup((char*[]){"X","SEARCH",NULL}, 0, screen, 0);
+	GFX_blitButtonGroup((char*[]){"FN","SEARCH",NULL}, 0, screen, 0);
 	GFX_blitButtonGroup((char*[]){"B","BACK","A","DOWNLOAD",NULL}, 1, screen, 1);
 }
 static void draw_osk(void) {
@@ -636,7 +636,7 @@ static void handle_input(void) {
 
 	// games
 	if (PAD_justPressed(BTN_B)) { stop_job(); rromlist_free(&roms); cur_screen = SCR_PLATFORMS; dirty = 1; return; }
-	if (PAD_justPressed(BTN_X)) {
+	if (PAD_justPressed(BTN_X) || PAD_justPressed(BTN_MENU)) { // MENU is the Fn button on this device
 		snprintf(osk_text, sizeof(osk_text), "%s", query);
 		osk_x = osk_y = 0;
 		cur_screen = SCR_OSK;
