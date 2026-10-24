@@ -49,6 +49,7 @@
 
 #define RAW_MENU1	RAW_L3
 #define RAW_MENU2	RAW_R3
+#define RAW_MENU3	316 // BTN_MODE, the Fn button (the only code the unit sends that nothing used)
 
 #define INPUT_COUNT 4
 static int inputs[INPUT_COUNT];
@@ -124,6 +125,7 @@ void PLAT_pollInput(void) {
 				else if (code==RAW_MENU)	{ btn = BTN_MENU; 		id = BTN_ID_MENU; }
 				else if (code==RAW_MENU1)	{ btn = BTN_MENU; 		id = BTN_ID_MENU; }
 				else if (code==RAW_MENU2)	{ btn = BTN_MENU; 		id = BTN_ID_MENU; }
+				else if (code==RAW_MENU3)	{ btn = BTN_MENU; 		id = BTN_ID_MENU; }
 				else if (code==RAW_L1)		{ btn = BTN_L1; 		id = BTN_ID_L1; }
 				else if (code==RAW_L2)		{ btn = BTN_L2; 		id = BTN_ID_L2; }
 				else if (code==RAW_L3)		{ btn = BTN_L3; 		id = BTN_ID_L3; }

@@ -18,6 +18,7 @@
 // L3 or R3
 #define CODE_MENU 317 // 11 in SDL for some reason...
 #define CODE_MENU_ALT 318 // 12 in SDL...
+#define CODE_MENU_FN 316 // BTN_MODE, the Fn button
 
 // linux KEY_VOLUMEUP and KEY_VOLUMEDOWN, as labeled in the device tree
 #define CODE_PLUS 115
@@ -136,6 +137,7 @@ int main (int argc, char *argv[]) {
 				switch (code) {
 					case CODE_MENU:
 					case CODE_MENU_ALT:
+					case CODE_MENU_FN:
 						menu_pressed = val;
 					break;
 					case CODE_PLUS:
