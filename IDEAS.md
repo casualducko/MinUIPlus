@@ -29,10 +29,10 @@ Last refreshed 2026-10-24 (evening). `FORK.md` lists what has been done; this is
 ~~2. Left stick as D-pad (with deadzone setting). The RGB20SX has two sticks and NES/GB/SNES games ignore them. A per-system option makes the sticks useful for the games you actually play.~~ (done, see FORK.md)
 3. **Theme file.** Colors and fonts are compile-time constants (`TRIAD_*` in `defines.h`). Read them from `.userdata/rgb30/theme.cfg` (and an optional font path) so the look can change without a rebuild. Fun and very visible.
 4. **Random game ("Surprise me").** One entry in the launcher that picks an unplayed game from the current folder or collection.
-~~5. "Set time from network" in the Clock tool. Romulus already knows how to bring Wi-Fi up; the Clock tool could fetch the time from the server's HTTP `Date:` header (no NTP client needed) and set it, with the timezone handled properly. Also fixes certificate errors caused by a wrong clock.~~ (done, see FORK.md)
+5. "Set time from network" in the Clock tool. Romulus already knows how to bring Wi-Fi up; the Clock tool could fetch the time from the server's HTTP `Date:` header (no NTP client needed) and set it, with the timezone handled properly. Also fixes certificate errors caused by a wrong clock. (not done)
 6. **Low-battery protection.** Below ~5%: autosave the state, then shut down cleanly instead of dying mid-write (the atomic saves make this safe now).
 7. **Auto power-off after a long sleep.** The device faux-sleeps (suspend). After N hours asleep, wake briefly and shut down so it doesn't drain flat in a bag. Setting file like `sleep-timeout`.
-~~8. Cleaner IP / info tool. Show SSID, signal, IP, battery %, free card space, firmware/commit. Takes an hour and answers "is it on Wi-Fi?" at a glance.~~ (done, see FORK.md)
+8. Cleaner IP / info tool. Show SSID, signal, IP, battery %, free card space, firmware/commit. Takes an hour and answers "is it on Wi-Fi?" at a glance. (partly: the Wi-Fi tool shows the network name, signal and address)
 
 ## Medium (M)
 
@@ -47,7 +47,7 @@ Last refreshed 2026-10-24 (evening). `FORK.md` lists what has been done; this is
 17. **Romulus v2.** Resume interrupted downloads (the server supports Range), a queue ("download these 5"), "get everything I'm missing for this platform", filters (verified only, region), show file sizes, and optionally update `.res` art. The API is already read-only and tested.
 18. **ROM drop over Wi-Fi.** A tool that serves a tiny upload page on the local network so a phone or laptop can drop ROMs onto the card without taking it out. (Alternative: expose SFTP; OpenSSH, Samba, Syncthing and rclone are all in Moss's package set, though whether they're in your image is untested.)
 19. **Bluetooth tool.** Pair headphones or a controller from the device. Moss's package set includes BlueZ and bluez-alsa and PipeWire already routes audio, so it's mostly UI (untested on your image).
-~~20. Self-update tool. Download the latest build of *this fork* (a release on GitHub, or a file on your Romulus server), verify its SHA-256, install with the same backup scheme as `install.sh`. This is the real answer to "an up-to-date fork I can maintain": one tool, no card swapping.~~ (done, see FORK.md)
+20. Self-update tool. Download the latest build of *this fork* (a release on GitHub, or a file on your Romulus server), verify its SHA-256, install with the same backup scheme as `install.sh`. This is the real answer to "an up-to-date fork I can maintain": one tool, no card swapping. (for now replaced by pushing builds over SSH from the Mac, see Tools > SSH)
 
 ## Larger (L)
 
