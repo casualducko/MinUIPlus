@@ -181,11 +181,7 @@ void touch(char* path) {
 	close(open(path, O_RDWR|O_CREAT, 0777));
 }
 void putFile(char* path, char* contents) {
-	FILE* file = fopen(path, "w");
-	if (file) {
-		fputs(contents, file);
-		fclose(file);
-	}
+	writeFileAtomic(path, contents, strlen(contents)); // not fopen "w": that empties the old file first
 }
 void getFile(char* path, char* buffer, size_t buffer_size) {
 	if (buffer_size==0) return;

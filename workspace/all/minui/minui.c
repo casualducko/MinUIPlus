@@ -430,19 +430,23 @@ static int restore_end = 0;
 
 #define MAX_RECENTS 24 // a multiple of all menu rows
 static void saveRecents(void) {
-	FILE* file = fopen(RECENT_PATH, "w");
-	if (file) {
-		for (int i=0; i<recents->count; i++) {
-			Recent* recent = recents->items[i];
-			fputs(recent->path, file);
-			if (recent->alias) {
-				fputs("\t", file);
-				fputs(recent->alias, file);
-			}
-			putc('\n', file);
-		}
-		fclose(file);
+	// built in memory and put in place in one step, so a power cut can't leave an empty list
+	size_t cap = 1;
+	for (int i=0; i<recents->count; i++) {
+		Recent* recent = recents->items[i];
+		cap += strlen(recent->path) + (recent->alias ? strlen(recent->alias) + 1 : 0) + 1;
 	}
+	char* text = malloc(cap);
+	if (!text) return;
+	size_t n = 0;
+	for (int i=0; i<recents->count; i++) {
+		Recent* recent = recents->items[i];
+		n += snprintf(text+n, cap-n, "%s", recent->path);
+		if (recent->alias) n += snprintf(text+n, cap-n, "\t%s", recent->alias);
+		n += snprintf(text+n, cap-n, "\n");
+	}
+	writeFileAtomic(RECENT_PATH, text, n);
+	free(text);
 }
 static void addRecent(char* path, char* alias) {
 	path += strlen(SDCARD_PATH); // makes paths platform agnostic
