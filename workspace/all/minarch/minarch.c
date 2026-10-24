@@ -413,20 +413,17 @@ static void SRAM_write(void) {
 	char filename[MAX_PATH];
 	SRAM_getPath(filename);
 	printf("sav path (write): %s\n", filename);
-		
-	FILE *sram_file = fopen(filename, "w");
-	if (!sram_file) {
-		LOG_error("Error opening SRAM file: %s\n", strerror(errno));
+
+	void *sram = core.get_memory_data(RETRO_MEMORY_SAVE_RAM);
+	if (!sram) {
+		LOG_error("No SRAM data to write\n");
 		return;
 	}
 
-	void *sram = core.get_memory_data(RETRO_MEMORY_SAVE_RAM);
-
-	if (!sram || sram_size != fwrite(sram, 1, sram_size, sram_file)) {
-		LOG_error("Error writing SRAM data to file\n");
+	// temp file and rename: a failed or interrupted write keeps the previous save
+	if (writeFileAtomic(filename, sram, sram_size)) {
+		LOG_error("Error writing SRAM data to file: %s (%s)\n", filename, strerror(errno));
 	}
-
-	fclose(sram_file);
 
 	sync();
 }
@@ -461,21 +458,17 @@ static void RTC_write(void) {
 	
 	char filename[MAX_PATH];
 	RTC_getPath(filename);
-	printf("rtc path (write) size(%u): %s\n", rtc_size, filename);
-		
-	FILE *rtc_file = fopen(filename, "w");
-	if (!rtc_file) {
-		LOG_error("Error opening RTC file: %s\n", strerror(errno));
+	printf("rtc path (write) size(%u): %s\n", (unsigned)rtc_size, filename);
+
+	void *rtc = core.get_memory_data(RETRO_MEMORY_RTC);
+	if (!rtc) {
+		LOG_error("No RTC data to write\n");
 		return;
 	}
 
-	void *rtc = core.get_memory_data(RETRO_MEMORY_RTC);
-
-	if (!rtc || rtc_size != fwrite(rtc, 1, rtc_size, rtc_file)) {
-		LOG_error("Error writing RTC data to file\n");
+	if (writeFileAtomic(filename, rtc, rtc_size)) {
+		LOG_error("Error writing RTC data to file: %s (%s)\n", filename, strerror(errno));
 	}
-
-	fclose(rtc_file);
 
 	sync();
 }
@@ -513,7 +506,8 @@ static void State_read(void) { // from picoarch
 	
 	// some cores report the wrong serialize size initially for some games, eg. mgba: Wario Land 4
 	// so we allow a size mismatch as long as the actual size fits in the buffer we've allocated
-	if (state_size < fread(state, 1, state_size, state_file)) {
+	size_t state_got = fread(state, 1, state_size, state_file);
+	if (state_got==0 || state_size < state_got) { // an empty file (a save that was cut short) is not a state
 		LOG_error("Error reading state data from file: %s (%s)\n", filename, strerror(errno));
 		goto error;
 	}
@@ -536,7 +530,6 @@ static void State_write(void) { // from picoarch
 	int was_ff = fast_forward;
 	fast_forward = 0;
 
-	FILE *state_file = NULL; // declared before the first goto error
 	void *state = calloc(1, state_size);
 	if (!state) {
 		LOG_error("Couldn't allocate memory for state\n");
@@ -546,25 +539,20 @@ static void State_write(void) { // from picoarch
 	char filename[MAX_PATH];
 	State_getPath(filename);
 	
-	state_file = fopen(filename, "w");
-	if (!state_file) {
-		LOG_error("Error opening state file: %s (%s)\n", filename, strerror(errno));
-		goto error;
-	}
-
+	// serialize first, then replace the file in one step: it used to open (and so empty) the old
+	// state before asking the core for the new one, so a core that failed took the old state with it
 	if (!core.serialize(state, state_size)) {
 		LOG_error("Error creating save state: %s (%s)\n", filename, strerror(errno));
 		goto error;
 	}
 
-	if (state_size != fwrite(state, 1, state_size, state_file)) {
+	if (writeFileAtomic(filename, state, state_size)) {
 		LOG_error("Error writing state data to file: %s (%s)\n", filename, strerror(errno));
 		goto error;
 	}
 
 error:
 	if (state) free(state);
-	if (state_file) fclose(state_file);
 
 	sync();
 	
@@ -1286,7 +1274,10 @@ static void Config_write(int override) {
 	}
 	config.loaded = override ? CONFIG_GAME : CONFIG_CONSOLE;
 	
-	FILE *file = fopen(path, "wb");
+	// written beside it and renamed over it, so a full card or a power cut can't leave half a config
+	char tmp_path[MAX_PATH+8];
+	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+	FILE *file = fopen(tmp_path, "wb");
 	if (!file) return;
 	
 	for (int i=0; config.frontend.options[i].key; i++) {
@@ -1313,7 +1304,15 @@ static void Config_write(int override) {
 		fprintf(file, "bind %s = %s\n", mapping->name, button_labels[j]);
 	}
 	
-	fclose(file);
+	int wrote = !ferror(file);
+	if (fclose(file)!=0) wrote = 0;
+	if (wrote && rename(tmp_path, path)!=0) {
+		if (unlink(path)!=0 || rename(tmp_path, path)!=0) wrote = 0;
+	}
+	if (!wrote) {
+		LOG_error("Error writing config: %s (%s)\n", path, strerror(errno));
+		unlink(tmp_path);
+	}
 	sync();
 }
 static void Config_restore(void) {

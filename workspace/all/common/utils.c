@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <errno.h>
 #include "defines.h"
 #include "utils.h"
 
@@ -105,6 +106,25 @@ void getEmuPath(char* emu_name, char* pak_path) {
 	sprintf(pak_path, "%s/Emus/%s/%s.pak/launch.sh", SDCARD_PATH, PLATFORM, emu_name);
 	if (exists(pak_path)) return;
 	sprintf(pak_path, "%s/Emus/%s.pak/launch.sh", PAKS_PATH, emu_name);
+}
+
+// Saves must never be destroyed by a failed save: fopen(path, "w") truncates the old file before
+// anything is written, so a full card, a crash or a power cut in the middle left nothing.
+int writeFileAtomic(const char* path, const void* data, size_t size) {
+	char tmp[MAX_PATH+8];
+	if (!path || strlen(path)+5>=sizeof(tmp)) return -1;
+	snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+	FILE* f = fopen(tmp, "wb");
+	if (!f) return -1;
+	int ok = (size==0 || (data && fwrite(data, 1, size, f)==size));
+	if (fflush(f)!=0) ok = 0;
+	if (ok && fsync(fileno(f))!=0 && errno!=EINVAL && errno!=ENOTSUP && errno!=ENOSYS) ok = 0; // some filesystems can't, that's not a failed write
+	if (fclose(f)!=0) ok = 0;
+	if (!ok) { unlink(tmp); return -1; }
+	if (rename(tmp, path)!=0) { // a filesystem that won't replace: remove the old one, the new one is complete
+		if (unlink(path)!=0 || rename(tmp, path)!=0) { unlink(tmp); return -1; }
+	}
+	return 0;
 }
 
 int mkdirs(const char* path) {

@@ -18,6 +18,7 @@ void trimTrailingNewlines(char* line);
 void trimSortingMeta(char** str);
 
 int exists(char* path);
+int writeFileAtomic(const char* path, const void* data, size_t size); // writes path.tmp, syncs, renames over path: the old file survives any failure; 0 or -1
 int mkdirs(const char* path); // mkdir -p without a shell (a folder name is never a command); 0 if it exists afterwards, -1 if not
 void touch(char* path);
 void putFile(char* path, char* contents);
