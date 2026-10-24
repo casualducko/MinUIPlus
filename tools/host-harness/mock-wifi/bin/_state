@@ -1,0 +1,7 @@
+# shared by the fake commands: state lives in $WIFI_MOCK_DIR
+D=${WIFI_MOCK_DIR:?}
+mkdir -p "$D/net/wlan0"
+get() { cat "$D/$1" 2>/dev/null; }
+put() { printf '%s' "$2" > "$D/$1"; }
+radio() { if [ "$1" = on ]; then printf '0x1003\n' > "$D/net/wlan0/flags"; else printf '0x1002\n' > "$D/net/wlan0/flags"; fi; }
+link() { if [ -n "$1" ]; then printf 'up\n' > "$D/net/wlan0/operstate"; else printf 'down\n' > "$D/net/wlan0/operstate"; fi; }

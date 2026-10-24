@@ -1,0 +1,19 @@
+#!/bin/sh
+# fake: "HomeNet" needs homepass123, "Coffee Shop Guest" is open, "Café あ" needs cafepass99
+. "$(dirname "$0")/_state"
+case "$1" in
+	enable)
+		sleep 2
+		ssid=${2:-$(get s_wifi.ssid)}; psk=${3:-$(get s_wifi.key)}
+		radio on
+		case "$ssid" in
+			HomeNet) want=homepass123 ;;
+			"Coffee Shop Guest") want= ;;
+			"Café あ") want=cafepass99 ;;
+			Hidden1) want=hiddenpass1 ;;
+			*) put connected ""; link ""; exit 0 ;;
+		esac
+		if [ "$psk" = "$want" ]; then put connected "$ssid"; link x; else put connected ""; link ""; fi ;;
+	disable) put connected ""; link ""; radio off ;;
+esac
+exit 0

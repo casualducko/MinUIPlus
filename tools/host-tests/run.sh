@@ -65,5 +65,10 @@ $CC $FLAGS -I"$all/romulus" -o "$out/test_romulus" "$here/test_romulus.c" "$all/
 if ! ROM_ZIPS="$out/zips" ROM_PORT="$port" ROM_TOKEN="$tok" "$out/test_romulus"; then failed=1; echo "   ^ FAILED: romulus"; fi
 kill $mock 2>/dev/null; wait $mock 2>/dev/null || true
 
+# the Wi-Fi tool: parsing iw output, the saved networks file, running commands
+echo "== wifi"
+$CC $FLAGS -I"$all/wifi" -o "$out/test_wifi" "$here/test_wifi.c" "$all/wifi/wifi_core.c"
+if ! "$out/test_wifi"; then failed=1; echo "   ^ FAILED: wifi"; fi
+
 echo
 if [ $failed = 0 ]; then echo "all host tests passed"; else echo "SOME HOST TESTS FAILED"; exit 1; fi

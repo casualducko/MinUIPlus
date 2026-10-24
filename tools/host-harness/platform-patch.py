@@ -50,6 +50,8 @@ void PLAT_pollInput(void) {
 	if (!script) { script = strdup(getenv("HP_SCRIPT")); cursor = script; }
 	
 	if (release_btn) { hp_press(release_btn, release_id, 0); release_btn = 0; return; }
+	static Uint32 sleep_until = 0; // the sleep:MS token waits in real time (for things that take seconds)
+	if (sleep_until) { if (SDL_GetTicks()<sleep_until) return; sleep_until = 0; }
 	if (wait-->0) return;
 	if (!cursor || !*cursor) { fprintf(stderr, "script finished\n"); exit(0); }
 	
@@ -59,6 +61,7 @@ void PLAT_pollInput(void) {
 	wait = 12;
 	
 	if (!strncmp(tok,"snap:",5)) { hp_snap(tok+5); return; }
+	if (!strncmp(tok,"sleep:",6)) { sleep_until = SDL_GetTicks() + (Uint32)atoi(tok+6); return; }
 	int btn = BTN_NONE, id = -1;
 	if (!strcmp(tok,"U")) { btn = BTN_DPAD_UP; id = BTN_ID_DPAD_UP; }
 	else if (!strcmp(tok,"D")) { btn = BTN_DPAD_DOWN; id = BTN_ID_DPAD_DOWN; }

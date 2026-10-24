@@ -717,7 +717,7 @@ static char hud_toast_text[48] = "";
 // The slot picker under the save and load previews: the numbers 1 to count, the current one in a dark
 // pill, slots that hold a save in black and empty ones in gray, and < > at the ends to say that left
 // and right change the slot. Drawn in the area (x,y,w) one row high (SCALE1(SLOT_PICKER_HEIGHT)).
-static void GFX_fillCapsule(SDL_Surface* dst, SDL_Rect r, Uint32 color) { // a filled rounded block, ends as round as the height allows
+void GFX_fillCapsule(SDL_Surface* dst, SDL_Rect r, Uint32 color) { // a filled rounded block, ends as round as the height allows
 	int radius = r.h / 2;
 	if (r.w < r.h) radius = r.w / 2;
 	for (int row=0; row<r.h; row++) {

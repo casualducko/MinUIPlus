@@ -1,0 +1,12 @@
+#!/bin/sh
+. "$(dirname "$0")/_state"
+[ -f "$D/net/wlan0/flags" ] || radio on
+case "$*" in
+	"dev wlan0 link")
+		c=$(get connected)
+		if [ -n "$c" ]; then printf 'Connected to 00:11:22:33:44:55 (on wlan0)\n\tSSID: %s\n\tfreq: 2437\n\tsignal: -48 dBm\n' "$c"; else echo "Not connected."; fi ;;
+	"dev wlan0 scan dump")
+		grep -q 0x1003 "$D/net/wlan0/flags" || exit 1
+		cat "$(dirname "$0")/../scan.txt" ;;
+	*) exit 1 ;;
+esac

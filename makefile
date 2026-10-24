@@ -56,6 +56,7 @@ system:
 	cp ./workspace/all/minput/build/$(PLATFORM)/minput.elf ./build/EXTRAS/Tools/$(PLATFORM)/Input.pak/
 	cp ./workspace/all/romulus/build/$(PLATFORM)/romulus.elf ./build/EXTRAS/Tools/$(PLATFORM)/Romulus.pak/
 	cp ./workspace/all/power/build/$(PLATFORM)/power.elf ./build/EXTRAS/Tools/$(PLATFORM)/Power.pak/
+	cp ./workspace/all/wifi/build/$(PLATFORM)/wifi.elf ./build/EXTRAS/Tools/$(PLATFORM)/Wi-Fi.pak/
 
 cores: # TODO: can't assume every platform will have the same stock cores (platform should be responsible for copy too)
 	# stock cores

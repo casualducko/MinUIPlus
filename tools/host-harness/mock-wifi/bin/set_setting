@@ -1,0 +1,3 @@
+#!/bin/sh
+. "$(dirname "$0")/_state"
+put "s_$1" "$2"

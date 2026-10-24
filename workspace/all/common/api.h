@@ -195,6 +195,7 @@ void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_
 #define HUD_TOAST 3 // show_setting value: a short text in the pill
 int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting);
 #define SLOT_PICKER_HEIGHT 18 // one row, in unscaled units
+void GFX_fillCapsule(SDL_Surface* dst, SDL_Rect r, Uint32 color); // a filled block with round ends, any height (the pill assets only draw well at their own)
 void GFX_blitSlotPicker(SDL_Surface* dst, int x, int y, int w, int slot, int count, const int* used); // numbers, the current one in a pill, < > at the ends
 SDL_Surface* GFX_renderSettingHud(int show_setting);
 SDL_Surface* GFX_renderToastHud(const char* text); // device-size ARGB strip for PLAT_setHud, NULL if it cannot be made

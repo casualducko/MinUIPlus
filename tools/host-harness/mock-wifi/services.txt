@@ -1,0 +1,2 @@
+*AO HomeNet              wifi_dc85de828967_686f6d654e6574_managed_psk
+    Coffee Shop Guest    wifi_dc85de828967_636f66_managed_none

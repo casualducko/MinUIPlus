@@ -1,0 +1,6 @@
+#!/bin/sh
+. "$(dirname "$0")/_state"
+c=$(get connected)
+if [ "$1" = route ]; then [ -n "$c" ] && echo "default via 192.168.1.1 dev wlan0"; exit 0; fi
+[ -n "$c" ] && echo "3: wlan0    inet 192.168.1.84/24 brd 192.168.1.255 scope global wlan0"
+exit 0

@@ -1,0 +1,41 @@
+BSS 00:11:22:33:44:55(on wlan0)
+	last seen: 1234.567s [boottime]
+	TSF: 1 usec (0d, 00:00:00)
+	freq: 2437
+	beacon interval: 100 TUs
+	capability: ESS Privacy ShortSlotTime (0x0411)
+	signal: -52.00 dBm
+	last seen: 1710 ms ago
+	SSID: HomeNet
+	Supported rates: 1.0* 2.0* 5.5* 11.0* 6.0 9.0 12.0 18.0
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: PSK
+BSS 00:11:22:33:44:56(on wlan0)
+	freq: 5180
+	capability: ESS Privacy ShortSlotTime (0x0411)
+	signal: -67.00 dBm
+	SSID: HomeNet
+	RSN:	 * Version: 1
+BSS aa:bb:cc:dd:ee:ff(on wlan0) -- associated
+	freq: 2412
+	capability: ESS ShortSlotTime (0x0401)
+	signal: -81.00 dBm
+	SSID: Coffee Shop Guest
+BSS 10:20:30:40:50:60(on wlan0)
+	capability: ESS Privacy (0x0011)
+	signal: -70.00 dBm
+	SSID: \x00\x00\x00\x00
+BSS 10:20:30:40:50:61(on wlan0)
+	signal: -60.00 dBm
+	SSID: 
+BSS 11:22:33:44:55:66(on wlan0)
+	capability: ESS Privacy (0x0011)
+	signal: -40.50 dBm
+	SSID: Caf\xc3\xa9 \xe3\x81\x82
+	WPA:	 * Version: 1
+BSS 77:88:99:aa:bb:cc(on wlan0)
+	capability: ESS Privacy (0x0011)
+	signal: -90.00 dBm
+	SSID: OldWEP
