@@ -10,6 +10,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 #include <sys/statvfs.h>
 
 #include <msettings.h>
@@ -84,7 +86,6 @@ static uint32_t modal_until = 0;
 static int confirm_index = -1;
 
 static int show_setting = 0;
-static uint32_t wifi_wait_until = 0;	// while the Wi-Fi is still coming up
 
 ///////////////////////////////
 
@@ -134,14 +135,58 @@ static void stop_job(void) {
 ///////////////////////////////
 // jobs
 
-#define WIFI_STATE_PATH "/sys/class/net/wlan0/operstate"
-static int wifi_is_down(void) { // only when there is a wlan0 and it isn't up (no wlan0: nothing to wait for)
-	char state[32] = "";
-	FILE* f = fopen(WIFI_STATE_PATH, "r");
+// The network. On the device Wi-Fi may be off (wlan0 down or not there at all), and "link up"
+// is not yet "has an address": check first, switch it on if it isn't, then wait for both.
+// The paths and the command can be overridden for tests (ROMULUS_NET_DIR, ROMULUS_ROUTE_FILE, ROMULUS_WIFICTL).
+#define WIFI_TIMEOUT_MS 30000
+#define NET_RETRIES 3 // quiet retries of the first request after we switched Wi-Fi on (DNS is often last)
+typedef enum { NET_READY, NET_ENABLING, NET_WAITING } NetState;
+static NetState net_state = NET_READY;
+static uint32_t net_deadline = 0;
+static uint32_t net_drawn_at = 0;
+static int net_retries = 0;
+static uint32_t retry_at = 0;
+static pid_t wifictl_pid = 0;
+
+static const char* net_dir(void) { const char* e = getenv("ROMULUS_NET_DIR"); return (e && *e) ? e : "/sys/class/net"; }
+static int net_managed(void) { return access(net_dir(), F_OK)==0; } // no /sys/class/net: not the device, nothing to manage
+static int wifi_link_up(void) {
+	char path[256], state[32] = "";
+	snprintf(path, sizeof(path), "%s/wlan0/operstate", net_dir());
+	FILE* f = fopen(path, "r");
 	if (!f) return 0;
 	if (!fgets(state, sizeof(state), f)) state[0] = '\0';
 	fclose(f);
-	return strncmp(state, "up", 2)!=0;
+	return !strncmp(state, "up", 2);
+}
+static int has_default_route(void) { // /proc/net/route: a line whose destination is 00000000
+	const char* e = getenv("ROMULUS_ROUTE_FILE");
+	FILE* f = fopen((e && *e) ? e : "/proc/net/route", "r");
+	if (!f) return 0;
+	char line[256];
+	int found = 0;
+	while (fgets(line, sizeof(line), f)) {
+		char iface[32], dest[16];
+		if (sscanf(line, "%31s %15s", iface, dest)==2 && !strcmp(dest, "00000000")) { found = 1; break; }
+	}
+	fclose(f);
+	return found;
+}
+static int network_ready(void) { return wifi_link_up() && has_default_route(); }
+static void start_wifictl(void) { // `wifictl enable` like the Wi-Fi tool does, in the background
+	const char* cmd = getenv("ROMULUS_WIFICTL");
+	if (!cmd || !*cmd) cmd = "wifictl";
+	pid_t pid = fork();
+	if (pid==0) {
+		int nul = open("/dev/null", O_RDWR);
+		if (nul>=0) { dup2(nul, 0); dup2(nul, 1); dup2(nul, 2); }
+		execlp(cmd, cmd, "enable", (char*)NULL);
+		_exit(127);
+	}
+	if (pid>0) wifictl_pid = pid;
+}
+static void reap_wifictl(void) {
+	if (wifictl_pid>0 && waitpid(wifictl_pid, NULL, WNOHANG)!=0) wifictl_pid = 0;
 }
 
 static void load_platforms(void) {
@@ -190,6 +235,12 @@ static void restore_last(void) {
 
 static void finish_platforms(void) {
 	const char* err = rjob_error(&job);
+	if (err && net_retries>0 && (job.curl_exit==6 || job.curl_exit==7 || job.curl_exit==28)) {
+		// we only just switched Wi-Fi on: the address may be there but not DNS yet, ask again quietly
+		net_retries--;
+		retry_at = SDL_GetTicks() + 2000;
+		return;
+	}
 	if (err) { plats_failed = 1; say(err, 0); return; }
 	size_t cap = 256*1024;
 	FILE* f = fopen(list_tmp, "rb");
@@ -423,7 +474,9 @@ static void keep_visible(int* s, int* top, int count) {
 static void draw_platforms(int ow) {
 	draw_title("Romulus", ow);
 	if (plat_count==0) {
-		if (wifi_wait_until) draw_note("Connecting to Wi-Fi...");
+		if (net_state==NET_ENABLING) draw_note("Turning on Wi-Fi...");
+		else if (net_state==NET_WAITING) draw_note("Waiting for the network...");
+		else if (retry_at) draw_note("Connecting to the server...");
 		else if (job_kind==JOB_PLATFORMS) draw_note("Loading...");
 		else draw_note(plats_failed ? "Couldn't load the server's list.\nPress A to try again." : "Loading...");
 	}
@@ -434,7 +487,8 @@ static void draw_platforms(int ow) {
 		}
 	}
 	GFX_blitButtonGroup((char*[]){"B","QUIT",NULL}, 0, screen, 0);
-	GFX_blitButtonGroup((char*[]){"A", plat_count ? "OPEN" : "RETRY", NULL}, 1, screen, 1);
+	if (plat_count) GFX_blitButtonGroup((char*[]){"A","OPEN",NULL}, 1, screen, 1);
+	else if (plats_failed) GFX_blitButtonGroup((char*[]){"A","RETRY",NULL}, 1, screen, 1);
 }
 static void draw_games(int ow) {
 	char title[256];
@@ -688,8 +742,15 @@ int main(int argc, char* argv[]) {
 		snprintf(msg, sizeof(msg), "%s.\nEdit .userdata/" PLATFORM "/romulus.cfg\non the card.", rcfg_message(cfg_state));
 		say(msg, 0);
 	}
-	else load_platforms();
-
+	else if (!net_managed() || network_ready()) load_platforms();
+	else {
+		const char* t = getenv("ROMULUS_WIFI_TIMEOUT_MS");
+		net_deadline = SDL_GetTicks() + (t ? (uint32_t)atoi(t) : WIFI_TIMEOUT_MS);
+		net_retries = NET_RETRIES;
+		if (wifi_link_up()) net_state = NET_WAITING; // on, just no address yet: don't touch it
+		else { net_state = NET_ENABLING; start_wifictl(); }
+	}
+	
 	int config_problem = cfg_state!=RCFG_OK;
 
 	while (!quit) {
@@ -699,11 +760,18 @@ int main(int argc, char* argv[]) {
 		PAD_poll();
 		PWR_update(&dirty, &show_setting, NULL, NULL);
 
-		if (wifi_wait_until && (!wifi_is_down() || now>=wifi_wait_until)) {
-			wifi_wait_until = 0;
-			load_platforms();
+		reap_wifictl();
+		if (net_state!=NET_READY) {
+			if (network_ready() || now>=net_deadline) { // up with an address, or we've waited long enough: the error will say what's wrong
+				net_state = NET_READY;
+				load_platforms();
+			}
+			else {
+				if (net_state==NET_ENABLING && wifi_link_up()) { net_state = NET_WAITING; dirty = 1; }
+				if (now-net_drawn_at>=1000) { net_drawn_at = now; dirty = 1; }
+			}
 		}
-		else if (wifi_wait_until) dirty = dirty || (now/1000 != (now-16)/1000); // redraw about once a second
+		if (retry_at && now>=retry_at) { retry_at = 0; load_platforms(); }
 		
 		if (job_kind!=JOB_NONE && rjob_poll(&job)) {
 			JobKind kind = job_kind;
