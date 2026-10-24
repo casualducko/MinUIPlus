@@ -13,6 +13,13 @@ export DATETIME_PATH="$SHARED_USERDATA_PATH/datetime.txt"
 
 #######################################
 
+# Moss applies its timezone setting while it starts EmulationStation, which this boot skips,
+# so without this the clock (and the Clock tool) would be in UTC
+TZNAME=$(. /etc/profile >/dev/null 2>&1; get_setting system.timezone)
+if [ -n "$TZNAME" ] && [ -f "/usr/share/zoneinfo/$TZNAME" ]; then
+	ln -sf "/usr/share/zoneinfo/$TZNAME" /var/run/localtime
+fi
+
 # JELOS aggressively repairs disks and leaves litter on the SD card
 rm $SDCARD_PATH/FSCK*.REC
 
