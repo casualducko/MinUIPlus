@@ -1719,6 +1719,28 @@ int PAD_tappedMenu(uint32_t now) {
 
 ///////////////////////////////
 
+// How strong the motor runs, as a percent of what the game asks for: .userdata/<platform>/rumble, 0 turns it
+// off, 100 (also when missing or unreadable) is as the game asks.
+static int VIB_parsePercent(const char* text) {
+	if (!text || *text<'0' || *text>'9') return 100;
+	int n = 0;
+	while (*text>='0' && *text<='9' && n<1000) n = n*10 + (*text++ - '0');
+	if (*text=='%') text++;
+	while (*text==' ' || *text=='\t' || *text=='\r' || *text=='\n') text++;
+	if (*text || n>100) return 100;
+	return n;
+}
+static int VIB_scale(int strength) {
+	static int percent = -1;
+	if (percent<0) {
+		char text[16] = "";
+		FILE* f = fopen(USERDATA_PATH "/rumble", "r");
+		if (f) { if (!fgets(text, sizeof(text), f)) text[0] = '\0'; fclose(f); percent = VIB_parsePercent(text); }
+		else percent = 100;
+		LOG_info("rumble at %i%%\n", percent);
+	}
+	return (int)((long long)strength * percent / 100);
+}
 static struct VIB_Context {
 	int initialized;
 	pthread_t pt;
@@ -1738,7 +1760,7 @@ static void* VIB_thread(void *arg) {
 			vib.strength = vib.queued_strength;
 			defer = 0;
 
-			PLAT_setRumble(vib.strength);
+			PLAT_setRumble(VIB_scale(vib.strength));
 		}
 	}
 	return 0;
@@ -1754,6 +1776,7 @@ void VIB_quit(void) {
 	VIB_setStrength(0);
 	pthread_cancel(vib.pt);
 	pthread_join(vib.pt, NULL);
+	PLAT_setRumble(0); // the thread may not have got to the 0, and a motor left running keeps running
 }
 void VIB_setStrength(int strength) {
 	if (vib.queued_strength==strength) return;

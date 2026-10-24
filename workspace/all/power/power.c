@@ -16,6 +16,7 @@
 #define POWEROFF_PATH USERDATA_PATH "/poweroff-timeout"
 #define AUDIO_PATH USERDATA_PATH "/audio-buffer"
 #define BATTERY_PATH USERDATA_PATH "/low-battery-shutdown"
+#define RUMBLE_PATH USERDATA_PATH "/rumble"
 #define DEFAULT_SECONDS 120 // what the system uses when there is no file
 
 typedef struct { int seconds; const char* label; } Choice;
@@ -36,6 +37,10 @@ static const Choice battery_choices[] = {
 	{0,"Off"}, {3,"3%"}, {5,"5%"}, {8,"8%"}, {10,"10%"}, {-1,NULL}
 };
 
+static const Choice rumble_choices[] = {
+	{0,"Off"}, {25,"25%"}, {50,"50%"}, {75,"75%"}, {100,"Full"}, {-1,NULL}
+};
+
 typedef struct {
 	const char* name;
 	const char* path;
@@ -49,6 +54,7 @@ static Row rows[] = {
 	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
 	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
+	{"Rumble", RUMBLE_PATH, rumble_choices, 100, 1, 100, 100},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))
 
@@ -69,7 +75,7 @@ static int choiceIndex(const Row* row) { // -1 when the file holds something tha
 static void describe(const Row* row, char* out, size_t cap) {
 	int i = choiceIndex(row);
 	if (i>=0) snprintf(out, cap, "%s", row->choices[i].label);
-	else snprintf(out, cap, row->choices==audio_choices ? "%i ms" : row->choices==battery_choices ? "%i%%" : "%i seconds", row->seconds);
+	else snprintf(out, cap, row->choices==audio_choices ? "%i ms" : row->choices==battery_choices || row->choices==rumble_choices ? "%i%%" : "%i seconds", row->seconds);
 }
 static void step(Row* row, int dir) {
 	int count = 0;
@@ -132,7 +138,7 @@ int main(int argc, char* argv[]) {
 		if (dirty) {
 			GFX_clear(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
-			char title[64] = "Power & Audio";
+			char title[64] = "Settings";
 			char out[64];
 			GFX_truncateText(font.large, title, out, screen->w - SCALE1(PADDING*2) - ow, SCALE1(BUTTON_PADDING*2));
 			SDL_Surface* t = TTF_RenderUTF8_Blended(font.large, out, COLOR_LIGHT_TEXT);
@@ -145,11 +151,10 @@ int main(int argc, char* argv[]) {
 			// what the settings mean, in small text under the rows
 			static const char* notes[] = {
 				"Games don't sleep by themselves; power still does.",
-				"Low battery: quicksave, then power off.",
-				"Applies when a game or the launcher next starts.",
+				"Changes apply when a game or the launcher starts.",
 				NULL
 			};
-			int y = SCALE1(PADDING) + (ROW_COUNT+2)*SCALE1(PILL_SIZE);
+			int y = SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE) + SCALE1(8);
 			for (int i=0; notes[i]; i++) {
 				SDL_Surface* n = TTF_RenderUTF8_Blended(font.small, notes[i], COLOR_GRAY);
 				if (!n) continue;

@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <dlfcn.h>
 #include <string.h>
+#include <linux/input.h>
 
 #include "msettings.h"
 
@@ -216,3 +217,92 @@ void SetHDMI(int value) {
 
 int GetMute(void) { return 0; }
 void SetMute(int value) { }
+
+///////////////////////////////////////
+// Rumble. The joypad driver registers a force-feedback device (FF_RUMBLE, which drives the PWM motor):
+// that is used when there is one. If not, the PWM that Moss sets up at boot (pwmchip1/pwm0, period 1 ms,
+// duty = period meaning off) is driven directly, but only if it is already set up that way, so nothing
+// else's PWM (the backlight's) can be touched by a wrong guess.
+
+#define RUMBLE_PWM "/sys/class/pwm/pwmchip1/pwm0"
+static int rumble_state = -1; // -1 not looked at yet, 0 nothing to drive, 1 force feedback, 2 sysfs PWM
+static int rumble_fd = -1;
+static int rumble_id = -1;
+static int rumble_period = 0;
+
+static int RumbleHasBit(const unsigned long* bits, int bit) {
+	return (bits[bit / (8 * sizeof(unsigned long))] >> (bit % (8 * sizeof(unsigned long)))) & 1;
+}
+static int RumbleReadInt(const char* path) {
+	int value = -1;
+	FILE* f = fopen(path, "r");
+	if (!f) return -1;
+	if (fscanf(f, "%d", &value)!=1) value = -1;
+	fclose(f);
+	return value;
+}
+static void RumbleOpen(void) {
+	rumble_state = 0;
+	for (int i=0; i<16; i++) {
+		char path[32];
+		snprintf(path, sizeof(path), "/dev/input/event%i", i);
+		int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+		if (fd<0) continue;
+		unsigned long types[(EV_MAX / (8 * sizeof(unsigned long))) + 1];
+		unsigned long effects[(FF_MAX / (8 * sizeof(unsigned long))) + 1];
+		memset(types, 0, sizeof(types));
+		memset(effects, 0, sizeof(effects));
+		if (ioctl(fd, EVIOCGBIT(0, sizeof(types)), types)>=0 && RumbleHasBit(types, EV_FF) &&
+			ioctl(fd, EVIOCGBIT(EV_FF, sizeof(effects)), effects)>=0 && RumbleHasBit(effects, FF_RUMBLE)) {
+			rumble_fd = fd;
+			rumble_state = 1;
+			return;
+		}
+		close(fd);
+	}
+	rumble_period = RumbleReadInt(RUMBLE_PWM "/period");
+	if (rumble_period==1000000 && RumbleReadInt(RUMBLE_PWM "/enable")==1) rumble_state = 2;
+}
+int GetRumbleBackend(void) { // 0 none, 1 force feedback, 2 PWM (after the first SetRawRumble)
+	return rumble_state<0 ? 0 : rumble_state;
+}
+void SetRawRumble(int strength) { // 0-65535, 0 is off
+	if (rumble_state<0) RumbleOpen();
+	if (strength<0) strength = 0;
+	if (strength>0xffff) strength = 0xffff;
+	if (rumble_state==1) {
+		struct input_event play;
+		memset(&play, 0, sizeof(play));
+		play.type = EV_FF;
+		if (strength==0) {
+			if (rumble_id<0) return;
+			play.code = (unsigned short)rumble_id;
+			play.value = 0;
+			if (write(rumble_fd, &play, sizeof(play))<0) { /* nothing more to do */ }
+			return;
+		}
+		struct ff_effect effect;
+		memset(&effect, 0, sizeof(effect));
+		effect.type = FF_RUMBLE;
+		effect.id = (short)rumble_id; // -1 the first time: the driver picks one
+		effect.replay.length = 60000; // restarted whenever the strength changes, stopped with a 0
+		effect.u.rumble.strong_magnitude = (unsigned short)strength;
+		effect.u.rumble.weak_magnitude = 0;
+		if (ioctl(rumble_fd, EVIOCSFF, &effect)<0) return;
+		rumble_id = effect.id;
+		play.code = (unsigned short)rumble_id;
+		play.value = 1;
+		if (write(rumble_fd, &play, sizeof(play))<0) { /* nothing more to do */ }
+	}
+	else if (rumble_state==2) {
+		// Moss's "off" is duty == period, so more strength means a shorter duty
+		int duty = rumble_period - (int)((long long)rumble_period * strength / 0xffff);
+		char value[16];
+		snprintf(value, sizeof(value), "%d", duty);
+		int fd = open(RUMBLE_PWM "/duty_cycle", O_WRONLY);
+		if (fd>=0) {
+			if (write(fd, value, strlen(value))<0) { /* nothing more to do */ }
+			close(fd);
+		}
+	}
+}

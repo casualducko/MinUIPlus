@@ -745,8 +745,14 @@ void PLAT_setCPUSpeed(int speed) {
 	putInt(GOVERNOR_PATH, freq);
 }
 
-void PLAT_setRumble(int strength) {
-	// buh
+void PLAT_setRumble(int strength) { // 0-65535, see SetRawRumble() in libmsettings
+	static int logged = 0;
+	SetRawRumble(strength);
+	if (!logged) {
+		logged = 1;
+		static const char* names[] = { "nothing to drive it with", "the force feedback device", "Moss's PWM" };
+		LOG_info("rumble: %s\n", names[GetRumbleBackend()]);
+	}
 }
 
 int PLAT_pickSampleRate(int requested, int max) {
