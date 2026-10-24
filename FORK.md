@@ -75,3 +75,11 @@ volume key direction, the audio change, and the minarch input change.
 
 ## Fn button
 - The Fn button sends evdev code 316 (BTN_MODE), the only code in the device logs nothing handled. It now acts as MENU like L3 and R3: `RAW_MENU3` in rgb30 platform.c and `CODE_MENU_FN` in keymon (so Fn + volume changes brightness). Inferred from the logs, not from a key test: if Fn turns out to send another code, the launcher/minarch log line `key event: N` shows it.
+
+## Romulus tool (new)
+A Tools pak that browses a romulus server (the API described in ROMULUS_HANDOFF.md from the Android app) and downloads ROMs into the right Roms folder. Source: `workspace/all/romulus/` (`json.c` parser, `zipx.c` zip extraction with zlib, `rapi.c` config/URLs/curl job/naming/placement, `romulus.c` the UI), pak launcher in `skeleton/EXTRAS/Tools/rgb30/Romulus.pak/`.
+- Config: `.userdata/rgb30/romulus.cfg` on the card (`url=https://...`, `token=...`, optional `map=slug:Folder (TAG)`); created empty on first launch. https only (`insecure_http=1` allows http for testing).
+- Network via the device's `curl` (run in the background, token in a private header file, never on the command line); Wi-Fi is switched on at launch if it's off. Platforms the server reports are listed when this device has an emulator for them; folder = the existing `Name (TAG)` folder (GBA goes to `(MGBA)` when that's what the card has), else it makes one.
+- A: download (asks first if you already have it), X: search (on-screen keyboard), B: back, L1/R1: page. Zips are unpacked (first file the emulator takes, base name only, CRC checked); odd file names are cleaned for FAT; a download never leaves a partial ROM.
+- Tests: `tools/host-tests/test_romulus.c` (+ `mock_romulus.py`, `make_zips.py`) run in `run.sh` under ASan/UBSan; `tools/host-harness/romulus-run.sh` drives the real UI against the mock server with screenshots.
+- Not tried on the device or against the real server.

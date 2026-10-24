@@ -37,5 +37,22 @@ for t in emuname corename msettings underrun fadein audio_sim truncate wraptext 
 	$CC $FLAGS -I"$out" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi
 done
+# the Romulus tool: JSON, zip, config, naming, and the curl job against a mock server
+echo "== romulus"
+python3 "$here/make_zips.py" "$out/zips" > /dev/null
+tok="test-token-$$"
+rm -f "$out/mock.log"
+python3 "$here/mock_romulus.py" "$tok" > "$out/mock.log" 2>&1 &
+mock=$!
+port=
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+	port=$(sed -n 's/^PORT //p' "$out/mock.log" 2>/dev/null | head -1)
+	[ -n "$port" ] && break
+	sleep 0.25
+done
+$CC $FLAGS -I"$all/romulus" -o "$out/test_romulus" "$here/test_romulus.c" "$all/romulus/json.c" "$all/romulus/zipx.c" "$all/romulus/rapi.c" -lz
+if ! ROM_ZIPS="$out/zips" ROM_PORT="$port" ROM_TOKEN="$tok" "$out/test_romulus"; then failed=1; echo "   ^ FAILED: romulus"; fi
+kill $mock 2>/dev/null; wait $mock 2>/dev/null || true
+
 echo
 if [ $failed = 0 ]; then echo "all host tests passed"; else echo "SOME HOST TESTS FAILED"; exit 1; fi
