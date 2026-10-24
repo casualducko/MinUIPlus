@@ -1,0 +1,23 @@
+diff --git forkSrcPrefix/libretro/Makefile forkDstPrefix/libretro/Makefile
+index e9f725f7..222b7464 100644
+--- forkSrcPrefix/libretro/Makefile
++++ forkDstPrefix/libretro/Makefile
+@@ -219,6 +219,18 @@ else ifeq ($(platform), classic_armv8_a35)
+ 	  endif
+ 	endif
+ #######################################
++
++# RGB30
++else ifeq ($(platform), rgb30)
++	TARGET := $(TARGET_NAME)_libretro.so
++	CC  = $(CROSS_COMPILE)gcc
++	CXX = $(CROSS_COMPILE)g++
++	AR  = $(CROSS_COMPILE)ar
++	fpic := -fPIC
++	SHARED := -shared -Wl,--version-script=link.T
++	CFLAGS += -fomit-frame-pointer -ffast-math -fno-ident -mtune=cortex-a55 -march=armv8.2-a -DARM
++	CXXFLAGS += -fomit-frame-pointer -ffast-math -fno-ident -mtune=cortex-a55 -march=armv8.2-a -DARM
++	LDFLAGS += -Wl,--gc-sections
+    
+ # iOS
+ else ifneq (,$(findstring ios,$(platform)))
