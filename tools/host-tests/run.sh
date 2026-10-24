@@ -37,7 +37,7 @@ x "$all/minarch/minarch.c" 'void Core_getName' 'void Core_open' > "$out/gen/Core
 x "$all/common/api.c" 'int GFX_wrapText' '///////////////////////////////
 
 // scale_blend' > "$out/gen/GFX_wrapText.inc"
-x "$all/common/api.c" 'void GFX_blitMessage' 'int GFX_blitHardwareGroup' > "$out/gen/GFX_blitMessage.inc"
+x "$all/common/api.c" 'void GFX_blitMessage' '// The slot picker under the save and load previews' > "$out/gen/GFX_blitMessage.inc"
 x "$all/minarch/minarch.c" '	int claimed = 0;' '	static int toggled_ff_on' > "$out/gen/inputclaim_claim.inc"
 x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
