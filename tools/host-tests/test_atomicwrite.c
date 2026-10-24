@@ -39,6 +39,9 @@ int main(void) {
 	// putFile on a device/sysfs-like file must write in place (bl_power, cpu governor): no temp file, node stays
 	putFile("/dev/null", "1");
 	struct stat dst; CHECK(stat("/dev/null", &dst)==0 && S_ISCHR(dst.st_mode), "putFile on a device node leaves it a device node");
+	// "/sys/..." must never get a temp file even when the target looks like a regular file: here it can't be written at all, and nothing may appear next to it
+	putFile("/dev/zzz-not-there", "1"); CHECK(access("/dev/zzz-not-there.tmp", F_OK)!=0, "putFile under /dev never makes a .tmp");
+	putFile("/sys/zzz-not-there", "1"); CHECK(access("/sys/zzz-not-there.tmp", F_OK)!=0, "putFile under /sys never makes a .tmp");
 	putFile(p, "plain");
 	c = slurp(p, &n); CHECK(c && n==5 && !memcmp(c, "plain", 5), "putFile on a regular file still replaces it"); free(c);
 	// big (an 8 MB state)

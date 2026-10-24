@@ -100,3 +100,4 @@ Found and fixed, each with a host test where it can have one:
 
 ## putFile regression (found 2026-10-24)
 The atomic-write change made `putFile` write `<path>.tmp` and rename. That cannot work on sysfs, so `bl_power` (the sleep backlight) and the CPU governor writes silently failed in builds `527dac4` and `b081bea`: the screen stayed lit during sleep until the 2-minute power-off. `putFile` now writes in place for anything that isn't a regular file (test in `test_atomicwrite.c`). Brightness was unaffected (msettings writes it itself).
+The first fix tested `S_ISREG` and did not work: sysfs attributes look like regular files to `stat()`. The test is now by path prefix (`/sys/`, `/proc/`, `/dev/`) as well.

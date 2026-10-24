@@ -182,7 +182,8 @@ void touch(char* path) {
 }
 void putFile(char* path, char* contents) {
 	struct stat st;
-	if (stat(path, &st)==0 && !S_ISREG(st.st_mode)) { // sysfs, procfs, devices: no temp file can be made next to them
+	int kernel_file = !strncmp(path, "/sys/", 5) || !strncmp(path, "/proc/", 6) || !strncmp(path, "/dev/", 5); // sysfs files look like regular files to stat()
+	if (kernel_file || (stat(path, &st)==0 && !S_ISREG(st.st_mode))) { // no temp file can be made next to these
 		FILE* f = fopen(path, "w");
 		if (f) { fputs(contents, f); fclose(f); }
 		return;
