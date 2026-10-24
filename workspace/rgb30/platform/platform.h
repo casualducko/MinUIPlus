@@ -123,7 +123,7 @@
 ///////////////////////////////
 
 #define MAIN_ROW_COUNT 8
-#define PADDING 40
+#define PADDING 20 // was 40 (80 px on every edge) from the RGB30; this panel can use more of its edges
 
 ///////////////////////////////
 

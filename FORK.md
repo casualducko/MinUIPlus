@@ -131,3 +131,7 @@ If `.userdata/<platform>/audio-dump` exists, minarch writes the core's raw audio
 
 ## Slot picker in the save and load screens
 The row under the state preview used to be eight dots, with no numbers and nothing saying left/right changes the slot. It is now `< 1 2 3 4 5 6 7 8 >` (`GFX_blitSlotPicker` in api.c, drawn by minarch's menu): the current slot in a dark block, slots that already hold a state in black, empty ones in gray. The row is taller (`SLOT_PICKER_HEIGHT` 14). Rendered on the Mac by `tools/host-harness/hud-test.c` (slots-*.bmp); not yet seen on the device.
+
+## Margins and slot picker polish
+- `PADDING` in `workspace/rgb30/platform/platform.h` was 40 (x2 = 80 px on each edge, about 11% of the 720 px panel) as in upstream's RGB30 setup; now 20 (40 px). Affects every screen (launcher, in-game menu, tools, the volume pill). Before/after launcher renders: `evidence/padding-compare/`. Harness: `PADDING=20 tools/host-harness/run.sh ...`.
+- Slot picker: larger numbers (`font.large`), a round dark capsule for the current slot (`GFX_fillCapsule`), `SLOT_PICKER_HEIGHT` 18.

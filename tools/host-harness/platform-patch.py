@@ -3,7 +3,7 @@
 path, rgb30 sized layout, software rendering (works with SDL's dummy video
 driver) and scripted input plus screenshots driven by $HP_SCRIPT / $HP_OUT.
 usage: platform-patch.py PLATFORM_DIR CARD_DIR"""
-import re, sys
+import os, re, sys
 
 plat, card = sys.argv[1:3]
 
@@ -11,7 +11,7 @@ p = plat + '/platform.h'
 s = open(p).read()
 s = re.sub(r'#define SDCARD_PATH ".*"', '#define SDCARD_PATH "%s"' % card, s)
 s = s.replace('#define FIXED_WIDTH\t\t640', '#define FIXED_WIDTH\t\t720').replace('#define FIXED_HEIGHT\t480', '#define FIXED_HEIGHT\t720')
-s = s.replace('#define MAIN_ROW_COUNT 6', '#define MAIN_ROW_COUNT 8').replace('#define PADDING 10', '#define PADDING 40')
+s = s.replace('#define MAIN_ROW_COUNT 6', '#define MAIN_ROW_COUNT 8').replace('#define PADDING 10', '#define PADDING ' + os.environ.get('PADDING', '40'))
 open(p, 'w').write(s)
 
 p = plat + '/platform.c'

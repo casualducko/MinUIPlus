@@ -717,17 +717,27 @@ static char hud_toast_text[48] = "";
 // The slot picker under the save and load previews: the numbers 1 to count, the current one in a dark
 // pill, slots that hold a save in black and empty ones in gray, and < > at the ends to say that left
 // and right change the slot. Drawn in the area (x,y,w) one row high (SCALE1(SLOT_PICKER_HEIGHT)).
+static void GFX_fillCapsule(SDL_Surface* dst, SDL_Rect r, Uint32 color) { // a filled rounded block, ends as round as the height allows
+	int radius = r.h / 2;
+	if (r.w < r.h) radius = r.w / 2;
+	for (int row=0; row<r.h; row++) {
+		int d = row < radius ? radius - row : (row >= r.h - radius ? row - (r.h - radius - 1) : 0); // rows from the straight part
+		int inset = radius - (int)(sqrt((double)radius*radius - (double)d*d) + 0.5);
+		if (d==0) inset = 0;
+		SDL_FillRect(dst, &(SDL_Rect){r.x + inset, r.y + row, r.w - inset*2, 1}, color);
+	}
+}
 void GFX_blitSlotPicker(SDL_Surface* dst, int x, int y, int w, int slot, int count, const int* used) {
-	int cw = SCALE1(12); // width of one number
+	int cw = SCALE1(17); // width of one number
 	int rh = SCALE1(SLOT_PICKER_HEIGHT);
 	int row_w = cw * count;
 	int rx = x + (w - row_w) / 2;
 	
 	const char* arrows[2] = { "<", ">" };
 	for (int a=0; a<2; a++) {
-		SDL_Surface* t = TTF_RenderUTF8_Blended(font.medium, arrows[a], COLOR_DARK_TEXT);
+		SDL_Surface* t = TTF_RenderUTF8_Blended(font.large, arrows[a], COLOR_DARK_TEXT);
 		if (!t) continue;
-		int ax = a==0 ? rx - SCALE1(4) - t->w : rx + row_w + SCALE1(4);
+		int ax = a==0 ? rx - SCALE1(2) - t->w : rx + row_w + SCALE1(2);
 		SDL_BlitSurface(t, NULL, dst, &(SDL_Rect){ax, y + (rh - t->h) / 2});
 		SDL_FreeSurface(t);
 	}
@@ -737,15 +747,10 @@ void GFX_blitSlotPicker(SDL_Surface* dst, int x, int y, int w, int slot, int cou
 		int cx = rx + i * cw;
 		SDL_Color color = (used && used[i]) ? COLOR_BLACK : COLOR_GRAY;
 		if (i==slot) {
-			// a dark rounded block (the pill asset is only drawn well at its own height)
-			SDL_Rect r = {cx + SCALE1(1), y, cw - SCALE1(2), rh};
-			Uint32 black = SDL_MapRGB(dst->format, 0, 0, 0);
-			SDL_FillRect(dst, &(SDL_Rect){r.x + SCALE1(3), r.y, r.w - SCALE1(6), r.h}, black);
-			SDL_FillRect(dst, &(SDL_Rect){r.x, r.y + SCALE1(3), r.w, r.h - SCALE1(6)}, black);
-			SDL_FillRect(dst, &(SDL_Rect){r.x + SCALE1(1), r.y + SCALE1(1), r.w - SCALE1(2), r.h - SCALE1(2)}, black);
+			GFX_fillCapsule(dst, (SDL_Rect){cx + SCALE1(1), y, cw - SCALE1(2), rh}, SDL_MapRGB(dst->format, 0, 0, 0));
 			color = COLOR_WHITE;
 		}
-		SDL_Surface* t = TTF_RenderUTF8_Blended(font.medium, number, color);
+		SDL_Surface* t = TTF_RenderUTF8_Blended(font.large, number, color);
 		if (!t) continue;
 		SDL_BlitSurface(t, NULL, dst, &(SDL_Rect){cx + (cw - t->w) / 2, y + (rh - t->h) / 2});
 		SDL_FreeSurface(t);
