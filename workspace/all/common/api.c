@@ -1760,18 +1760,28 @@ static int PWR_parseSleepSeconds(const char* text) { // seconds, 0 for never
 	if (n!=0 && n<10) return SLEEP_TIMEOUT_DEFAULT; // a typo should not make it sleep at once
 	return (int)n;
 }
+// seconds from a one-line file in .userdata/<platform>/, 0 for never (the Power tool writes these)
+static int PWR_readSeconds(const char* path) {
+	char text[32] = "";
+	FILE* f = fopen(path, "r");
+	if (!f) return SLEEP_TIMEOUT_DEFAULT;
+	if (!fgets(text, sizeof(text), f)) text[0] = '\0';
+	fclose(f);
+	return PWR_parseSleepSeconds(text);
+}
 static uint32_t PWR_sleepDelay(void) { // milliseconds, 0 for never; read once
 	static int seconds = -1;
 	if (seconds<0) {
-		char text[32] = "";
-		FILE* f = fopen(USERDATA_PATH "/sleep-timeout", "r");
-		if (f) {
-			if (!fgets(text, sizeof(text), f)) text[0] = '\0';
-			fclose(f);
-			seconds = PWR_parseSleepSeconds(text);
-		}
-		else seconds = SLEEP_TIMEOUT_DEFAULT;
+		seconds = PWR_readSeconds(USERDATA_PATH "/sleep-timeout");
 		LOG_info("autosleep after %i seconds\n", seconds);
+	}
+	return (uint32_t)seconds * 1000;
+}
+static uint32_t PWR_poweroffDelay(void) { // how long it stays asleep before powering off, 0 for never; read once
+	static int seconds = -1;
+	if (seconds<0) {
+		seconds = PWR_readSeconds(USERDATA_PATH "/poweroff-timeout");
+		LOG_info("power off after %i seconds asleep\n", seconds);
 	}
 	return (uint32_t)seconds * 1000;
 }
@@ -1942,13 +1952,14 @@ static void PWR_exitSleep(void) {
 
 static void PWR_waitForWake(void) {
 	uint32_t sleep_ticks = SDL_GetTicks();
+	uint32_t off_delay = PWR_poweroffDelay(); // 0: stay asleep until woken
 	while (!PAD_wake()) {
 		if (pwr.requested_wake) {
 			pwr.requested_wake = 0;
 			break;
 		}
 		SDL_Delay(200);
-		if (pwr.can_poweroff && SDL_GetTicks()-sleep_ticks>=120000) { // increased to two minutes
+		if (off_delay && pwr.can_poweroff && SDL_GetTicks()-sleep_ticks>=off_delay) {
 			if (pwr.is_charging) sleep_ticks += 60000; // check again in a minute
 			else PWR_powerOff();
 		}
