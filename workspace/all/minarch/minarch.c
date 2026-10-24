@@ -2872,7 +2872,16 @@ static void Screenshot_take(void) {
 	if (rgb) {
 		snprintf(part, sizeof(part), "%s.part", path); // a half-written PNG never looks like a screenshot
 		if (IMG_SavePNG(rgb, part)==0 && rename(part, path)==0) ok = 1;
-		else unlink(part);
+		else {
+			unlink(part);
+			char* ext = strrchr(path, '.'); // this SDL_image can't write PNG: a BMP is still a screenshot
+			if (ext) {
+				strcpy(ext, ".bmp");
+				snprintf(part, sizeof(part), "%s.part", path);
+				if (SDL_SaveBMP(rgb, part)==0 && rename(part, path)==0) ok = 1;
+				else unlink(part);
+			}
+		}
 	}
 	if (rgb) SDL_FreeSurface(rgb);
 	if (frame) SDL_FreeSurface(frame);
