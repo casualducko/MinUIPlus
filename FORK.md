@@ -109,3 +109,6 @@ The first fix tested `S_ISREG` and did not work: sysfs attributes look like regu
 ## Sleep & Power tool
 `Tools > Sleep & Power` (`workspace/all/power`) sets `.userdata/rgb30/sleep-timeout` (idle seconds before sleep, default 120) and the new `.userdata/rgb30/poweroff-timeout` (seconds asleep before powering off, default 120, never while charging). 0 means never for both; the same strict parsing as before (bad file = default). Read once when the launcher or a game starts. Games still never sleep on their own (original MinUI behavior); the power button always sleeps. Host harness: `tools/host-harness/power-run.sh`.
 Screenshots are scaled up by a whole number so the longest side is at most 1080 px (GB 960x864, GBA 960x640, NES 1024x960), nearest-neighbor.
+
+## SSH tool
+`Tools > SSH` (`skeleton/EXTRAS/Tools/rgb30/SSH.pak`) runs `systemctl start sshd` (only until reboot), appends `authorized_key.pub` (if present beside it; the test package ships the Mac's dedicated key, not the repo) to `/storage/.ssh/authorized_keys`, and shows the wlan0 address. Log in as root with `ssh -i ~/.ssh/rgb20sx_ed25519 root@<address>`. Untested on the device.
