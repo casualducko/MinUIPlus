@@ -71,5 +71,35 @@ int main(int argc, char** argv) {
 		snprintf(path, sizeof(path), "%s/options-list.bmp", out);
 		SDL_SaveBMP(screen, path);
 	}
+	// an options page with values (Frontend etc.) as minarch draws it
+	{
+		const char* names[] = {"Screen Scaling","Screen Effect","Screen Sharpness","Prevent Tearing","Show Debug HUD","Max FF Speed","Fast forward with a very long option name",NULL};
+		const char* values[] = {"Native","None","Crisp","Lenient","Off","None","Yes",NULL};
+		GFX_clear(screen);
+		GFX_blitHardwareGroup(screen, 0);
+		int mw = screen->w - SCALE1(PADDING*2), ox = SCALE1(PADDING), oy = SCALE1(PADDING + PILL_SIZE), row_h = SCALE1(PILL_SIZE);
+		for (int j=0; names[j]; j++) {
+			SDL_Color color = COLOR_WHITE;
+			char name[256], value[256];
+			int pill_w = GFX_truncateText(font.large, names[j], name, mw*6/10, SCALE1(BUTTON_PADDING*2));
+			int y = oy + j*row_h;
+			if (j==2) {
+				GFX_blitPill(ASSET_DARK_GRAY_PILL, screen, &(SDL_Rect){ox, y, mw, row_h});
+				GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){ox, y, pill_w, row_h});
+				color = COLOR_BLACK;
+			}
+			SDL_Surface* t = TTF_RenderUTF8_Blended(font.large, name, color);
+			SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){ox+SCALE1(BUTTON_PADDING), y+4});
+			SDL_FreeSurface(t);
+			int room = mw - pill_w - SCALE1(BUTTON_PADDING*2);
+			GFX_truncateText(font.medium, values[j], value, room, 0);
+			t = TTF_RenderUTF8_Blended(font.medium, value, COLOR_WHITE);
+			SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){ox+mw-t->w-SCALE1(BUTTON_PADDING), y+(row_h-t->h)/2});
+			SDL_FreeSurface(t);
+		}
+		char path[512];
+		snprintf(path, sizeof(path), "%s/options-page.bmp", out);
+		SDL_SaveBMP(screen, path);
+	}
 	return 0;
 }

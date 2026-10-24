@@ -3913,7 +3913,7 @@ static int Menu_options(MenuList* list) {
 	
 	// dependent on option list offset top and bottom, eg. the gray triangles
 	int max_visible_options = (screen->h - ((SCALE1(PADDING + PILL_SIZE) * 2) + SCALE1(BUTTON_SIZE))) / SCALE1(BUTTON_SIZE); // 7 for 480, 10 for 720
-	if (type==MENU_LIST) max_visible_options = (screen->h - SCALE1((PADDING + PILL_SIZE) * 2)) / SCALE1(PILL_SIZE); // the big list below has taller rows
+	max_visible_options = (screen->h - SCALE1((PADDING + PILL_SIZE) * 2)) / SCALE1(PILL_SIZE); // every list has the main menu's big rows (8 on this panel)
 	
 	int count;
 	for (count=0; items[count].name; count++);
@@ -4068,171 +4068,47 @@ static int Menu_options(MenuList* list) {
 			char* desc = NULL;
 			SDL_Surface* text;
 
-			if (type==MENU_LIST) {
-				// the same big rows as the main menu (this list is short, and the small ones were hard to read on this panel)
+			{
+				// One look for every options page, the same big rows as the main menu: the name on a white
+				// pill when selected, and for pages with values (the options, the controls, the emulator
+				// info) a dark pill behind the whole row with the value at the right.
+				int has_values = type!=MENU_LIST;
+				int mw = screen->w - SCALE1(PADDING*2);
 				int ox = SCALE1(PADDING);
 				int oy = SCALE1(PADDING + PILL_SIZE);
+				int row_h = SCALE1(PILL_SIZE);
 				int selected_row = selected - start;
 				for (int i=start,j=0; i<end; i++,j++) {
 					MenuItem* item = &items[i];
 					SDL_Color text_color = COLOR_WHITE;
+					int y = oy + j*row_h;
+					
+					char name[256];
+					int name_max = has_values ? mw * 6 / 10 : mw; // leave the value its room
+					int pill_w = GFX_truncateText(font.large, item->name, name, name_max, SCALE1(BUTTON_PADDING*2));
+					
 					if (j==selected_row) {
-						int w = 0;
-						TTF_SizeUTF8(font.large, item->name, &w, NULL);
-						w += SCALE1(BUTTON_PADDING*2);
-						GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){
-							ox,
-							oy+SCALE1(j*PILL_SIZE),
-							w,
-							SCALE1(PILL_SIZE)
-						});
+						if (has_values) GFX_blitPill(ASSET_DARK_GRAY_PILL, screen, &(SDL_Rect){ox, y, mw, row_h});
+						GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){ox, y, pill_w, row_h});
 						text_color = COLOR_BLACK;
 						if (item->desc) desc = item->desc;
 					}
-					text = TTF_RenderUTF8_Blended(font.large, item->name, text_color);
-					SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
-						ox+SCALE1(BUTTON_PADDING),
-						oy+SCALE1(j*PILL_SIZE)+4
-					});
+					text = TTF_RenderUTF8_Blended(font.large, name, text_color);
+					SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){ox+SCALE1(BUTTON_PADDING), y+4});
 					SDL_FreeSurface(text);
-				}
-			}
-			else if (type==MENU_FIXED) {
-				// NOTE: no need to calculate max width
-				int mw = screen->w - SCALE1(PADDING*2);
-				// int lw,rw;
-				// lw = rw = mw / 2;
-				int ox,oy;
-				ox = oy = SCALE1(PADDING);
-				oy += SCALE1(PILL_SIZE);
-				
-				int selected_row = selected - start;
-				for (int i=start,j=0; i<end; i++,j++) {
-					MenuItem* item = &items[i];
-					SDL_Color text_color = COLOR_WHITE;
-
-					if (j==selected_row) {
-						// gray pill
-						GFX_blitPill(ASSET_OPTION, screen, &(SDL_Rect){
-							ox,
-							oy+SCALE1(j*BUTTON_SIZE),
-							mw,
-							SCALE1(BUTTON_SIZE)
-						});
-					}
 					
-					if (item->value>=0) {
-						text = TTF_RenderUTF8_Blended(font.tiny, item->values[item->value], COLOR_WHITE); // always white
-						SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
-							ox + mw - text->w - SCALE1(OPTION_PADDING),
-							oy+SCALE1((j*BUTTON_SIZE)+3)
-						});
-						SDL_FreeSurface(text);
-					}
-					
-					// TODO: blit a black pill on unselected rows (to cover longer item->values?) or truncate longer item->values?
-					if (j==selected_row) {
-						// white pill
-						int w = 0;
-						TTF_SizeUTF8(font.small, item->name, &w, NULL);
-						w += SCALE1(OPTION_PADDING*2);
-						GFX_blitPill(ASSET_BUTTON, screen, &(SDL_Rect){
-							ox,
-							oy+SCALE1(j*BUTTON_SIZE),
-							w,
-							SCALE1(BUTTON_SIZE)
-						});
-						text_color = COLOR_BLACK;
-						
-						if (item->desc) desc = item->desc;
-					}
-					text = TTF_RenderUTF8_Blended(font.small, item->name, text_color);
-					SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
-						ox+SCALE1(OPTION_PADDING),
-						oy+SCALE1((j*BUTTON_SIZE)+1)
-					});
-					SDL_FreeSurface(text);
-				}
-			}
-			else if (type==MENU_VAR || type==MENU_INPUT) {
-				int mw = list->max_width;
-				if (!mw) {
-					// get the width of the widest row
-					int mrw = 0;
-					for (int i=0; i<count; i++) {
-						MenuItem* item = &items[i];
-						int w = 0;
-						int lw = 0;
-						int rw = 0;
-						TTF_SizeUTF8(font.small, item->name, &lw, NULL);
-						
-						// every value list in an input table is the same
-						// so only calculate rw for the first item...
-						if (!mrw || type!=MENU_INPUT) {
-							for (int j=0; item->values[j]; j++) {
-								TTF_SizeUTF8(font.tiny, item->values[j], &rw, NULL);
-								if (lw+rw>w) w = lw+rw;
-								if (rw>mrw) mrw = rw;
-							}
+					if (has_values && !(await_input && j==selected_row) && item->value>=0) {
+						char value[256];
+						int room = mw - pill_w - SCALE1(BUTTON_PADDING*2);
+						if (room>SCALE1(BUTTON_PADDING*2)) {
+							GFX_truncateText(font.medium, item->values[item->value], value, room, 0);
+							text = TTF_RenderUTF8_Blended(font.medium, value, COLOR_WHITE); // always white
+							SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
+								ox + mw - text->w - SCALE1(BUTTON_PADDING),
+								y + (row_h - text->h) / 2
+							});
+							SDL_FreeSurface(text);
 						}
-						else {
-							w = lw + mrw;
-						}
-						w += SCALE1(OPTION_PADDING*4);
-						if (w>mw) mw = w;
-					}
-					fflush(stdout);
-					// cache the result
-					list->max_width = mw = MIN(mw, screen->w - SCALE1(PADDING *2));
-				}
-				
-				int ox = (screen->w - mw) / 2;
-				int oy = SCALE1(PADDING + PILL_SIZE);
-				int selected_row = selected - start;
-				for (int i=start,j=0; i<end; i++,j++) {
-					MenuItem* item = &items[i];
-					SDL_Color text_color = COLOR_WHITE;
-
-					if (j==selected_row) {
-						// gray pill
-						GFX_blitPill(ASSET_OPTION, screen, &(SDL_Rect){
-							ox,
-							oy+SCALE1(j*BUTTON_SIZE),
-							mw,
-							SCALE1(BUTTON_SIZE)
-						});
-						
-						// white pill
-						int w = 0;
-						TTF_SizeUTF8(font.small, item->name, &w, NULL);
-						w += SCALE1(OPTION_PADDING*2);
-						GFX_blitPill(ASSET_BUTTON, screen, &(SDL_Rect){
-							ox,
-							oy+SCALE1(j*BUTTON_SIZE),
-							w,
-							SCALE1(BUTTON_SIZE)
-						});
-						text_color = COLOR_BLACK;
-						
-						if (item->desc) desc = item->desc;
-					}
-					text = TTF_RenderUTF8_Blended(font.small, item->name, text_color);
-					SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
-						ox+SCALE1(OPTION_PADDING),
-						oy+SCALE1((j*BUTTON_SIZE)+1)
-					});
-					SDL_FreeSurface(text);
-					
-					if (await_input && j==selected_row) {
-						// buh
-					}
-					else if (item->value>=0) {
-						text = TTF_RenderUTF8_Blended(font.tiny, item->values[item->value], COLOR_WHITE); // always white
-						SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
-							ox + mw - text->w - SCALE1(OPTION_PADDING),
-							oy+SCALE1((j*BUTTON_SIZE)+3)
-						});
-						SDL_FreeSurface(text);
 					}
 				}
 			}
