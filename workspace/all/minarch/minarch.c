@@ -2869,6 +2869,15 @@ static void Screenshot_take(void) {
 	int ok = 0;
 	SDL_Surface* frame = renderer.src ? SDL_CreateRGBSurfaceFrom(renderer.src, renderer.true_w, renderer.true_h, FIXED_DEPTH, renderer.src_p, RGBA_MASK_565) : NULL;
 	SDL_Surface* rgb = frame ? SDL_ConvertSurfaceFormat(frame, SDL_PIXELFORMAT_RGB24, 0) : NULL;
+	if (rgb) { // the core's frame is tiny (160x144 on a Game Boy): whole-number scale, no blur, so it is easy to look at and share
+		int longest = MAX(rgb->w, rgb->h);
+		int factor = longest>0 ? MAX(1, 1080/longest) : 1;
+		if (factor>1) {
+			SDL_Surface* big = SDL_CreateRGBSurfaceWithFormat(0, rgb->w*factor, rgb->h*factor, 24, SDL_PIXELFORMAT_RGB24);
+			if (big && SDL_BlitScaled(rgb, NULL, big, NULL)==0) { SDL_FreeSurface(rgb); rgb = big; }
+			else if (big) SDL_FreeSurface(big);
+		}
+	}
 	if (rgb) {
 		snprintf(part, sizeof(part), "%s.part", path); // a half-written PNG never looks like a screenshot
 		if (IMG_SavePNG(rgb, part)==0 && rename(part, path)==0) ok = 1;

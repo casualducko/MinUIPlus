@@ -108,3 +108,4 @@ The first fix tested `S_ISREG` and did not work: sysfs attributes look like regu
 
 ## Sleep & Power tool
 `Tools > Sleep & Power` (`workspace/all/power`) sets `.userdata/rgb30/sleep-timeout` (idle seconds before sleep, default 120) and the new `.userdata/rgb30/poweroff-timeout` (seconds asleep before powering off, default 120, never while charging). 0 means never for both; the same strict parsing as before (bad file = default). Read once when the launcher or a game starts. Games still never sleep on their own (original MinUI behavior); the power button always sleeps. Host harness: `tools/host-harness/power-run.sh`.
+Screenshots are scaled up by a whole number so the longest side is at most 1080 px (GB 960x864, GBA 960x640, NES 1024x960), nearest-neighbor.
