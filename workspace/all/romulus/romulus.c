@@ -184,7 +184,7 @@ static int has_default_route(void) { // /proc/net/route: a line whose destinatio
 	fclose(f);
 	return found;
 }
-static int network_ready(void) { return wifi_link_up() && has_default_route(); }
+static int network_ready(void) { return has_default_route(); } // by whatever interface: Wi-Fi, a USB tether, Ethernet
 static void start_wifictl(void) { // `wifictl enable` like the Wi-Fi tool does, in the background
 	const char* cmd = getenv("ROMULUS_WIFICTL");
 	if (!cmd || !*cmd) cmd = "wifictl";

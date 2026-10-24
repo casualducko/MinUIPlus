@@ -86,3 +86,12 @@ A Tools pak that browses a romulus server (the API described in ROMULUS_HANDOFF.
 
 ## Autosleep timeout
 - Idle autosleep was a fixed 30 seconds (`SLEEP_DELAY` in `PWR_update`). It is now 120 seconds by default, and `.userdata/rgb30/sleep-timeout` (a number of seconds on one line) overrides it: `0` = never, otherwise 10 to 86400, anything else is ignored. Read once at start and logged (`autosleep after N seconds`). Applies wherever `PWR_update` runs (launcher, tools, the in-game menu); sleeping on a long download is still prevented by the tools. Test: `test_sleeptimeout.c`.
+
+## Overnight review (2026-10-23/24)
+Found and fixed, each with a host test where it can have one:
+- **Multi-disc launching was broken by my own earlier change**: `getFirstDisc` bounded its output with `sizeof(disc_path)`, a pointer parameter, so the disc path was cut to 7 characters (an .m3u game would launch with a garbage path, auto-resume of one too). Now `MAX_PATH`. `test_firstdisc.c` fails on the old code.
+- **`getFile` left the caller's buffer untouched when the file was missing**, so callers read uninitialized stack. Now an empty string. Together with an empty-string TTF render (returns NULL) this crashed the launcher's version screen on a card without `.system/version.txt`; the screen now shows "unknown". `test_getfile.c`, `test_version.c`.
+- **minarch ran `mkdir -p "<tag>-<core>"` through a shell**, where the tag is a ROM folder name: a folder with a backtick or `$()` in its tag ran as a command. Now a shell-free `mkdirs()` in utils.c (`test_mkdirs.c` checks that hostile names only make folders). Also: `Game_open` and `main` no longer `strcpy` unbounded paths / `strrchr()+1` without a slash; the relative disc path joins in minui and minarch are bounded.
+- Romulus: network readiness is "has a default route" (any interface), `LAST_PATH` macro clash, dead variable, per-row folder scans cached, stale download temp removed at start, copy checks read errors, child processes close inherited fds.
+- Dead code: unused variables in clock, minput, say, `PWR_update`; `ox`/`oy` initialized.
+- Checked and found clean: clang static analyzer and GCC `-fanalyzer` on the new code, macOS `leaks` on the launcher (repeated folder navigation) and on Romulus (browse, search, paging, three downloads, a cancel): 0 leaks.

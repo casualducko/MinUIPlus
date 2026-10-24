@@ -44,8 +44,19 @@ clang romulus.c json.c zipx.c rapi.c ../common/scaler.c ../common/utils.c ../com
 
 rm -rf "$OUT"; mkdir -p "$OUT"
 cd "$WORK"
+if [ -n "$LEAKS_AFTER" ]; then
+	# LEAKS_AFTER=N: let the script run (end it with plenty of waits), then ask macOS `leaks` after N seconds
+	SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy HP_OUT="$OUT" HP_SCRIPT="$script" ./romulus > "$OUT/log.txt" 2> "$OUT/err.txt" &
+	rpid=$!
+	sleep "$LEAKS_AFTER"
+	if kill -0 $rpid 2>/dev/null; then leaks $rpid > "$OUT/leaks.txt" 2>&1; kill $rpid; else echo "romulus had already exited"; fi
+	wait $rpid 2>/dev/null || true
+	grep -E "leaks for|ROOT LEAK" "$OUT/leaks.txt" 2>/dev/null | head -20
+	status=leaks
+else
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy HP_OUT="$OUT" HP_SCRIPT="$script" \
 	perl -e 'alarm 120; exec @ARGV' ./romulus > "$OUT/log.txt" 2> "$OUT/err.txt" && status=0 || status=$?
+fi
 for f in "$OUT"/*.bmp; do
 	[ -f "$f" ] || continue
 	sips -s format png "$f" --out "${f%.bmp}.png" >/dev/null 2>&1 && rm "$f"

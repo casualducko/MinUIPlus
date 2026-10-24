@@ -1787,7 +1787,6 @@ void PWR_update(int* _dirty, int* _show_setting, PWR_callback_t before_sleep, PW
 		dirty = 1;
 	}
 	
-	int was_dirty = dirty; // dirty list (not including settings/battery)
 	
 	// TODO: only delay hiding setting changes if that setting didn't require a modifier button be held, otherwise release as soon as modifier is released
 	

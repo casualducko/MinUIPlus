@@ -826,6 +826,19 @@ static Array* getDiscs(char* path){
 	}
 	return entries;
 }
+// version.txt is "release\ncommit\n". Cuts text after the release line and points commit at the next line.
+static void splitVersion(char* text, char** commit) {
+	*commit = text + strlen(text); // an empty string
+	char* nl = strchr(text, '\n');
+	if (nl) {
+		*nl = '\0';
+		*commit = nl + 1;
+		char* end = strchr(*commit, '\n');
+		if (end) *end = '\0';
+		trimTrailingNewlines(*commit);
+	}
+	trimTrailingNewlines(text);
+}
 static int getFirstDisc(char* m3u_path, char* disc_path) { // based on getDiscs() natch
 	int found = 0;
 
@@ -1114,7 +1127,7 @@ static void openRom(char* path, char* last) {
 				else { // relative
 					strcpy(sd_path, m3u_path);
 					char* tmp = strrchr(sd_path, '/') + 1;
-					strcpy(tmp, disc_path);
+					snprintf(tmp, sizeof(sd_path) - (tmp - sd_path), "%s", disc_path); // a long relative path is cut, not run off the end
 				}
 			}
 		}
@@ -1484,8 +1497,8 @@ int main (int argc, char *argv[]) {
 		if (dirty) {
 			GFX_clear(screen);
 			
-			int ox;
-			int oy;
+			int ox = 0;
+			int oy = 0;
 			
 			// simple thumbnail support a thumbnail for a file or folder named NAME.EXT needs a corresponding /.res/NAME.EXT.png 
 			// that is no bigger than platform FIXED_HEIGHT x FIXED_HEIGHT
@@ -1523,16 +1536,15 @@ int main (int argc, char *argv[]) {
 					char release[MAX_PATH];
 					getFile(ROOT_SYSTEM_PATH "/version.txt", release, MAX_PATH);
 					
-					char *tmp,*commit;
-					commit = strrchr(release, '\n');
-					commit[0] = '\0';
-					commit = strrchr(release, '\n')+1;
-					tmp = strchr(release, '\n');
-					tmp[0] = '\0';
+					char* commit;
+					splitVersion(release, &commit); // a missing or short version.txt doesn't crash...
+					if (!release[0]) strcpy(release, "unknown"); // ...and nothing empty goes to TTF_Render (it returns NULL for "")
+					if (!commit[0]) commit = "unknown";
 					
 					// TODO: not sure if I want bare PLAT_* calls here
 					char* extra_key = "Model";
-					char* extra_val = PLAT_getModel(); 
+					char* extra_val = PLAT_getModel();
+					if (!extra_val || !extra_val[0]) extra_val = "unknown";
 					
 					SDL_Surface* release_txt = TTF_RenderUTF8_Blended(font.large, "Release", COLOR_DARK_TEXT);
 					SDL_Surface* version_txt = TTF_RenderUTF8_Blended(font.large, release, COLOR_WHITE);

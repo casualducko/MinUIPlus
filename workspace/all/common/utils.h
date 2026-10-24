@@ -18,6 +18,7 @@ void trimTrailingNewlines(char* line);
 void trimSortingMeta(char** str);
 
 int exists(char* path);
+int mkdirs(const char* path); // mkdir -p without a shell (a folder name is never a command); 0 if it exists afterwards, -1 if not
 void touch(char* path);
 void putFile(char* path, char* contents);
 char* allocFile(char* path); // caller must free

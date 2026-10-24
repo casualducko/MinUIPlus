@@ -197,8 +197,9 @@ static void Game_open(char* path) {
 	LOG_info("Game_open\n");
 	memset(&game, 0, sizeof(game));
 	
-	strcpy((char*)game.path, path);
-	strcpy((char*)game.name, strrchr(path, '/')+1);
+	snprintf((char*)game.path, sizeof(game.path), "%s", path);
+	const char* base = strrchr(path, '/');
+	snprintf((char*)game.name, sizeof(game.name), "%s", base ? base+1 : path);
 	
 	// if we have a zip file
 	if (suffixMatch(".zip", game.path)) {
@@ -350,8 +351,9 @@ static void Game_open(char* path) {
 	strcpy(tmp, ".m3u");
 	
 	if (exists(m3u_path)) {
-		strcpy(game.m3u_path, m3u_path);
-		strcpy((char*)game.name, strrchr(m3u_path, '/')+1);
+		snprintf(game.m3u_path, sizeof(game.m3u_path), "%s", m3u_path);
+		const char* m3u_base = strrchr(m3u_path, '/');
+		snprintf((char*)game.name, sizeof(game.name), "%s", m3u_base ? m3u_base+1 : m3u_path);
 	}
 	
 	game.is_open = 1;
@@ -3007,9 +3009,9 @@ void Core_open(const char* core_path, const char* tag_name) {
 	sprintf((char*)core.saves_dir, SDCARD_PATH "/Saves/%s", core.tag);
 	sprintf((char*)core.bios_dir, SDCARD_PATH "/Bios/%s", core.tag);
 	
-	char cmd[512];
-	sprintf(cmd, "mkdir -p \"%s\"; mkdir -p \"%s\"", core.config_dir, core.states_dir);
-	system(cmd);
+	// no shell: the tag comes from a folder name, which could hold anything
+	mkdirs(core.config_dir);
+	mkdirs(core.states_dir);
 
 	set_environment_callback(environment_callback);
 	set_video_refresh_callback(video_refresh_callback);
@@ -4262,8 +4264,8 @@ static void Menu_loadState(void) {
 			getFile(menu.txt_path, slot_disc_name, MAX_PATH);
 		
 			char slot_disc_path[MAX_PATH];
-			if (slot_disc_name[0]=='/') strcpy(slot_disc_path, slot_disc_name);
-			else sprintf(slot_disc_path, "%s%s", menu.base_path, slot_disc_name);
+			if (slot_disc_name[0]=='/') snprintf(slot_disc_path, sizeof(slot_disc_path), "%s", slot_disc_name);
+			else snprintf(slot_disc_path, sizeof(slot_disc_path), "%s%s", menu.base_path, slot_disc_name);
 		
 			char* disc_path = menu.disc_paths[menu.disc];
 			if (!exactMatch(slot_disc_path, disc_path)) {
@@ -4778,6 +4780,10 @@ int main(int argc , char* argv[]) {
 	char rom_path[MAX_PATH]; 
 	char tag_name[MAX_PATH];
 	
+	if (strlen(argv[1])>=sizeof(core_path) || strlen(argv[2])>=sizeof(rom_path)) { // a path that long can't be ours
+		fprintf(stderr, "minarch: path too long\n");
+		return 1;
+	}
 	strcpy(core_path, argv[1]);
 	strcpy(rom_path, argv[2]);
 	getEmuName(rom_path, tag_name);

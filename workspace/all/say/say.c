@@ -17,12 +17,10 @@ int main(int argc , char* argv[]) {
 	PWR_init();
 	InitSettings();
 	
-	SDL_Event event;
 	int quit = 0;
 	
 	int dirty = 1;
 	while(!quit) {
-		uint32_t frame_start = SDL_GetTicks();
 		
 		PAD_poll();
 		if (PAD_justPressed(BTN_A) || PAD_justPressed(BTN_B)) {

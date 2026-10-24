@@ -7,6 +7,7 @@
 #include <math.h>
 #include <ctype.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include "defines.h"
 #include "utils.h"
 
@@ -106,6 +107,21 @@ void getEmuPath(char* emu_name, char* pak_path) {
 	sprintf(pak_path, "%s/Emus/%s.pak/launch.sh", PAKS_PATH, emu_name);
 }
 
+int mkdirs(const char* path) {
+	char tmp[MAX_PATH];
+	if (!path || !*path || strlen(path)>=sizeof(tmp)) return -1;
+	strcpy(tmp, path);
+	for (char* p=tmp+1; *p; p++) {
+		if (*p!='/') continue;
+		*p = '\0';
+		mkdir(tmp, 0755); // fine if it's already there, a real failure shows up below
+		*p = '/';
+	}
+	mkdir(tmp, 0755);
+	struct stat st;
+	return (stat(tmp, &st)==0 && S_ISDIR(st.st_mode)) ? 0 : -1;
+}
+
 void normalizeNewline(char* line) {
 	int len = strlen(line);
 	if (len>1 && line[len-1]=='\n' && line[len-2]=='\r') { // windows!
@@ -152,15 +168,18 @@ void putFile(char* path, char* contents) {
 	}
 }
 void getFile(char* path, char* buffer, size_t buffer_size) {
+	if (buffer_size==0) return;
+	buffer[0] = '\0'; // a missing or unreadable file reads as empty, never as whatever was in the buffer
 	FILE *file = fopen(path, "r");
 	if (file) {
 		fseek(file, 0L, SEEK_END);
-		size_t size = ftell(file);
+		long end = ftell(file); // -1 (or huge for a directory) if this isn't a regular file
+		size_t size = end<0 ? 0 : (size_t)end;
 		if (size>buffer_size-1) size = buffer_size - 1;
 		rewind(file);
-		fread(buffer, sizeof(char), size, file);
+		size_t got = fread(buffer, sizeof(char), size, file);
 		fclose(file);
-		buffer[size] = '\0';
+		buffer[got] = '\0';
 	}
 }
 char* allocFile(char* path) { // caller must free!
