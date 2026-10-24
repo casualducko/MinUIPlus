@@ -4916,11 +4916,36 @@ int main(int argc , char* argv[]) {
 	Special_init(); // after config
 	
 	sec_start = SDL_GetTicks();
+	
+	// frame timing, logged every 5 seconds: how long each trip round this loop takes (16.7ms is a
+	// frame at 60Hz) and how much of that is the core. Slow spots show up as the over-25/50/100ms counts.
+	uint32_t ft_last = SDL_GetTicks(), ft_logged = ft_last, ft_max = 0, ft_run_max = 0;
+	unsigned ft_frames = 0, ft_over25 = 0, ft_over50 = 0, ft_over100 = 0;
+	int ft_skip = 1; // the first trip, and the one after the menu, include time that isn't the game
+	
 	while (!quit) {
 		GFX_startFrame();
 		
+		uint32_t ft_now = SDL_GetTicks();
+		if (!ft_skip) {
+			uint32_t period = ft_now - ft_last;
+			ft_frames++;
+			if (period>ft_max) ft_max = period;
+			if (period>25) ft_over25++;
+			if (period>50) ft_over50++;
+			if (period>100) ft_over100++;
+		}
+		ft_skip = 0;
+		ft_last = ft_now;
+		if (ft_now - ft_logged >= 5000) {
+			LOG_info("frames: %u in %ums, slowest %ums (core %ums), over 25ms: %u, over 50ms: %u, over 100ms: %u\n", ft_frames, ft_now-ft_logged, ft_max, ft_run_max, ft_over25, ft_over50, ft_over100);
+			ft_logged = ft_now; ft_frames = ft_over25 = ft_over50 = ft_over100 = 0; ft_max = ft_run_max = 0;
+		}
+		
 		if (!thread_video) {
 			core.run();
+			uint32_t ft_run = SDL_GetTicks() - ft_now;
+			if (ft_run>ft_run_max) ft_run_max = ft_run;
 			limitFF();
 			trackFPS();
 		}
@@ -4940,6 +4965,7 @@ int main(int argc , char* argv[]) {
 		if (show_menu) {
 			Menu_loop();
 			Hud_sync();
+			ft_skip = 1;
 		}
 		
 		if (toggle_thread) {
