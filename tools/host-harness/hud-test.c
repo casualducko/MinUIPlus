@@ -18,14 +18,14 @@ int main(int argc, char** argv) {
 		if (x > frame->w/2) v = 255 - v;
 		((uint32_t*)((uint8_t*)frame->pixels + y*frame->pitch))[x] = 0xFF000000 | v<<16 | (v*3/4)<<8 | v/2;
 	}
-	for (int kind=1; kind<=2; kind++) {
-		SDL_Surface* hud = GFX_renderSettingHud(kind);
+	for (int kind=1; kind<=3; kind++) {
+		SDL_Surface* hud = kind==3 ? GFX_renderToastHud("Screenshot saved") : GFX_renderSettingHud(kind);
 		if (!hud) { fprintf(stderr, "no hud\n"); return 1; }
 		SDL_Surface* shot = SDL_ConvertSurface(frame, frame->format, 0);
 		SDL_SetSurfaceBlendMode(hud, SDL_BLENDMODE_BLEND);
 		SDL_BlitSurface(hud, NULL, shot, NULL);
 		char path[512];
-		snprintf(path, sizeof(path), "%s/hud-%s.bmp", out, kind==1?"brightness":"volume");
+		snprintf(path, sizeof(path), "%s/hud-%s.bmp", out, kind==1?"brightness":kind==2?"volume":"toast");
 		SDL_SaveBMP(shot, path);
 		SDL_FreeSurface(shot);
 	}

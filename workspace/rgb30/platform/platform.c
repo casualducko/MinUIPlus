@@ -137,7 +137,7 @@ void PLAT_pollInput(void) {
 				else if (code==RAW_POWER)	{ btn = BTN_POWER; 		id = BTN_ID_POWER; }
 			}
 			else if (type==EV_ABS) {
-				LOG_info("abs event: %i (%i==%i)\n",code,value,(value * 32767) / 1800);
+				// LOG_info("abs event: %i (%i==%i)\n",code,value,(value * 32767) / 1800);
 				
 					 if (code==RAW_LSX) { pad.laxis.x = (value * 32767) / 1800; PAD_setAnalog(BTN_ID_ANALOG_LEFT, BTN_ID_ANALOG_RIGHT, pad.laxis.x, tick+PAD_REPEAT_DELAY); }
 				else if (code==RAW_LSY) { pad.laxis.y = (value * 32767) / 1800; PAD_setAnalog(BTN_ID_ANALOG_UP,   BTN_ID_ANALOG_DOWN,  pad.laxis.y, tick+PAD_REPEAT_DELAY); }

@@ -192,8 +192,10 @@ int GFX_getButtonWidth(char* hint, char* button);
 void GFX_blitButton(char* hint, char*button, SDL_Surface* dst, SDL_Rect* dst_rect);
 void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_rect);
 
+#define HUD_TOAST 3 // show_setting value: a short text in the pill
 int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting);
-SDL_Surface* GFX_renderSettingHud(int show_setting); // device-size ARGB strip for PLAT_setHud, NULL if it cannot be made
+SDL_Surface* GFX_renderSettingHud(int show_setting);
+SDL_Surface* GFX_renderToastHud(const char* text); // device-size ARGB strip for PLAT_setHud, NULL if it cannot be made
 void PLAT_setHud(SDL_Surface* hud); // draw it over the game from the next flip on, NULL hides it
 void GFX_blitHardwareHints(SDL_Surface* dst, int show_setting);
 int GFX_blitButtonGroup(char** hints, int primary, SDL_Surface* dst, int align_right);

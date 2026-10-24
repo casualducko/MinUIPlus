@@ -712,6 +712,7 @@ void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_
 	}
 }
 
+static char hud_toast_text[48] = "";
 int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting) {
 	int ox;
 	int oy;
@@ -721,7 +722,18 @@ int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting) {
 	int setting_min;
 	int setting_max;
 	
-	if (show_setting && !GetHDMI()) {
+	if (show_setting==HUD_TOAST && !GetHDMI()) { // a short message in the same pill
+		SDL_Surface* text = TTF_RenderUTF8_Blended(font.medium, hud_toast_text, COLOR_WHITE);
+		if (text) {
+			ow = text->w + SCALE1(PILL_SIZE);
+			ox = dst->w - SCALE1(PADDING) - ow;
+			oy = SCALE1(PADDING);
+			GFX_blitPill(ASSET_BLACK_PILL, dst, &(SDL_Rect){ox, oy, ow, SCALE1(PILL_SIZE)});
+			SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){ox + (ow-text->w)/2, oy + (SCALE1(PILL_SIZE)-text->h)/2});
+			SDL_FreeSurface(text);
+		}
+	}
+	else if (show_setting && !GetHDMI()) {
 		ow = SCALE1(PILL_SIZE + SETTINGS_WIDTH + 10 + 4);
 		ox = dst->w - SCALE1(PADDING) - ow;
 		oy = SCALE1(PADDING);
@@ -840,6 +852,10 @@ SDL_Surface* GFX_renderSettingHud(int show_setting) {
 		}
 	}
 	return hud;
+}
+SDL_Surface* GFX_renderToastHud(const char* text) {
+	snprintf(hud_toast_text, sizeof(hud_toast_text), "%s", text);
+	return GFX_renderSettingHud(HUD_TOAST);
 }
 // platforms that can draw it override this (see rgb30)
 __attribute__((weak)) void PLAT_setHud(SDL_Surface* hud) {}
@@ -1325,12 +1341,40 @@ FALLBACK_IMPLEMENTATION int PLAT_lidChanged(int* state) { return 0; }
 
 PAD_Context pad;
 
-#define AXIS_DEADZONE 0x4000
+// how far the left stick must move (percent of full travel) to count as a D-pad press;
+// .userdata/<platform>/stick-deadzone holds a number from 10 to 90
+#define STICK_DEADZONE_DEFAULT 40
+static int PAD_parseDeadzone(const char* text) {
+	if (!text || *text<'0' || *text>'9') return STICK_DEADZONE_DEFAULT;
+	int n = 0;
+	while (*text>='0' && *text<='9' && n<1000) n = n*10 + (*text++ - '0');
+	if (*text=='%') text++;
+	while (*text==' ' || *text=='\t' || *text=='\r' || *text=='\n') text++;
+	if (*text) return STICK_DEADZONE_DEFAULT; // trailing junk
+	if (n<10 || n>90) return STICK_DEADZONE_DEFAULT;
+	return n;
+}
+static int PAD_deadzone(void) { // axis value (of 32767), read once
+	static int zone = -1;
+	if (zone<0) {
+		char text[16] = "";
+		FILE* f = fopen(USERDATA_PATH "/stick-deadzone", "r");
+		int percent = STICK_DEADZONE_DEFAULT;
+		if (f) {
+			if (fgets(text, sizeof(text), f)) percent = PAD_parseDeadzone(text);
+			fclose(f);
+		}
+		zone = 32767 * percent / 100;
+		LOG_info("stick deadzone %i%%\n", percent);
+	}
+	return zone;
+}
 void PAD_setAnalog(int neg_id,int pos_id,int value,int repeat_at) {
 	// LOG_info("neg %i pos %i value %i\n", neg_id, pos_id, value);
 	int neg = 1 << neg_id;
 	int pos = 1 << pos_id;	
-	if (value>AXIS_DEADZONE) { // pressing
+	int deadzone = PAD_deadzone();
+	if (value>deadzone) { // pressing
 		if (!(pad.is_pressed&pos)) { // not pressing
 			pad.is_pressed 		|= pos; // set
 			pad.just_pressed	|= pos; // set
@@ -1344,7 +1388,7 @@ void PAD_setAnalog(int neg_id,int pos_id,int value,int repeat_at) {
 			}
 		}
 	}
-	else if (value<-AXIS_DEADZONE) { // pressing
+	else if (value<-deadzone) { // pressing
 		if (!(pad.is_pressed&neg)) { // not pressing
 			pad.is_pressed		|= neg; // set
 			pad.just_pressed	|= neg; // set
@@ -1361,12 +1405,12 @@ void PAD_setAnalog(int neg_id,int pos_id,int value,int repeat_at) {
 	else { // not pressing
 		if (pad.is_pressed&neg) { // was pressing
 			pad.is_pressed 		&= ~neg; // unset
-			pad.just_repeated	&=  neg; // unset
+			pad.just_repeated	&= ~neg; // unset
 			pad.just_released	|=  neg; // set
 		}
 		if (pad.is_pressed&pos) { // was pressing
 			pad.is_pressed 		&= ~pos; // unset
-			pad.just_repeated	&=  pos; // unset
+			pad.just_repeated	&= ~pos; // unset
 			pad.just_released	|=  pos; // set
 		}
 	}

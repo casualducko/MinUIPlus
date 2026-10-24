@@ -664,6 +664,7 @@ enum {
 	SHORTCUT_CYCLE_EFFECT,
 	SHORTCUT_TOGGLE_FF,
 	SHORTCUT_HOLD_FF,
+	SHORTCUT_SCREENSHOT,
 	SHORTCUT_COUNT,
 };
 
@@ -929,6 +930,7 @@ static struct Config {
 		[SHORTCUT_CYCLE_EFFECT]			= {"Cycle Effect",		-1, BTN_ID_NONE, 0},
 		[SHORTCUT_TOGGLE_FF]			= {"Toggle FF",			-1, BTN_ID_NONE, 0},
 		[SHORTCUT_HOLD_FF]				= {"Hold FF",			-1, BTN_ID_NONE, 0},
+		[SHORTCUT_SCREENSHOT]			= {"Screenshot",		-1, BTN_ID_SELECT, 1}, // MENU+SELECT unless rebound
 		{NULL}
 	},
 };
@@ -1354,8 +1356,8 @@ static void Config_restore(void) {
 	}
 	for (int i=0; config.shortcuts[i].name; i++) {
 		ButtonMapping* mapping = &config.shortcuts[i];
-		mapping->local = BTN_ID_NONE;
-		mapping->mod = 0;
+		mapping->local = i==SHORTCUT_SCREENSHOT ? BTN_ID_SELECT : BTN_ID_NONE; // the one shortcut that comes bound
+		mapping->mod = i==SHORTCUT_SCREENSHOT;
 	}
 	
 	Config_load();
@@ -1637,6 +1639,7 @@ static void Menu_afterSleep(void);
 
 static void Menu_saveState(void);
 static void Menu_loadState(void);
+static void Screenshot_take(void);
 
 static int setFastForward(int enable) {
 	if (!fast_forward && enable && thread_video) {
@@ -1756,6 +1759,7 @@ static void input_poll_callback(void) {
 						if (screen_effect>=EFFECT_COUNT) screen_effect -= EFFECT_COUNT;
 						Config_syncFrontend(config.frontend.options[FE_OPT_EFFECT].key, screen_effect);
 						break;
+					case SHORTCUT_SCREENSHOT: Screenshot_take(); break;
 					default: break;
 				}
 				
@@ -2807,8 +2811,10 @@ static void selectScaler(int src_w, int src_h, int src_p) {
 #define HUD_SHOW_MS 1000
 static int hud_volume = -1;
 static int hud_brightness = -1;
-static int hud_kind = 0; // 0=hidden, 1=brightness, 2=volume
+static int hud_kind = 0; // 0=hidden, 1=brightness, 2=volume, HUD_TOAST=a message
 static uint32_t hud_until = 0;
+static char hud_toast[48] = ""; // set by hud_say(), shown at the next Hud_update()
+static void hud_say(const char* text) { snprintf(hud_toast, sizeof(hud_toast), "%s", text); }
 static void Hud_sync(void) { // after the menu: whatever changed in there was already shown there
 	hud_volume = GetVolume();
 	hud_brightness = GetBrightness();
@@ -2825,6 +2831,13 @@ static void Hud_update(void) {
 	else if (volume!=hud_volume) { hud_kind = 2; changed = 1; }
 	hud_volume = volume;
 	if (changed) hud_until = now + HUD_SHOW_MS;
+	if (hud_toast[0]) {
+		PLAT_setHud(GFX_renderToastHud(hud_toast));
+		hud_toast[0] = '\0';
+		hud_kind = HUD_TOAST;
+		hud_until = now + HUD_SHOW_MS * 3 / 2;
+		return;
+	}
 	
 	if (hud_kind && !GetHDMI() && now<hud_until) {
 		if (changed) PLAT_setHud(GFX_renderSettingHud(hud_kind));
@@ -2833,6 +2846,38 @@ static void Hud_update(void) {
 		hud_kind = 0;
 		PLAT_setHud(NULL);
 	}
+}
+
+// the game's own picture (not the menu, not scaled) as a PNG in /Screenshots/<system>/
+static void Screenshot_take(void) {
+	char dir[MAX_PATH], name[MAX_PATH], path[MAX_PATH], part[MAX_PATH+8];
+	snprintf(dir, sizeof(dir), SDCARD_PATH "/Screenshots/%s", core.tag);
+	if (mkdirs(dir)) { hud_say("Can't save screenshot"); return; }
+	
+	snprintf(name, sizeof(name), "%s", game.name);
+	char* dot = strrchr(name, '.');
+	if (dot && strlen(dot)<=5) *dot = '\0'; // no extension
+	for (char* c=name; *c; c++) if (strchr("/\\:*?\"<>|", *c)) *c = '_'; // FAT
+	
+	time_t t = time(NULL);
+	struct tm* tm = localtime(&t);
+	char stamp[32] = "";
+	if (tm) strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm);
+	snprintf(path, sizeof(path), "%s/%s %s.png", dir, name, stamp);
+	for (int n=2; exists(path) && n<100; n++) snprintf(path, sizeof(path), "%s/%s %s-%i.png", dir, name, stamp, n);
+	
+	int ok = 0;
+	SDL_Surface* frame = renderer.src ? SDL_CreateRGBSurfaceFrom(renderer.src, renderer.true_w, renderer.true_h, FIXED_DEPTH, renderer.src_p, RGBA_MASK_565) : NULL;
+	SDL_Surface* rgb = frame ? SDL_ConvertSurfaceFormat(frame, SDL_PIXELFORMAT_RGB24, 0) : NULL;
+	if (rgb) {
+		snprintf(part, sizeof(part), "%s.part", path); // a half-written PNG never looks like a screenshot
+		if (IMG_SavePNG(rgb, part)==0 && rename(part, path)==0) ok = 1;
+		else unlink(part);
+	}
+	if (rgb) SDL_FreeSurface(rgb);
+	if (frame) SDL_FreeSurface(frame);
+	LOG_info("screenshot %s: %s\n", ok ? "saved" : "FAILED", path);
+	hud_say(ok ? "Screenshot saved" : "Can't save screenshot");
 }
 
 static void video_refresh_callback_main(const void *data, unsigned width, unsigned height, size_t pitch) {
