@@ -552,6 +552,29 @@ void PLAT_blitRenderer(GFX_Renderer* renderer) {
 	resizeVideo(vid.blit->true_w,vid.blit->true_h,vid.blit->src_p);
 }
 
+// in-game volume/brightness pill, composited at device size over the scaled game
+static struct {
+	SDL_Texture* texture;
+	int w,h;
+	int show;
+} hud;
+void PLAT_setHud(SDL_Surface* surface) {
+	if (!surface) {
+		hud.show = 0;
+		return;
+	}
+	if (!hud.texture || hud.w!=surface->w || hud.h!=surface->h) {
+		if (hud.texture) SDL_DestroyTexture(hud.texture);
+		hud.texture = SDL_CreateTexture(vid.renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, surface->w,surface->h);
+		if (!hud.texture) { hud.show = 0; return; }
+		SDL_SetTextureBlendMode(hud.texture, SDL_BLENDMODE_BLEND);
+		hud.w = surface->w;
+		hud.h = surface->h;
+	}
+	SDL_UpdateTexture(hud.texture, NULL, surface->pixels, surface->pitch);
+	hud.show = 1;
+}
+
 void PLAT_flip(SDL_Surface* IGNORED, int ignored) {
 	if (!vid.blit) {
 		resizeVideo(device_width,device_height,FIXED_PITCH); // !!!???
@@ -621,6 +644,7 @@ void PLAT_flip(SDL_Surface* IGNORED, int ignored) {
 		SDL_RenderCopy(vid.renderer, vid.effect, &(SDL_Rect){0,0,dst_rect->w,dst_rect->h},dst_rect);
 	}
 	
+	if (hud.show && hud.texture) SDL_RenderCopy(vid.renderer, hud.texture, NULL, &(SDL_Rect){0,0,hud.w,hud.h});
 	// uint32_t then = SDL_GetTicks();
 	SDL_RenderPresent(vid.renderer);
 	// LOG_info("SDL_RenderPresent blocked for %ims\n", SDL_GetTicks()-then);

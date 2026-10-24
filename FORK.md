@@ -68,3 +68,7 @@ volume key direction, the audio change, and the minarch input change.
   between a text file and the filesystem); not reproducible on macOS.
 - Moss itself: `moss-patches/` next to this repo has two untested patches (restart
   logind when the sleep config changes; allow 8 GB cards).
+
+## Fade-in and in-game volume pill
+- Audio fade-in (`SND_fadeIn` in api.c): the first 50 ms of a game's sound ramps up from silence, so a core that starts at a non-zero level (NES) no longer steps from 0 to that level, which clicks. Counts from the first non-silent frame. Host test: `test_fadein.c`. Only helps if the pop is a step; a pop from the sound chip powering up is not touched.
+- In-game volume/brightness pill: keymon changes the settings in another process, so minarch now watches `GetVolume()`/`GetBrightness()` per frame (`Hud_update` in minarch.c) and shows the menu's pill for 1 s. The game is drawn at its own size straight from the core's buffer, so the pill is rendered at device size (`GFX_renderSettingHud`, drawn on white and on black to recover alpha) and composited by the platform (`PLAT_setHud`, rgb30 `PLAT_flip`). Other platforms get a no-op (weak default). Not shown on HDMI. `tools/host-harness/hud-test.c` renders it over a checkerboard for a visual check.

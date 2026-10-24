@@ -2801,6 +2801,39 @@ static void selectScaler(int src_w, int src_h, int src_p) {
 		screen = GFX_resize(dst_w,dst_h,dst_p);
 	// }
 }
+// volume and brightness are changed by keymon, a different process, so the game never sees
+// the buttons. Watch the settings instead and show the same pill the menus do for a moment.
+#define HUD_SHOW_MS 1000
+static int hud_volume = -1;
+static int hud_brightness = -1;
+static int hud_kind = 0; // 0=hidden, 1=brightness, 2=volume
+static uint32_t hud_until = 0;
+static void Hud_sync(void) { // after the menu: whatever changed in there was already shown there
+	hud_volume = GetVolume();
+	hud_brightness = GetBrightness();
+	if (hud_kind) PLAT_setHud(NULL);
+	hud_kind = 0;
+}
+static void Hud_update(void) {
+	if (hud_volume<0) Hud_sync();
+	uint32_t now = SDL_GetTicks();
+	int volume = GetVolume();
+	int brightness = GetBrightness();
+	int changed = 0;
+	if (brightness!=hud_brightness) { hud_brightness = brightness; hud_kind = 1; changed = 1; }
+	else if (volume!=hud_volume) { hud_kind = 2; changed = 1; }
+	hud_volume = volume;
+	if (changed) hud_until = now + HUD_SHOW_MS;
+	
+	if (hud_kind && !GetHDMI() && now<hud_until) {
+		if (changed) PLAT_setHud(GFX_renderSettingHud(hud_kind));
+	}
+	else if (hud_kind) {
+		hud_kind = 0;
+		PLAT_setHud(NULL);
+	}
+}
+
 static void video_refresh_callback_main(const void *data, unsigned width, unsigned height, size_t pitch) {
 	// return;
 	
@@ -2873,6 +2906,7 @@ static void video_refresh_callback_main(const void *data, unsigned width, unsign
 	
 	GFX_blitRenderer(&renderer);
 	
+	Hud_update();
 	if (!thread_video) GFX_flip(screen);
 	last_flip_time = SDL_GetTicks();
 }
@@ -4835,7 +4869,10 @@ int main(int argc , char* argv[]) {
 			pthread_mutex_unlock(&core_mx);
 		}
 		
-		if (show_menu) Menu_loop();
+		if (show_menu) {
+			Menu_loop();
+			Hud_sync();
+		}
 		
 		if (toggle_thread) {
 			toggle_thread = 0;

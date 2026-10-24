@@ -798,6 +798,52 @@ int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting) {
 	
 	return ow;
 }
+// The volume/brightness pill for in-game feedback. The game is drawn straight from the
+// core's buffer at its own size, so the pill cannot be drawn into the screen surface.
+// Instead it is drawn at device size, once on white and once on black, and the difference
+// between the two gives each pixel's alpha (the blits and fills of the menu have no alpha
+// of their own). The platform composites the result over the game (PLAT_setHud).
+SDL_Surface* GFX_renderSettingHud(int show_setting) {
+	static SDL_Surface* on_white = NULL;
+	static SDL_Surface* on_black = NULL;
+	static SDL_Surface* hud = NULL;
+	int w = gfx.screen->w;
+	int h = SCALE1(PILL_SIZE + PADDING * 2);
+	if (!hud || hud->w!=w || hud->h!=h) {
+		if (hud) SDL_FreeSurface(hud);
+		if (on_white) SDL_FreeSurface(on_white);
+		if (on_black) SDL_FreeSurface(on_black);
+		on_white = SDL_CreateRGBSurface(SDL_SWSURFACE, w,h, 16, RGBA_MASK_565);
+		on_black = SDL_CreateRGBSurface(SDL_SWSURFACE, w,h, 16, RGBA_MASK_565);
+		hud = SDL_CreateRGBSurface(SDL_SWSURFACE, w,h, 32, 0x00FF0000,0x0000FF00,0x000000FF,0xFF000000);
+		if (!on_white || !on_black || !hud) return NULL;
+	}
+	SDL_FillRect(on_white, NULL, 0xFFFF);
+	SDL_FillRect(on_black, NULL, 0);
+	GFX_blitHardwareGroup(on_white, show_setting);
+	GFX_blitHardwareGroup(on_black, show_setting);
+	
+	for (int y=0; y<h; y++) {
+		uint16_t* white = (uint16_t*)((uint8_t*)on_white->pixels + y * on_white->pitch);
+		uint16_t* black = (uint16_t*)((uint8_t*)on_black->pixels + y * on_black->pitch);
+		uint32_t* out = (uint32_t*)((uint8_t*)hud->pixels + y * hud->pitch);
+		for (int x=0; x<w; x++) {
+			int wc[3] = { (white[x]>>11 & 0x1F) * 255 / 31, (white[x]>>5 & 0x3F) * 255 / 63, (white[x] & 0x1F) * 255 / 31 };
+			int bc[3] = { (black[x]>>11 & 0x1F) * 255 / 31, (black[x]>>5 & 0x3F) * 255 / 63, (black[x] & 0x1F) * 255 / 31 };
+			int d = 0;
+			for (int c=0; c<3; c++) if (wc[c]-bc[c]>d) d = wc[c]-bc[c];
+			int a = 255 - d;
+			if (a<=0) { out[x] = 0; continue; }
+			int rgb[3];
+			for (int c=0; c<3; c++) { rgb[c] = bc[c] * 255 / a; if (rgb[c]>255) rgb[c] = 255; }
+			out[x] = (uint32_t)a<<24 | (uint32_t)rgb[0]<<16 | (uint32_t)rgb[1]<<8 | (uint32_t)rgb[2];
+		}
+	}
+	return hud;
+}
+// platforms that can draw it override this (see rgb30)
+__attribute__((weak)) void PLAT_setHud(SDL_Surface* hud) {}
+
 void GFX_blitHardwareHints(SDL_Surface* dst, int show_setting) {
 	if (BTN_MOD_VOLUME==BTN_SELECT && BTN_MOD_BRIGHTNESS==BTN_START) {
 		if (show_setting==1) GFX_blitButtonGroup((char*[]){ "SELECT","VOLUME",  NULL }, 0, dst, 0);
@@ -977,6 +1023,8 @@ static struct SND_Context {
 	unsigned frames_written;	// frames put in the buffer (a bit more or less after rate control)
 	unsigned frames_duplicated;	// frames written twice by the rate control
 	unsigned frames_dropped;	// frames left out by the rate control
+	int fade_pos;				// frames of the fade-in done so far
+	int fade_len;				// length of the fade-in in frames, 0 for none
 	unsigned log_at;			// frames_offered at the last log line
 	
 	// diagnostics, only written by the audio callback and read after audio is closed
@@ -985,7 +1033,7 @@ static struct SND_Context {
 	unsigned underruns;			// callbacks that ran out of frames part way through
 	unsigned underrun_frames;	// frames those callbacks were short by
 } snd = {0};
-static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // plat_sound_callback
+static void SND_audioFill(void* userdata, uint8_t* stream, int len) {
 	
 	// return (void)memset(stream,0,len); // TODO: tmp, silent
 	
@@ -1041,6 +1089,22 @@ static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // pla
 		}
 		len -= 1;
 	}
+}
+// Ramp the first moments of a game's sound up from silence. Cores often start at a
+// non-zero level (the NES one does), and a jump from the silence before it to that
+// level is a click from the speaker. Counting starts at the first non-silent frame.
+static void SND_fadeIn(int16_t* out, int frames) {
+	if (snd.fade_pos>=snd.fade_len) return;
+	for (int i=0; i<frames && snd.fade_pos<snd.fade_len; i++) {
+		if (snd.fade_pos==0 && !out[i*2] && !out[i*2+1]) continue;
+		out[i*2]   = (int16_t)((int)out[i*2]   * snd.fade_pos / snd.fade_len);
+		out[i*2+1] = (int16_t)((int)out[i*2+1] * snd.fade_pos / snd.fade_len);
+		snd.fade_pos += 1;
+	}
+}
+static void SND_audioCallback(void* userdata, uint8_t* stream, int len) { // plat_sound_callback
+	SND_audioFill(userdata, stream, len);
+	SND_fadeIn((int16_t*)stream, len / (int)(sizeof(int16_t) * 2));
 }
 static void SND_resizeBuffer(void) { // plat_sound_resize_buffer
 	snd.frame_count = snd.buffer_seconds * snd.sample_rate_in / snd.frame_rate;
@@ -1196,6 +1260,8 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	snd.sample_rate_in  = sample_rate;
 	snd.sample_rate_out = spec_out.freq;
 	
+	snd.fade_pos = 0;
+	snd.fade_len = snd.sample_rate_out / 20; // 50ms
 	snd.drc_enabled = !exists(USERDATA_PATH "/no-audio-rate-control");
 	snd.drc_rate_min = snd.drc_rate_max = snd.sample_rate_in;
 	SND_selectResampler();
