@@ -4805,7 +4805,7 @@ static void Menu_loop(void) {
 			// slot preview
 			if (selected==ITEM_SAVE || selected==ITEM_LOAD) {
 				#define WINDOW_RADIUS 4 // TODO: this logic belongs in blitRect?
-				#define PAGINATION_HEIGHT 6
+				#define PAGINATION_HEIGHT SLOT_PICKER_HEIGHT
 				// unscaled
 				int hw = DEVICE_WIDTH / 2;
 				int hh = DEVICE_HEIGHT / 2;
@@ -4815,6 +4815,7 @@ static void Menu_loop(void) {
 				oy = (DEVICE_HEIGHT - ph) / 2;
 				
 				// window
+				int window_x = ox;
 				GFX_blitRect(ASSET_STATE_BG, screen, &(SDL_Rect){ox,oy,pw,ph});
 				ox += SCALE1(WINDOW_RADIUS);
 				oy += SCALE1(WINDOW_RADIUS);
@@ -4839,13 +4840,18 @@ static void Menu_loop(void) {
 					else GFX_blitMessage(font.large, "Empty Slot", screen, &preview_rect);
 				}
 				
-				// pagination
-				ox += (pw-SCALE1(15*MENU_SLOT_COUNT))/2;
+				// slot numbers: which slots hold a save, which one is showing, and that left and right change it
 				oy += hh+SCALE1(WINDOW_RADIUS);
+				int used[MENU_SLOT_COUNT];
+				int shown_slot = state_slot;
 				for (int i=0; i<MENU_SLOT_COUNT; i++) {
-					if (i==menu.slot)GFX_blitAsset(ASSET_PAGE, NULL, screen, &(SDL_Rect){ox+SCALE1(i*15),oy});
-					else GFX_blitAsset(ASSET_DOT, NULL, screen, &(SDL_Rect){ox+SCALE1(i*15)+4,oy+SCALE1(2)});
+					char state_path[MAX_PATH];
+					state_slot = i;
+					State_getPath(state_path);
+					used[i] = exists(state_path);
 				}
+				state_slot = shown_slot;
+				GFX_blitSlotPicker(screen, window_x, oy, pw, menu.slot, MENU_SLOT_COUNT, used);
 			}
 	
 			GFX_flip(screen);

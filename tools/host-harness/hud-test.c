@@ -29,5 +29,24 @@ int main(int argc, char** argv) {
 		SDL_SaveBMP(shot, path);
 		SDL_FreeSurface(shot);
 	}
+	// the save/load slot picker, laid out like the preview window in minarch's menu
+	{
+		int hw = screen->w / 2, hh = screen->h / 2;
+		int pw = hw + SCALE1(8), ph = hh + SCALE1(8 + SLOT_PICKER_HEIGHT + 4);
+		int ox = screen->w - pw - SCALE1(PADDING), oy = (screen->h - ph) / 2;
+		for (int variant=0; variant<2; variant++) {
+			GFX_clear(screen);
+			int window_x = ox;
+			GFX_blitRect(ASSET_STATE_BG, screen, &(SDL_Rect){ox,oy,pw,ph});
+			SDL_Rect preview = {ox+SCALE1(4), oy+SCALE1(4), hw, hh};
+			SDL_FillRect(screen, &preview, 0);
+			int used[8] = {1,0,1,1,0,0,0,1};
+			int none[8] = {0,0,0,0,0,0,0,0};
+			GFX_blitSlotPicker(screen, window_x, oy+SCALE1(4)+hh+SCALE1(4), pw, variant ? 4 : 0, 8, variant ? none : used);
+			char path[512];
+			snprintf(path, sizeof(path), "%s/slots-%s.bmp", out, variant ? "slot5-all-empty" : "slot1");
+			SDL_SaveBMP(screen, path);
+		}
+	}
 	return 0;
 }

@@ -714,6 +714,44 @@ void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_
 }
 
 static char hud_toast_text[48] = "";
+// The slot picker under the save and load previews: the numbers 1 to count, the current one in a dark
+// pill, slots that hold a save in black and empty ones in gray, and < > at the ends to say that left
+// and right change the slot. Drawn in the area (x,y,w) one row high (SCALE1(SLOT_PICKER_HEIGHT)).
+void GFX_blitSlotPicker(SDL_Surface* dst, int x, int y, int w, int slot, int count, const int* used) {
+	int cw = SCALE1(12); // width of one number
+	int rh = SCALE1(SLOT_PICKER_HEIGHT);
+	int row_w = cw * count;
+	int rx = x + (w - row_w) / 2;
+	
+	const char* arrows[2] = { "<", ">" };
+	for (int a=0; a<2; a++) {
+		SDL_Surface* t = TTF_RenderUTF8_Blended(font.medium, arrows[a], COLOR_DARK_TEXT);
+		if (!t) continue;
+		int ax = a==0 ? rx - SCALE1(4) - t->w : rx + row_w + SCALE1(4);
+		SDL_BlitSurface(t, NULL, dst, &(SDL_Rect){ax, y + (rh - t->h) / 2});
+		SDL_FreeSurface(t);
+	}
+	for (int i=0; i<count; i++) {
+		char number[8];
+		snprintf(number, sizeof(number), "%i", i+1);
+		int cx = rx + i * cw;
+		SDL_Color color = (used && used[i]) ? COLOR_BLACK : COLOR_GRAY;
+		if (i==slot) {
+			// a dark rounded block (the pill asset is only drawn well at its own height)
+			SDL_Rect r = {cx + SCALE1(1), y, cw - SCALE1(2), rh};
+			Uint32 black = SDL_MapRGB(dst->format, 0, 0, 0);
+			SDL_FillRect(dst, &(SDL_Rect){r.x + SCALE1(3), r.y, r.w - SCALE1(6), r.h}, black);
+			SDL_FillRect(dst, &(SDL_Rect){r.x, r.y + SCALE1(3), r.w, r.h - SCALE1(6)}, black);
+			SDL_FillRect(dst, &(SDL_Rect){r.x + SCALE1(1), r.y + SCALE1(1), r.w - SCALE1(2), r.h - SCALE1(2)}, black);
+			color = COLOR_WHITE;
+		}
+		SDL_Surface* t = TTF_RenderUTF8_Blended(font.medium, number, color);
+		if (!t) continue;
+		SDL_BlitSurface(t, NULL, dst, &(SDL_Rect){cx + (cw - t->w) / 2, y + (rh - t->h) / 2});
+		SDL_FreeSurface(t);
+	}
+}
+
 int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting) {
 	int ox;
 	int oy;
