@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #define MAX_PATH 1024
 #include "gen/writeFileAtomic.inc"
+#include "gen/putFile.inc"
 static int fails = 0;
 #define CHECK(c, msg) do { int sane = (c); printf("%s  %s\n", sane?"ok  ":"FAIL", msg); if (!sane) fails++; } while(0)
 static char* slurp(const char* p, size_t* n) { FILE* f = fopen(p, "rb"); if (!f) return NULL; fseek(f, 0, SEEK_END); long l = ftell(f); fseek(f, 0, SEEK_SET); char* b = malloc(l+1); *n = fread(b, 1, l, f); b[*n] = 0; fclose(f); return b; }
@@ -35,6 +36,11 @@ int main(void) {
 	c = slurp(p, &n); CHECK(c && n==6, "old file still there"); free(c);
 	CHECK(writeFileAtomic(p, NULL, 0)==0, "size 0 writes an empty file");
 	c = slurp(p, &n); CHECK(c && n==0, "(a core with no memory)"); free(c);
+	// putFile on a device/sysfs-like file must write in place (bl_power, cpu governor): no temp file, node stays
+	putFile("/dev/null", "1");
+	struct stat dst; CHECK(stat("/dev/null", &dst)==0 && S_ISCHR(dst.st_mode), "putFile on a device node leaves it a device node");
+	putFile(p, "plain");
+	c = slurp(p, &n); CHECK(c && n==5 && !memcmp(c, "plain", 5), "putFile on a regular file still replaces it"); free(c);
 	// big (an 8 MB state)
 	size_t big = 8*1024*1024; char* data = malloc(big); for (size_t i=0;i<big;i++) data[i] = (char)(i*31);
 	CHECK(writeFileAtomic(p, data, big)==0, "8 MB state");

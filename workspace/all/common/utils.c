@@ -181,6 +181,12 @@ void touch(char* path) {
 	close(open(path, O_RDWR|O_CREAT, 0777));
 }
 void putFile(char* path, char* contents) {
+	struct stat st;
+	if (stat(path, &st)==0 && !S_ISREG(st.st_mode)) { // sysfs, procfs, devices: no temp file can be made next to them
+		FILE* f = fopen(path, "w");
+		if (f) { fputs(contents, f); fclose(f); }
+		return;
+	}
 	writeFileAtomic(path, contents, strlen(contents)); // not fopen "w": that empties the old file first
 }
 void getFile(char* path, char* buffer, size_t buffer_size) {

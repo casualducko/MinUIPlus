@@ -23,6 +23,7 @@ x "$all/common/api.c" 'static void SND_audioFill' 'static void SND_resizeBuffer'
 x "$all/common/api.c" 'int GFX_truncateText' 'int GFX_wrapText' > "$out/gen/GFX_truncate.inc"
 x "$all/common/utils.c" 'void getFile' 'char* allocFile' > "$out/gen/getFile.inc"
 x "$all/common/utils.c" '// Saves must never be destroyed' 'int mkdirs' > "$out/gen/writeFileAtomic.inc"
+x "$all/common/utils.c" 'void putFile' 'void getFile' > "$out/gen/putFile.inc"
 x "$all/common/utils.c" 'int mkdirs' 'void normalizeNewline' > "$out/gen/mkdirs.inc"
 x "$all/minui/minui.c" 'static void splitVersion' 'static int getFirstDisc' > "$out/gen/splitVersion.inc"
 x "$all/minui/minui.c" 'static int getFirstDisc' 'static void addEntries' > "$out/gen/getFirstDisc.inc"
