@@ -277,7 +277,7 @@ Test: `tools/package/release.sh ../test-package v2099.01.01.0000`, then `node do
 - **Note:** `MIN` and `MAX` in `defines.h` have no outer parentheses: never nest them or use them inside a larger expression (`clampTop` in `minui.c` exists for that reason).
 
 ## Cartridge-style title tiles
-The dashed rule is gone. Each generated tile is now framed like a cartridge front: a 4 px outline with the top corners cut, a label outline inside it, and grip ridges in the base beside the system name (`drawCart` in `titleart_gen.c`). The big letters get a little less width (`TA_COLS-6`) to stay inside the label. Existing tiles change when you press X (RECREATE ALL) in Tools > TitleArt.
+The dashed rule is gone. Each generated tile is now framed like a cartridge front: a 4 px outline with the top corners cut, a label outline inside it, and grip ridges in the base beside the system name (`drawCart` in `titleart_gen.c`). The title never gets wider than `TEXT_COLS` (50 of the 60 columns), so it keeps about 12 px of space to the label outline. Existing tiles change when you press X (RECREATE ALL) in Tools > TitleArt.
 
 ## SSH dot on the Wi-Fi icon
 A small green dot on the corner Wi-Fi icon while SSH is on: `sshOn()` in `api.c` looks for a socket listening on port 22 in `/proc/net/tcp` and `tcp6` (at most every 3 seconds, read with fread because files in /proc report size 0; `Net_listening` is host-tested, and the reading was checked on the device with a probe program). Tools > SSH starts the service until the next reboot, so the dot goes away after a reboot. `MINUI_FAKE_SSH=1` forces it on for the Mac harness.

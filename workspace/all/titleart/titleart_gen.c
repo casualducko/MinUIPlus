@@ -23,6 +23,7 @@
 #define FILL_BOTH 1           // grid codes for the marks of the big letters (TA_pack's H ' . become these)
 #define FILL_TOP 2
 #define FILL_BOTTOM 3
+#define TEXT_COLS (TA_COLS-10)  // the title never gets wider than this, so it keeps a gap to the label outline (about 12 px each side)
 #define CONDENSE 0.8f         // the big letters are drawn this much narrower, so a long word still gets tall letters
 
 // the tile
@@ -206,7 +207,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 	snprintf(up, sizeof(up), "%s", sub);
 	for (char* p = up; *p; p++) *p = toupper((unsigned char)*p);
 	char sub_lines[2][TA_LINE_MAX];
-	int sub_count = up[0] ? TA_wrapPlain(up, (TA_COLS-8)/2, 2, sub_lines) : 0; // double size: half as many characters fit
+	int sub_count = up[0] ? TA_wrapPlain(up, TEXT_COLS/2, 2, sub_lines) : 0; // double size: half as many characters fit
 	int sub_rows = sub_count*2;
 	TA_Layout lay;
 	int max_rows = TA_ROWS - 8 - (sub_count ? sub_rows + 1 : 0);
@@ -218,7 +219,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		if (TA_cellWidth(cp)==2) wide = 1;
 		p += n;
 	}
-	if (wide || !TA_layout(main, TA_COLS-6, max_rows, lineAspect, NULL, &lay)) {
+	if (wide || !TA_layout(main, TEXT_COLS, max_rows, lineAspect, NULL, &lay)) {
 		// too long for letters this big: the whole title in plain characters instead, never a cut one
 		char upper[256];
 		snprintf(upper, sizeof(upper), "%s", main);
@@ -227,9 +228,9 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		// double size when the whole title fits that way (never a cut one), else the small plain letters
 		int sub_block = sub_count ? sub_rows + 1 : 0;
 		int max_big = MIN(TA_MAX_LINES, (TA_ROWS - 8 - sub_block) / 2);
-		int n = max_big>0 ? TA_wrapPlain(upper, (TA_COLS-8)/2, max_big, plain) : 0;
+		int n = max_big>0 ? TA_wrapPlain(upper, TEXT_COLS/2, max_big, plain) : 0;
 		int big = n>0 && plain[n-1][strlen(plain[n-1])-1]!='~';
-		if (!big) n = TA_wrapPlain(upper, TA_COLS-8, TA_MAX_LINES, plain);
+		if (!big) n = TA_wrapPlain(upper, TEXT_COLS, TA_MAX_LINES, plain);
 		int block = (big ? n*2 : n) + sub_block;
 		int top = (TA_ROWS - 3 - block) / 2;
 		for (int i=0; i<n; i++) {
@@ -251,7 +252,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		if (!r) continue;
 		int wcols = (int)lroundf(lay.h * 2.0f * CONDENSE * r->w / r->h);
 		if (wcols<1) wcols = 1;
-		if (wcols>TA_COLS-2) wcols = TA_COLS - 2;
+		if (wcols>TEXT_COLS) wcols = TEXT_COLS;
 		uint8_t* px = malloc((size_t)wcols * lay.h * 2);
 		char* chars = malloc((size_t)wcols * lay.h);
 		if (px && chars) {
