@@ -198,7 +198,7 @@ int main(int argc, char* argv[]) {
 	int quit = 0, dirty = 1, show_setting = 0;
 	int state = ST_HOME;
 	Job* jobs = NULL;
-	int job_count = 0, job_done = 0, job_failed = 0, job_remake = 0;
+	int job_count = 0, job_done = 0, job_failed = 0;
 	char note[160] = "";
 
 	while (!quit) {
@@ -220,13 +220,18 @@ int main(int argc, char* argv[]) {
 				putFile(SHOW_ART_PATH, art_shown ? "1\n" : "0\n");
 				dirty = 1;
 			}
-			else if ((PAD_justPressed(BTN_A) && missing>0) || (PAD_justPressed(BTN_X) && mine>0)) {
-				int remake = !(PAD_justPressed(BTN_A));
-				job_remake = remake;
+			else if (PAD_justPressed(BTN_X) && (missing>0 || mine>0)) { // every game without art, and this tool's tiles again
 				free(jobs);
-				jobs = calloc(remake ? MAX_MADE : MAX_GAMES, sizeof(Job));
+				jobs = calloc(MAX_MADE + MAX_GAMES, sizeof(Job));
 				job_count = job_done = job_failed = 0;
-				if (jobs && remake) {
+				if (jobs) {
+					for (int i=0; i<game_count; i++) {
+						if (games[i].has_art) continue;
+						Job* j = &jobs[job_count++];
+						artPath(&games[i], j->art, sizeof(j->art));
+						snprintf(j->file, sizeof(j->file), "%s", games[i].file);
+						snprintf(j->folder, sizeof(j->folder), "%s", folders[games[i].folder]);
+					}
 					for (int i=0; i<made_count && job_count<MAX_MADE; i++) {
 						if (!isMine(i)) continue;
 						Job* j = &jobs[job_count++];
@@ -240,15 +245,6 @@ int main(int argc, char* argv[]) {
 						snprintf(dir, sizeof(dir), "%.*s", (int)(res - j->art), j->art);
 						char* slash = strrchr(dir, '/');
 						snprintf(j->folder, sizeof(j->folder), "%s", slash ? slash+1 : dir);
-					}
-				}
-				else if (jobs) {
-					for (int i=0; i<game_count; i++) {
-						if (games[i].has_art) continue;
-						Job* j = &jobs[job_count++];
-						artPath(&games[i], j->art, sizeof(j->art));
-						snprintf(j->file, sizeof(j->file), "%s", games[i].file);
-						snprintf(j->folder, sizeof(j->folder), "%s", folders[games[i].folder]);
 					}
 				}
 				if (job_count>0) { state = ST_WORK; PWR_disableAutosleep(); }
@@ -275,7 +271,7 @@ int main(int argc, char* argv[]) {
 				if (slash) *slash = '\0';
 				char badge[96];
 				TA_badge(j->folder, badge, sizeof(badge));
-				int skip = !job_remake && exists(j->art); // a picture that appeared since the scan is somebody's: left alone
+				int skip = exists(j->art) && madeIndex(j->art)<0; // a picture that appeared since the scan is somebody's: left alone
 				int ok = skip ? 0 : TAGen_write(j->file, badge, j->art)==0;
 				if (skip) {}
 				else if (ok) {
@@ -306,15 +302,12 @@ int main(int argc, char* argv[]) {
 				snprintf(line, sizeof(line), "%i tile%s made by this tool", mine, mine==1 ? "" : "s");
 				text(screen, font.large, line, COLOR_WHITE, tx, y + row_h, w);
 				text(screen, font.small, "A picture of each game's title for the launcher.", COLOR_GRAY, tx, y + row_h*2 + SCALE1(8), w);
-				text(screen, font.small, "Art that is already there is never replaced.", COLOR_GRAY, tx, y + row_h*2 + SCALE1(26), w);
-				if (mine>0) text(screen, font.small, "X makes this tool's tiles again (after a theme change).", COLOR_GRAY, tx, y + row_h*2 + SCALE1(44), w);
-				snprintf(line, sizeof(line), "Art in the launcher: %s   (Y: %s)", art_shown ? "On" : "Off", art_shown ? "text only" : "show it");
+				text(screen, font.small, "Art from elsewhere is never replaced.", COLOR_GRAY, tx, y + row_h*2 + SCALE1(26), w);
+				snprintf(line, sizeof(line), "Art in the launcher: %s", art_shown ? "On" : "Off");
 				text(screen, font.large, line, art_shown ? COLOR_WHITE : COLOR_LIGHT_TEXT, tx, y + row_h*4 + SCALE1(8), w);
-				if (!missing && !mine) text(screen, font.small, "Every game has art.", COLOR_LIGHT_TEXT, tx, y + row_h*2 + SCALE1(66), w);
-				char* hints[5] = {NULL};
-				hints[0] = "B"; hints[1] = "BACK";
-				if (missing>0) { hints[2] = "A"; hints[3] = "MAKE"; }
-				GFX_blitButtonGroup(hints, 1, screen, 1);
+				if (!missing && !mine) text(screen, font.small, "Every game has art.", COLOR_LIGHT_TEXT, tx, y + row_h*2 + SCALE1(44), w);
+				GFX_blitButtonGroup((char*[]){"B","BACK","Y",art_shown ? "ART ON" : "ART OFF",NULL}, 0, screen, 0);
+				if (missing>0 || mine>0) GFX_blitButtonGroup((char*[]){"X","RECREATE ALL",NULL}, 1, screen, 1);
 			}
 			else if (state==ST_WORK) {
 				int bw = w - SCALE1(BUTTON_PADDING*2);
