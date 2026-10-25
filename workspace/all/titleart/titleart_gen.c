@@ -20,6 +20,10 @@
 #define CELL_H 12
 #define BIG_PX 96             // the title is drawn this big, then shrunk to the letter grid
 #define CELL_PX 11            // the font size of the characters in the tile
+#define FILL_BOTH 1           // grid codes for the marks of the big letters (TA_pack's H ' . become these)
+#define FILL_TOP 2
+#define FILL_BOTTOM 3
+#define CONDENSE 0.8f         // the big letters are drawn this much narrower, so a long word still gets tall letters
 
 // the tile
 
@@ -67,7 +71,7 @@ static Raster* rasterLine(const char* text) { // the line in big letters: its co
 static float lineAspect(const char* text, void* ctx) {
 	(void)ctx;
 	Raster* r = rasterLine(text);
-	return r ? (float)r->w / r->h : 0;
+	return r ? CONDENSE * r->w / r->h : 0;
 }
 static void shrink(const Raster* r, int dw, int dh, uint8_t* out) { // box filter
 	for (int y=0; y<dh; y++) {
@@ -110,14 +114,14 @@ static const uint8_t* glyphFor(char c) { // a character's coverage, centered in 
 	glyph_ready[u] = 1;
 	memset(glyphs[u], 0, sizeof(glyphs[u]));
 	if (u==' ') return glyphs[u];
-	// the three characters the big letters are made of are drawn here, so they are crisp and always
-	// fit their cell whatever the font: H (both halves), ' (the top half), . (the bottom half)
-	if (u=='H' || u=='\'' || u=='.') {
+	// the three marks the big letters are made of (FILL_BOTH, FILL_TOP, FILL_BOTTOM) are drawn here, so
+	// they are crisp and always fit their cell whatever the font; real H ' . in text come from the font
+	if (u==FILL_BOTH || u==FILL_TOP || u==FILL_BOTTOM) {
 		uint8_t* g = glyphs[u];
 		for (int y=0; y<CELL_H; y++) for (int x=0; x<CELL_W; x++) {
 			int on = 0;
-			if (u=='H') on = ((x==1 || x==4) && y>=1 && y<=10) || ((x>=1 && x<=4) && (y==5 || y==6));
-			else if (u=='\'') on = (x==2 || x==3) && y>=1 && y<=4;
+			if (u==FILL_BOTH) on = ((x==1 || x==4) && y>=1 && y<=10) || ((x>=1 && x<=4) && (y==5 || y==6));
+			else if (u==FILL_TOP) on = (x==2 || x==3) && y>=1 && y<=4;
 			else on = (x==2 || x==3) && y>=9 && y<=10;
 			g[y*CELL_W + x] = on ? 255 : 0;
 		}
@@ -156,14 +160,30 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 	int sub_count = up[0] ? TA_wrapPlain(up, TA_COLS-6, 2, sub_lines) : 0;
 	TA_Layout lay;
 	int max_rows = TA_ROWS - 8 - (sub_count ? sub_count + 1 : 0);
-	if (!TA_layout(main, TA_COLS-4, max_rows, lineAspect, NULL, &lay) || lay.h<1) return;
+	if (!TA_layout(main, TA_COLS-4, max_rows, lineAspect, NULL, &lay)) {
+		// too long for letters this big: the whole title in plain characters instead, never a cut one
+		char upper[256];
+		snprintf(upper, sizeof(upper), "%s", main);
+		for (char* p = upper; *p; p++) *p = toupper((unsigned char)*p);
+		char plain[TA_MAX_LINES][TA_LINE_MAX];
+		int n = TA_wrapPlain(upper, TA_COLS-8, TA_MAX_LINES, plain);
+		int block = n + (sub_count ? sub_count + 1 : 0);
+		int top = (TA_ROWS - 3 - block) / 2;
+		for (int i=0; i<n; i++) gridCenter(g, top + i, plain[i], 100);
+		for (int i=0; i<sub_count; i++) gridCenter(g, top + n + 1 + i, sub_lines[i], 70);
+		for (int x=2; x<TA_COLS-2; x++) gridPut(g, x, TA_ROWS-4, '-', 40);
+		char tag[96];
+		snprintf(tag, sizeof(tag), "[ %s ]", badge);
+		gridCenter(g, TA_ROWS-2, tag, 60);
+		return;
+	}
 	int total = lay.count * lay.h + (lay.count - 1);
 	int block = total + (sub_count ? sub_count + 1 : 0);
 	int top = (TA_ROWS - 3 - block) / 2;
 	for (int li=0; li<lay.count; li++) {
 		Raster* r = rasterLine(lay.lines[li]);
 		if (!r) continue;
-		int wcols = (int)lroundf(lay.h * 2.0f * r->w / r->h);
+		int wcols = (int)lroundf(lay.h * 2.0f * CONDENSE * r->w / r->h);
 		if (wcols<1) wcols = 1;
 		if (wcols>TA_COLS-2) wcols = TA_COLS - 2;
 		uint8_t* px = malloc((size_t)wcols * lay.h * 2);
@@ -174,7 +194,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 			int ox = (TA_COLS - wcols) / 2, oy = top + li*(lay.h+1);
 			for (int y=0; y<lay.h; y++) for (int x=0; x<wcols; x++) {
 				char c = chars[y*wcols + x];
-				if (c!=' ') gridPut(g, ox+x, oy+y, c, 100);
+				if (c!=' ') gridPut(g, ox+x, oy+y, c=='H' ? FILL_BOTH : c=='\'' ? FILL_TOP : FILL_BOTTOM, 100);
 			}
 		}
 		free(px);

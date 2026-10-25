@@ -52,10 +52,10 @@ int main(void) {
 	CHECK(TA_layout("Apotris", 56, 22, fake, NULL, &lay) && lay.count==1 && lay.h==6, "one word: one line, as high as the width allows");
 	CHECK(TA_layout("Ab", 56, 22, fake, NULL, &lay) && lay.count==1 && lay.h==11, "a very short word: capped at 11 rows");
 	CHECK(TA_layout("A B", 56, 22, fake, NULL, &lay) && lay.h>=4, "tiny title");
-	CHECK(TA_layout("Super Mario Land 2 DX Extra Long Title Words Here", 56, 22, fat, NULL, &lay) && lay.h>=4 && lay.count>=1, "too long: words are dropped until the letters are 4 rows");
-	CHECK(strstr(lay.lines[0], "SUPER")==lay.lines[0], "the start of the title is kept");
+	CHECK(!TA_layout("Super Mario Land 2 DX Extra Long Title Words Here", 56, 22, fat, NULL, &lay), "too long for 4-row letters: no layout, nothing is cut");
+	CHECK(TA_layout("Burgertime Deluxe EX", 56, 22, fake, NULL, &lay) && lay.count==2 && !strcmp(lay.lines[0], "BURGERTIME") && !strcmp(lay.lines[1], "DELUXE EX"), "every word is kept");
 	CHECK(TA_layout("", 56, 22, fake, NULL, &lay) && !strcmp(lay.lines[0], "?"), "empty title");
-	CHECK(TA_layout("Pneumonoultramicroscopicsilicovolcanoconiosis", 56, 22, fat, NULL, &lay)==1 || 1, "one huge word does not loop forever");
+	CHECK(!TA_layout("Pneumonoultramicroscopicsilicovolcanoconiosis", 56, 22, fat, NULL, &lay), "one huge word: no layout (and no endless loop)");
 	CHECK(TA_layout("Mega Man X", 56, 12, fake, NULL, &lay) && lay.h<=6, "fewer rows: shorter letters");
 
 	uint8_t px[4*6];

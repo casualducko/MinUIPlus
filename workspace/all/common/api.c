@@ -402,10 +402,27 @@ int GFX_truncateUniqueText(TTF_Font* font, const char* name, const char* unique,
 		return GFX_truncateText(font, unique, out_unique, max_width, padding);
 	}
 	
+	// what tells it apart is the tag, without the file extension (" (World).gb" is " (World)") unless
+	// that leaves nothing, and never more than about half the room, so the name keeps the rest
+	char tag[256];
+	snprintf(tag, sizeof(tag), "%s", alt);
+	char* dot = strrchr(tag, '.');
+	if (dot && dot>tag && dot[1] && strlen(dot+1)<=4) {
+		int alnum = 1;
+		for (char* q = dot+1; *q; q++) if (!((*q>='0' && *q<='9') || (*q>='a' && *q<='z') || (*q>='A' && *q<='Z'))) alnum = 0;
+		if (alnum) *dot = '\0';
+	}
+	if (!tag[0]) snprintf(tag, sizeof(tag), "%s", alt);
 	int alt_width;
-	TTF_SizeUTF8(font, alt, &alt_width, NULL);
+	TTF_SizeUTF8(font, tag, &alt_width, NULL);
+	if (alt_width > max_width * 55 / 100) {
+		char cut[256];
+		GFX_truncateText(font, tag, cut, max_width * 55 / 100, 0);
+		snprintf(tag, sizeof(tag), "%s", cut);
+		TTF_SizeUTF8(font, tag, &alt_width, NULL);
+	}
 	GFX_truncateText(font, name, out_name, max_width-alt_width, padding);
-	snprintf(out_unique, 256, "%s%s", out_name, alt);
+	snprintf(out_unique, 256, "%s%s", out_name, tag);
 	
 	int text_width;
 	TTF_SizeUTF8(font, out_unique, &text_width, NULL);

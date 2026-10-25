@@ -176,19 +176,13 @@ int TA_layout(const char* text, int max_cols, int max_rows, float (*aspect)(cons
 	char words[TA_MAX_WORDS][TA_LINE_MAX];
 	int count = ta_words(up, words);
 	if (!count) { snprintf(words[0], TA_LINE_MAX, "?"); count = 1; }
-	for (;;) {
-		int have;
-		TA_Layout best;
-		memset(&best, 0, sizeof(best));
-		ta_layoutTry(words, count, max_cols, max_rows, aspect, ctx, &best, &have);
-		if (have && best.h>=4) { *out = best; return 1; }
-		if (count==1) {
-			int len = strlen(words[0]);
-			if (len<=6) { if (have) { *out = best; return 1; } return 0; }
-			words[0][len-2] = '\0'; // one very long word: cut it
-		}
-		else count--;                // too long: drop the last word
-	}
+	int have;
+	TA_Layout best;
+	memset(&best, 0, sizeof(best));
+	ta_layoutTry(words, count, max_cols, max_rows, aspect, ctx, &best, &have);
+	if (!have || best.h<4) return 0; // too long for letters this big: the caller shows the title as plain text
+	*out = best;
+	return 1;
 }
 void TA_pack(const uint8_t* px, int w, int rows, char* out) {
 	for (int y=0; y<rows; y++) {

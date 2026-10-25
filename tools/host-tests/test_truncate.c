@@ -53,6 +53,18 @@ int main(void) {
 	for (int mw=40; mw<=300; mw+=7) { GFX_truncateText(NULL,u,name_out,mw,20); valid &= valid_utf8(name_out); }
 	CHECK(valid, "UTF-8 is never cut in half");
 
+
+	// the tag without its file extension, and never crowding the name out
+	GFX_truncateUniqueText(NULL,"Burger","Burger (World).gb",name_out,unique_out,1000,20);
+	CHECK(!strcmp(unique_out,"Burger (World)"), "the extension is dropped from the tag");
+	GFX_truncateUniqueText(NULL,"Game","Game.gbc",name_out,unique_out,1000,20);
+	CHECK(!strcmp(unique_out,"Game.gbc"), "only the extension differs: it is kept");
+	w = GFX_truncateUniqueText(NULL,"BurgerTime Deluxe EX","BurgerTime Deluxe EX (A Very Long Hack Name Here).gb",name_out,unique_out,280,20);
+	printf("      -> \"%s\" name \"%s\" (width %d of 280)\n", unique_out, name_out, w);
+	CHECK(w<=280 && strlen(name_out)>=8 && strstr(unique_out,"(A V"), "a long tag is cut so the name keeps some room");
+	GFX_truncateUniqueText(NULL,"BurgerTime Deluxe EX","BurgerTime Deluxe EX (TechDweeb).gb",name_out,unique_out,280,20);
+	CHECK(strstr(unique_out,"(TechDweeb)") && !strstr(unique_out,".gb") && strlen(name_out)>=8, "a short tag stays whole");
+
 	char big[1200]; memset(big,'x',1199); big[1199]=0;
 	GFX_truncateText(NULL,big,name_out,100000,0);
 	CHECK(strlen(name_out)==255, "very long input is bounded to 255 bytes");

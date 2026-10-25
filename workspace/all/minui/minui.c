@@ -1345,6 +1345,11 @@ int main (int argc, char *argv[]) {
 
 	PAD_reset();
 	int dirty = 1;
+	int marquee_active = 0; // the selected name is wider than its pill and is scrolling (redraw every frame)
+	Entry* marquee_entry = NULL;
+	uint32_t marquee_start = 0;
+	char thumb_path[MAX_PATH] = ""; // the picture shown, kept so it isn't decoded again on every redraw
+	SDL_Surface* thumb_cache = NULL;
 	int show_version = 0;
 	int show_setting = 0; // 1=brightness,2=volume
 	int was_online = PLAT_isOnline();
@@ -1498,7 +1503,9 @@ int main (int argc, char *argv[]) {
 			}
 		}
 		
+		if (marquee_active) dirty = 1;
 		if (dirty) {
+			marquee_active = 0;
 			GFX_clearUI(screen);
 			
 			int ox = 0;
@@ -1526,15 +1533,20 @@ int main (int argc, char *argv[]) {
 				
 				sprintf(res_path, "%s/.res/%s.png", res_root, res_name);
 				LOG_info("res_path: %s\n", res_path);
-				if (art_on && exists(res_path)) {
-					SDL_Surface* thumb = IMG_Load(res_path);
-					if (thumb) { // a file that isn't a picture is no picture (it used to crash the launcher)
-						had_thumb = 1;
-						ox = MAX(FIXED_WIDTH - FIXED_HEIGHT, (FIXED_WIDTH - thumb->w));
-						oy = (FIXED_HEIGHT - thumb->h) / 2;
-						SDL_BlitSurface(thumb, NULL, screen, &(SDL_Rect){ox,oy});
-						SDL_FreeSurface(thumb);
+				SDL_Surface* thumb = NULL;
+				if (art_on) {
+					if (strcmp(thumb_path, res_path)) { // a different picture: load it (a file that isn't a picture is no picture)
+						if (thumb_cache) SDL_FreeSurface(thumb_cache);
+						thumb_cache = exists(res_path) ? IMG_Load(res_path) : NULL;
+						snprintf(thumb_path, sizeof(thumb_path), "%s", res_path);
 					}
+					thumb = thumb_cache;
+				}
+				if (thumb) {
+					had_thumb = 1;
+					ox = MAX(FIXED_WIDTH - FIXED_HEIGHT, (FIXED_WIDTH - thumb->w));
+					oy = (FIXED_HEIGHT - thumb->h) / 2;
+					SDL_BlitSurface(thumb, NULL, screen, &(SDL_Rect){ox,oy});
 				}
 			}
 			
@@ -1628,6 +1640,7 @@ int main (int argc, char *argv[]) {
 						}
 						else text_width = GFX_truncateText(font.large, entry_name, display_name, available_width, SCALE1(BUTTON_PADDING*2));
 						int max_width = MIN(available_width, text_width);
+						int selected_full = 0;
 						if (j==selected_row) {
 							GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){
 								SCALE1(PADDING),
@@ -1637,6 +1650,7 @@ int main (int argc, char *argv[]) {
 							});
 							text_color = COLOR_BLACK;
 							if (entry_unique) strcpy(display_name, unique_name); // the selected row shows all of it
+							selected_full = 1; // ... and when that is wider than the pill, it scrolls (below)
 						}
 						else if (entry_unique) {
 							SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, unique_name, COLOR_DARK_TEXT);
@@ -1651,11 +1665,24 @@ int main (int argc, char *argv[]) {
 							});
 							SDL_FreeSurface(text);
 						}
-						SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, display_name, text_color);
+						SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, selected_full ? (entry_unique ? entry_unique : entry_name) : display_name, text_color);
+						int clip_w = max_width-SCALE1(BUTTON_PADDING*2);
+						int src_x = 0;
+						if (selected_full && text->w > clip_w) {
+							// it doesn't fit: scroll it, with a pause at each end
+							uint32_t now = SDL_GetTicks();
+							if (marquee_entry!=entry) { marquee_entry = entry; marquee_start = now; }
+							int overflow = text->w - clip_w;
+							uint32_t pause = 800;
+							uint32_t travel = (uint32_t)overflow * 1000 / SCALE1(50); // 50 px a second before scaling
+							uint32_t t = (now - marquee_start) % (pause + travel + pause);
+							src_x = t<pause ? 0 : t<pause+travel ? (int)((t-pause) * SCALE1(50) / 1000) : overflow;
+							marquee_active = 1;
+						}
 						SDL_BlitSurface(text, &(SDL_Rect){
+							src_x,
 							0,
-							0,
-							max_width-SCALE1(BUTTON_PADDING*2),
+							clip_w,
 							text->h
 						}, screen, &(SDL_Rect){
 							SCALE1(PADDING+BUTTON_PADDING),
