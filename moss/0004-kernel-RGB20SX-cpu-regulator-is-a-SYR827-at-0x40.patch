@@ -1,0 +1,19 @@
+RGB20SX: the CPU regulator (vdd_cpu) is a Silergy SYR827 at I2C 0x40, not a TCS4525 at 0x1c.
+Without this fan53555 fails to probe and cpufreq never starts (CPU fixed at the bootloader's 1.416 GHz).
+This makes the image RGB20SX-specific: a real RGB30 has the TCS4525.
+
+--- linux.orig/arch/arm64/boot/dts/rockchip/rk3568-evb-rgb30.dtsi
++++ linux/arch/arm64/boot/dts/rockchip/rk3568-evb-rgb30.dtsi
+@@ -408,9 +408,9 @@
+ &i2c0 {
+ 	status = "okay";
+ 
+-        vdd_cpu: tcs4525@1c {
+-                compatible = "tcs,tcs452x";
+-                reg = <0x1c>;
++        vdd_cpu: syr827@40 {
++                compatible = "silergy,syr827";
++                reg = <0x40>;
+                 vin-supply = <&vccsys>;
+                 regulator-compatible = "fan53555-reg";
+                 regulator-name = "vdd_cpu";
