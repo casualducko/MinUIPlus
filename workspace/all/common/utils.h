@@ -2,6 +2,7 @@
 #define UTILS_H
 
 #include <stdint.h>
+#include <time.h>
 
 int prefixMatch(char* pre, char* str);
 int suffixMatch(char* suf, char* str);
@@ -18,6 +19,8 @@ void trimTrailingNewlines(char* line);
 void trimSortingMeta(char** str);
 
 int exists(char* path);
+// An HTTP Date header (RFC 7231: "Date: Sat, 25 Oct 2026 04:30:00 GMT") in the text of a response's headers
+time_t HTTPDate_parse(const char* headers); // seconds since 1970 (UTC), or 0 if there is no usable date (before 2024 or after 2100 counts as none)
 // The recently played list (recent.txt: paths relative to the card, newest first, an optional \talias after each)
 size_t Recents_bump(const char* text, const char* rel_path, int max, char* out, size_t size); // the list with rel_path at the top (its alias kept), at most max lines; returns the length
 void Recents_add(const char* sd_path); // puts a game on top of the launcher's list (RECENT_PATH)

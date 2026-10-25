@@ -38,6 +38,7 @@ x "$all/common/utils.h" '// play time, kept' 'int Playtime_parse' > "$out/gen/pl
 x "$all/common/utils.c" '// Play time (see utils.h)' '// end of the play time code' > "$out/gen/playtime.inc"
 x "$all/minarch/minarch.c" '// Cheats: RetroArch-style' '// end of the cheat file code' > "$out/gen/cheats.inc"
 x "$all/common/utils.c" '// Cheat database (see utils.h)' '// end of the cheat database code' > "$out/gen/cheatdb.inc"
+x "$all/common/utils.c" '// HTTP date (see utils.h)' '// end of the HTTP date code' > "$out/gen/httpdate.inc"
 x "$all/common/utils.c" '// Recently played (see utils.h)' 'void Recents_add(const char* sd_path) {' > "$out/gen/recents.inc"
 x "$all/common/api.c" 'static int PAD_parseDeadzone' 'static int PAD_deadzone' > "$out/gen/PAD_deadzone.inc"
 x "$all/../rgb30/libmsettings/msettings.c" '#define SETTINGS_VERSION 2' '#define SHM_KEY' > "$out/gen/msettings_types.inc"
@@ -51,11 +52,25 @@ x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
 
 failed=0
-for t in rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb titleart recents playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
+for t in rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb titleart recents httpdate playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
 	echo "== $t"
-	$CC $FLAGS -I"$out" -I"$all/titleart" -o "$out/test_$t" "$here/test_$t.c" -lm
+	$CC $FLAGS -I"$out" -I"$all/titleart" -I"$all/clock" -I"$all/common" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi
 done
+# the Clock tool's network part against a mock time server
+echo "== clocknet"
+$CC $FLAGS -I"$out" -I"$all/clock" -I"$all/common" -o "$out/test_clocknet" "$here/test_clocknet.c" -lm
+rm -f "$out/mock-time.log"
+python3 "$here/mock_time.py" > "$out/mock-time.log" 2>&1 &
+mocktime=$!
+tport=
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+	tport=$(sed -n 's/^PORT //p' "$out/mock-time.log" 2>/dev/null | head -1)
+	[ -n "$tport" ] && break
+	sleep 0.25
+done
+if ! (cd "$out" && CLOCK_URL="http://127.0.0.1:$tport/" ./test_clocknet); then failed=1; echo "   ^ FAILED: clocknet"; fi
+kill $mocktime 2>/dev/null
 # the Romulus tool: JSON, zip, config, naming, and the curl job against a mock server
 echo "== romulus"
 python3 "$here/make_zips.py" "$out/zips" > /dev/null

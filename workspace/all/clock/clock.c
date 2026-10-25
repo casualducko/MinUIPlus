@@ -1,6 +1,8 @@
 // loosely based on https://github.com/gameblabla/clock_sdl_app
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <msettings.h>
@@ -8,6 +10,7 @@
 #include "defines.h"
 #include "api.h"
 #include "utils.h"
+#include "clocknet.h"
 
 enum {
 	CURSOR_YEAR,
@@ -18,6 +21,39 @@ enum {
 	CURSOR_SECOND,
 	CURSOR_AMPM,
 };
+
+
+///////////////////////////////
+// Y: set the clock from the network (clocknet.c)
+
+static int netTick(void* ctx, const char* message) { // shows what is going on; 1 if B was pressed
+	SDL_Surface* screen = ctx;
+	GFX_startFrame();
+	PAD_poll();
+	static uint32_t drawn = 0;
+	static char last[160] = "";
+	if (strcmp(last, message) || SDL_GetTicks() - drawn > 1000) { // the message, redrawn now and then
+		snprintf(last, sizeof(last), "%s", message);
+		GFX_clearUI(screen);
+		GFX_blitMessage(font.large, (char*)message, screen, &(SDL_Rect){0, SCALE1(PADDING), screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
+		GFX_blitButtonGroup((char*[]){ "B","CANCEL", NULL }, 1, screen, 1);
+		GFX_flip(screen);
+		drawn = SDL_GetTicks();
+	}
+	return PAD_justPressed(BTN_B);
+}
+static void waitForA(SDL_Surface* screen, const char* text) {
+	GFX_clearUI(screen);
+	GFX_blitMessage(font.large, (char*)text, screen, &(SDL_Rect){0, SCALE1(PADDING), screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
+	GFX_blitButtonGroup((char*[]){ "A","OKAY", NULL }, 1, screen, 1);
+	GFX_flip(screen);
+	while (1) {
+		GFX_startFrame();
+		PAD_poll();
+		if (PAD_justPressed(BTN_A) || PAD_justPressed(BTN_B)) break;
+		GFX_sync();
+	}
+}
 
 int main(int argc , char* argv[]) {
 	PWR_setCPUSpeed(CPU_SPEED_MENU);
@@ -218,6 +254,23 @@ int main(int argc , char* argv[]) {
 		else if (PAD_justPressed(BTN_B)) {
 			quit = 1;
 		}
+		else if (PAD_justPressed(BTN_Y)) { // set from the network
+			time_t net;
+			const char* error = "";
+			if (ClockNet_sync(&net, &error, netTick, screen)==0) {
+				struct tm lt;
+				localtime_r(&net, &lt);
+				if (!getenv("CLOCK_DRY_RUN")) PLAT_setDateTime(lt.tm_year+1900, lt.tm_mon+1, lt.tm_mday, lt.tm_hour, lt.tm_min, lt.tm_sec);
+				char done[128];
+				strftime(done, sizeof(done), "Clock set from the network.\n\n%Y-%m-%d  %H:%M", &lt);
+				waitForA(screen, done);
+				quit = 1;
+			}
+			else {
+				waitForA(screen, error);
+				dirty = 1;
+			}
+		}
 		else if (PAD_justPressed(BTN_SELECT)) {
 			dirty = 1;
 			show_24hour = !show_24hour;
@@ -246,7 +299,7 @@ int main(int argc , char* argv[]) {
 			GFX_blitHardwareGroup(screen, show_setting);
 			
 			if (show_setting) GFX_blitHardwareHints(screen, show_setting);
-			else GFX_blitButtonGroup((char*[]){ "SELECT",show_24hour?"12 HOUR":"24 HOUR", NULL }, 0, screen, 0);
+			else GFX_blitButtonGroup((char*[]){ "SELECT",show_24hour?"12 HOUR":"24 HOUR", "Y","SYNC", NULL }, 0, screen, 0);
 
 			GFX_blitButtonGroup((char*[]){ "B","CANCEL", "A","SET", NULL }, 1, screen, 1);
 		

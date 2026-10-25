@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <math.h>
@@ -612,3 +613,42 @@ void Recents_add(const char* sd_path) {
 	free(old);
 }
 // end of the recently played code
+
+// HTTP date (see utils.h)
+time_t HTTPDate_parse(const char* headers) {
+	if (!headers) return 0;
+	static const char* months[] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+	for (const char* line = headers; *line; ) {
+		const char* eol = strchr(line, '\n');
+		size_t len = eol ? (size_t)(eol - line) : strlen(line);
+		if (len>5 && !strncasecmp(line, "date:", 5)) {
+			char text[128];
+			snprintf(text, sizeof(text), "%.*s", len<sizeof(text)-1 ? (int)len : (int)sizeof(text)-1, line+5);
+			int day, year, hour, minute, second;
+			char month[8];
+			const char* p = text;
+			while (*p==' ' || *p=='\t') p++;
+			const char* comma = strchr(p, ',');
+			if (comma) p = comma + 1; // the weekday
+			if (sscanf(p, " %2d %3s %4d %2d:%2d:%2d", &day, month, &year, &hour, &minute, &second)==6) {
+				int mon = -1;
+				for (int i=0; i<12; i++) if (!strncasecmp(month, months[i], 3)) mon = i;
+				if (mon>=0 && day>=1 && day<=31 && hour>=0 && hour<=23 && minute>=0 && minute<=59 && second>=0 && second<=60 && year>=2024 && year<=2100) {
+					struct tm tmv;
+					memset(&tmv, 0, sizeof(tmv));
+					tmv.tm_year = year - 1900;
+					tmv.tm_mon = mon;
+					tmv.tm_mday = day;
+					tmv.tm_hour = hour;
+					tmv.tm_min = minute;
+					tmv.tm_sec = second==60 ? 59 : second;
+					return timegm(&tmv);
+				}
+			}
+			return 0; // the first Date line is the one; a bad one means no date
+		}
+		line += len + (eol ? 1 : 0);
+	}
+	return 0;
+}
+// end of the HTTP date code
