@@ -321,9 +321,185 @@ def sheet(out, theme='stock', cols=5, tile=240):
         im.paste(a, ((i % cols) * tile, (i // cols) * tile), a)
     im.save(out)
 
+
+# ---------------------------------------------------------------- the title as the art
+UIFONT = '/Users/ducko/powkiddy-rgb20sx/MinUI/skeleton/SYSTEM/res/BPreplayBold-unhinted.otf'
+TCOLS, TROWS = 60, 30        # 6x12 px cells on the 360x360 tile
+
+def line_image(text, size=160):
+    font = ImageFont.truetype(UIFONT, size)
+    im = Image.new('L', (size * (len(text) + 2), int(size * 1.6)), 0)
+    ImageDraw.Draw(im).text((size // 4, size // 8), text, font=font, fill=255)
+    bb = im.getbbox()
+    return im.crop(bb) if bb else None
+
+def wraps(words, n):
+    """split the words into n lines, as even as the words allow (by characters)"""
+    best = None
+    def rec(i, k, cur):
+        nonlocal best
+        if k == 1:
+            lines = cur + [' '.join(words[i:])]
+            score = max(len(l) for l in lines)
+            if best is None or score < best[0]:
+                best = (score, lines)
+            return
+        for j in range(i + 1, len(words) - k + 2):
+            rec(j, k - 1, cur + [' '.join(words[i:j])])
+    if n <= len(words):
+        rec(0, n, [])
+    return best[1] if best else None
+
+def layout_try(words, max_cols, max_rows):
+    best = None
+    for n in range(1, 5):
+        lines = wraps(words, n)
+        if not lines:
+            continue
+        imgs = [line_image(l) for l in lines]
+        if any(i is None for i in imgs):
+            continue
+        asp = max(i.width / i.height for i in imgs)   # one letter height for every line
+        h_by_w = max_cols / (2.0 * asp)
+        gap = 1
+        h_by_h = (max_rows - gap * (n - 1)) / n
+        h = int(min(h_by_w, h_by_h, 11))
+        if best is None or h > best[0]:
+            best = (h, lines, imgs)
+    return best
+
+def layout_title(title, max_cols=TCOLS - 4, max_rows=TROWS - 8):
+    words = title.upper().split() or ['?']
+    while True:
+        best = layout_try(words, max_cols, max_rows)
+        if best and best[0] >= 4:
+            return best
+        if len(words) == 1:                      # one very long word: cut it
+            w = words[0]
+            if len(w) <= 6:
+                return best
+            words = [w[:len(w) - 2]]
+        else:
+            words = words[:-1]                   # too long: drop the last word
+
+def title_grid(name, tag, variant='fill'):
+    title = title_of(name)
+    h, lines, imgs = layout_title(title)
+    gap = 1
+    total = len(lines) * h + (len(lines) - 1) * gap
+    g = Grid(TCOLS, TROWS)
+    top = (TROWS - 3 - total) // 2
+    for li, (l, im) in enumerate(zip(lines, imgs)):
+        wcols = max(1, min(TCOLS - 2, int(round(h * 2.0 * im.width / im.height))))
+        small = im.resize((wcols, h), Image.LANCZOS)
+        px = small.load()
+        ox, oy = (TCOLS - wcols) // 2, top + li * (h + gap)
+        if variant == 'shadow':
+            for y in range(h):
+                for x in range(wcols):
+                    if px[x, y] > 110 and g.ch[oy + y + 1][ox + x + 1] == ' ':
+                        g.put(ox + x + 1, oy + y + 1, ':', 0.3)
+        for y in range(h):
+            for x in range(wcols):
+                v = px[x, y] / 255.0
+                if v < 0.15:
+                    continue
+                if variant == 'outline':
+                    nb = [px[min(wcols-1, x+1), y], px[max(0, x-1), y], px[x, min(h-1, y+1)], px[x, max(0, y-1)]]
+                    inside = v > 0.6 and min(nb) > 150
+                    if inside:
+                        continue
+                    g.put(ox + x, oy + y, '#' if v > 0.6 else ':', 0.55 + 0.45 * v)
+                elif variant == 'solid':
+                    g.put(ox + x, oy + y, '#' if v > 0.5 else '+', 1.0 if v > 0.5 else 0.6)
+                else:   # fill: shaded by coverage and a little by row, top bright to bottom soft
+                    ch_ = ramp(0.35 + 0.65 * v) if v > 0.55 else ramp(0.2 + 0.5 * v)
+                    g.put(ox + x, oy + y, ch_, (0.55 + 0.45 * (1 - y / h)) * (0.6 + 0.4 * v))
+    for x in range(2, TCOLS - 2):                 # a rule and the system badge under the title
+        g.put(x, TROWS - 4, '-', 0.4)
+    badge = '[ %s ]' % tag.upper() if tag else ''
+    g.text((TCOLS - len(badge)) // 2, TROWS - 2, badge, 0.6)
+    return g
+
+
+HALF_MAPS = {   # (top, bottom, both) characters for a cell holding two square sub-pixels
+    'quote':  ('"', '_', '#'),
+    'caret':  ('^', 'v', '#'),
+    'tick':   ("'", '.', 'H'),
+    'bar':    ('`', ',', '#'),
+}
+def split_subtitle(title):
+    """'Castlevania - Symphony of the Night' -> ('Castlevania', 'Symphony of the Night')"""
+    for sep in (' - ', ': '):
+        if sep in title:
+            a, b = title.split(sep, 1)
+            if a.strip() and b.strip():
+                return a.strip(), b.strip()
+    return title, ''
+
+def wrap_plain(text, width, lines):
+    out, cur = [], ''
+    for w in text.split():
+        if len(cur) + (1 if cur else 0) + len(w) <= width:
+            cur = (cur + ' ' + w) if cur else w
+        else:
+            out.append(cur)
+            cur = w
+    if cur: out.append(cur)
+    if len(out) > lines:
+        out = out[:lines]
+        out[-1] = out[-1][:width - 1] + '~'
+    return out
+
+def title_grid_half(name, tag, mapping='tick', threshold=0.42):
+    """the title as big letters (two sub-pixels per row, packed into characters), a subtitle in plain text"""
+    main, sub = split_subtitle(title_of(name))
+    mp = HALF_MAPS[mapping]
+    sub_lines = wrap_plain(sub.upper(), TCOLS - 6, 2) if sub else []
+    h, lines, imgs = layout_title(main, max_rows=TROWS - 8 - (len(sub_lines) + 1 if sub_lines else 0))
+    gap = 1
+    total = len(lines) * h + (len(lines) - 1) * gap
+    block = total + (len(sub_lines) + 1 if sub_lines else 0)
+    g = Grid(TCOLS, TROWS)
+    top = (TROWS - 3 - block) // 2
+    for li, (l, im) in enumerate(zip(lines, imgs)):
+        wcols = max(1, min(TCOLS - 2, int(round(h * 2.0 * im.width / im.height))))
+        small = im.resize((wcols, h * 2), Image.LANCZOS)      # square sub-pixels
+        px = small.load()
+        ox, oy = (TCOLS - wcols) // 2, top + li * (h + gap)
+        for y in range(h):
+            for x in range(wcols):
+                t = px[x, 2 * y] / 255.0 > threshold
+                b = px[x, 2 * y + 1] / 255.0 > threshold
+                if t and b: g.put(ox + x, oy + y, mp[2], 1.0)
+                elif t: g.put(ox + x, oy + y, mp[0], 1.0)
+                elif b: g.put(ox + x, oy + y, mp[1], 1.0)
+    for i, sl in enumerate(sub_lines):
+        g.text((TCOLS - len(sl)) // 2, top + total + 1 + i, sl, 0.7)
+    for x in range(2, TCOLS - 2):
+        g.put(x, TROWS - 4, '-', 0.4)
+    badge = '[ %s ]' % tag.upper() if tag else ''
+    g.text((TCOLS - len(badge)) // 2, TROWS - 2, badge, 0.6)
+    return g
+
+def title_sheet(out, theme='warm', variant='fill', cols=5, tile=240, names=None):
+    bg = THEMES[theme][0]
+    names = names or SAMPLES
+    rows = (len(names) + cols - 1) // cols
+    im = Image.new('RGB', (cols * tile, rows * tile), bg)
+    for i, (n, t) in enumerate(names):
+        g = title_grid_half(n, t) if variant == 'half' else title_grid(n, t, variant)
+        a = render(g, theme, cw=6, ch=12, size=10).resize((tile, tile), Image.LANCZOS)
+        im.paste(a, ((i % cols) * tile, (i // cols) * tile), a)
+    im.save(out)
+
 def main(argv):
     cmd = argv[1]
-    if cmd == 'sheet':
+    if cmd == 'titles':
+        title_sheet(argv[2], argv[3] if len(argv) > 3 else 'warm', argv[4] if len(argv) > 4 else 'fill')
+    elif cmd == 'title':
+        render(title_grid(argv[2], argv[3], argv[5] if len(argv) > 5 else 'fill'), argv[6] if len(argv) > 6 else 'warm', cw=6, ch=12, size=10).save(argv[4])
+    elif cmd == 'sheet':
         theme = argv[3] if len(argv) > 3 else 'stock'
         sheet(argv[2], theme)
     elif cmd == 'one':
