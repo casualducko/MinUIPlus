@@ -26,7 +26,7 @@ static int hasRoute(void) { // a default route, by whatever interface
 	return found;
 }
 // runs argv with its standard output captured: 0 done, -1 couldn't start, -2 cancelled, -3 too slow
-static int capture(char* const argv[], char* out, size_t cap, int timeout_ms, ClockNet_tick tick, void* ctx, const char* message) {
+int ClockNet_capture(char* const argv[], char* out, size_t cap, int timeout_ms, ClockNet_tick tick, void* ctx, const char* message) {
 	int fds[2];
 	out[0] = '\0';
 	if (pipe(fds)) return -1;
@@ -62,7 +62,7 @@ static int capture(char* const argv[], char* out, size_t cap, int timeout_ms, Cl
 	waitpid(pid, NULL, 0);
 	return result;
 }
-int ClockNet_sync(time_t* now, const char** error, ClockNet_tick tick, void* ctx) {
+int ClockNet_wifiUp(const char** error, ClockNet_tick tick, void* ctx) {
 	if (!hasRoute()) {
 		const char* cmd = getenv("CLOCK_WIFICTL");
 		if (!cmd || !*cmd) cmd = "wifictl";
@@ -92,12 +92,16 @@ int ClockNet_sync(time_t* now, const char** error, ClockNet_tick tick, void* ctx
 		// the route is up; wifictl may still be finishing: it is left to, and collected on the next call or when the tool ends
 		if (pid>0 && !done) waitpid(pid, NULL, WNOHANG);
 	}
+	return 0;
+}
+int ClockNet_sync(time_t* now, const char** error, ClockNet_tick tick, void* ctx) {
+	if (ClockNet_wifiUp(error, tick, ctx)) return -1;
 	const char* env = getenv("CLOCK_URL");
 	const char* urls[] = { env, "http://connectivitycheck.gstatic.com/generate_204", "http://www.msftconnecttest.com/connecttest.txt", "http://detectportal.firefox.com/success.txt", NULL };
 	for (int i = (env && *env) ? 0 : 1; urls[i]; i++) {
 		char headers[4096];
 		char* argv[] = { "curl", "-sI", "--connect-timeout", "6", "--max-time", "10", (char*)urls[i], NULL };
-		int r = capture(argv, headers, sizeof(headers), 14000, tick, ctx, "Asking the network for the time...");
+		int r = ClockNet_capture(argv, headers, sizeof(headers), 14000, tick, ctx, "Asking the network for the time...");
 		if (r==-2) { *error = "Cancelled."; return -1; }
 		if (r==0) {
 			time_t t = HTTPDate_parse(headers);

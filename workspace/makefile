@@ -28,6 +28,7 @@ all:
 	cd ./all/theme/ && make
 	cd ./all/titleart/ && make
 	cd ./all/info/ && make
+	cd ./all/update/ && make
 	cd ./all/gallery/ && make
 	cd ./all/wifi/ && make
 	cd ./all/syncsettings/ && make
@@ -48,6 +49,7 @@ clean:
 	cd ./all/theme/ && make clean
 	cd ./all/titleart/ && make clean
 	cd ./all/info/ && make clean
+	cd ./all/update/ && make clean
 	cd ./all/gallery/ && make clean
 	cd ./all/wifi/ && make clean
 	cd ./all/syncsettings/ && make clean

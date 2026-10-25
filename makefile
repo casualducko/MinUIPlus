@@ -61,6 +61,7 @@ system:
 	cp ./workspace/all/theme/build/$(PLATFORM)/theme.elf ./build/EXTRAS/Tools/$(PLATFORM)/Theme.pak/
 	cp ./workspace/all/titleart/build/$(PLATFORM)/titleart.elf ./build/EXTRAS/Tools/$(PLATFORM)/TitleArt.pak/
 	cp ./workspace/all/info/build/$(PLATFORM)/info.elf ./build/EXTRAS/Tools/$(PLATFORM)/Info.pak/
+	cp ./workspace/all/update/build/$(PLATFORM)/update.elf ./build/EXTRAS/Tools/$(PLATFORM)/Update.pak/
 	cp ./workspace/all/gallery/build/$(PLATFORM)/gallery.elf ./build/EXTRAS/Tools/$(PLATFORM)/Screenshots.pak/
 
 cores: # TODO: can't assume every platform will have the same stock cores (platform should be responsible for copy too)

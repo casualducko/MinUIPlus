@@ -57,7 +57,7 @@ The ones I would do first are at the top of each size.
 6. **Per-game turbo / a hotkey.** Turbo is a frontend option now (saved per game with Save Changes); a shortcut to toggle it without opening the menu.
 
 ### Medium (M)
-8. **Self-update tool.** Tools > Update checks your GitHub repo's latest release, downloads the build, verifies SHA-256, installs it with the same backups as `install.sh`. Ends card swapping and the Mac-to-device pushes for anyone using the fork. Needs a public release (or a token in a config file) for the repo; it is private now.
+8. **Self-update tool (built, Tools > Update).** Waiting for a first real release: `tools/package/release.sh <package> --publish`, and either a public repo or a token in `update.cfg`.
 9. **Add to collection from a game.** MinUI collections are text files; a menu item in Options (and in the launcher) adds or removes the current game. Today it takes a computer.
 10. **Rewind.** A ring of state snapshots in RAM for NES/GB/GBA/SNES, per-system on/off.
 11. **Save backup and sync.** Copy saves to a zip on the card on a schedule, or sync to a server (Romulus server write path, or WebDAV/Syncthing which Moss already ships). The only protection against a lost card today is Restore Save on the same card.
