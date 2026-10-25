@@ -20,6 +20,7 @@
 #define PAKS_PATH SYSTEM_PATH "/paks"
 #define RECENT_PATH SHARED_USERDATA_PATH "/.minui/recent.txt"
 #define SHOW_ART_PATH USERDATA_PATH "/show-art" // "0" hides the launcher's game art (anything else, or no file: shown)
+#define TITLEART_AUTO_PATH USERDATA_PATH "/titleart-auto" // "1": a boot pass makes the pictures that new games are missing
 #define PLAYTIME_PATH SHARED_USERDATA_PATH "/.minui/playtime.txt"
 #define SIMPLE_MODE_PATH SHARED_USERDATA_PATH "/enable-simple-mode"
 #define AUTO_RESUME_PATH SHARED_USERDATA_PATH "/.minui/auto_resume.txt"

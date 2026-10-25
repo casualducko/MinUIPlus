@@ -2,7 +2,8 @@
 # Runs the real Title Art tool on this computer against a fake card with the sample games, with
 # scripted buttons and screenshots (script syntax as in run.sh). The tiles land in the card's Roms/*/.res.
 #   RES=/path/to/.system/res tools/host-harness/titleart-run.sh "snap:home,A,sleep:4000,snap:done"
-# Environment: RES (first time), WORK, OUT, THEME_FILE (printf %b text for theme.cfg, optional)
+# Environment: RES (first time), WORK, OUT, THEME_FILE (printf %b text for theme.cfg, optional),
+# TITLEART_ARGS (eg. --auto: no screen), KEEP=1 (keep the card as the last run left it)
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$here/../..
@@ -15,6 +16,7 @@ if [ ! -d "$CARD" ]; then "$here/make-card.sh" "$CARD" "${RES:?set RES to a .sys
 rm -rf "$WORK/platform"
 cp -R "$repo/workspace/macos/platform" "$WORK/platform"
 python3 "$here/platform-patch.py" "$WORK/platform" "$CARD"
+if [ -z "$KEEP" ]; then
 rm -rf "$CARD/Roms" "$CARD/.userdata/macos/titleart-made.txt" "$CARD/.userdata/macos/theme.cfg"
 mkdir -p "$CARD/.userdata/macos"
 [ -n "$THEME_FILE" ] && printf '%b' "$THEME_FILE" > "$CARD/.userdata/macos/theme.cfg"
@@ -38,8 +40,9 @@ for folder, files in games.items():
 os.makedirs(os.path.join(card, "Roms", "GBC (GBC)", ".res"), exist_ok=True)
 open(os.path.join(card, "Roms", "GBC (GBC)", ".res", "Donkey Kong.gb.png"), "wb").write(b"user's own art")
 PY
+fi
 cd "$repo/workspace/all/titleart"
-clang titleart.c titleart_core.c ../common/scaler.c ../common/utils.c ../common/api.c "$WORK/platform/platform.c" \
+clang titleart.c titleart_core.c titleart_gen.c ../common/scaler.c ../common/utils.c ../common/api.c "$WORK/platform/platform.c" \
 	-o "$WORK/titleart" -I. -I../common -I"$WORK/platform" -I/opt/homebrew/include -L/opt/homebrew/lib \
 	-DPLATFORM=\"macos\" -DUSE_SDL2 -Wno-builtin-macro-redefined -U__ARM_ARCH -D__ARM_ARCH=4 \
 	-O1 -g -std=gnu99 -fno-common -Wall -Wno-unused-function -Wno-tautological-constant-out-of-range-compare \
@@ -48,7 +51,7 @@ clang titleart.c titleart_core.c ../common/scaler.c ../common/utils.c ../common/
 rm -rf "$OUT"; mkdir -p "$OUT"
 cd "$WORK"
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy HP_OUT="$OUT" HP_SCRIPT="$script" \
-	perl -e 'alarm 90; exec @ARGV' ./titleart > "$OUT/log.txt" 2> "$OUT/err.txt" && status=0 || status=$?
+	perl -e 'alarm 90; exec @ARGV' ./titleart $TITLEART_ARGS > "$OUT/log.txt" 2> "$OUT/err.txt" && status=0 || status=$?
 for f in "$OUT"/*.bmp; do [ -f "$f" ] || continue; sips -s format png "$f" --out "${f%.bmp}.png" >/dev/null 2>&1 && rm "$f"; done
 echo "exit status $status"; ls "$OUT" | grep png || true
 find "$CARD/Roms" -path "*/.res/*" | sort

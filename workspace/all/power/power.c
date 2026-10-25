@@ -42,6 +42,10 @@ static const Choice art_choices[] = {
 	{1,"On"}, {0,"Off"}, {-1,NULL}
 };
 
+static const Choice auto_art_choices[] = {
+	{0,"Manual"}, {1,"Automatic"}, {-1,NULL}
+};
+
 static const Choice rumble_choices[] = {
 	{0,"Off"}, {25,"25%"}, {50,"50%"}, {75,"75%"}, {100,"Full"}, {-1,NULL}
 };
@@ -60,6 +64,7 @@ static Row rows[] = {
 	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
 	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
 	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1},
+	{"Art for new games", TITLEART_AUTO_PATH, auto_art_choices, 0, 1, 1, 0},
 	{"Rumble", RUMBLE_PATH, rumble_choices, 100, 1, 100, 100},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))

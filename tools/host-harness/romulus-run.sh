@@ -35,7 +35,7 @@ if [ -n "$CFG" ]; then cp "$CFG" "$CARD/.userdata/macos/romulus.cfg"
 else printf 'url=http://127.0.0.1:%s\ntoken=%s\ninsecure_http=1\n' "$port" "$tok" > "$CARD/.userdata/macos/romulus.cfg"; fi
 
 cd "$repo/workspace/all/romulus"
-clang romulus.c json.c zipx.c rapi.c ../common/scaler.c ../common/utils.c ../common/api.c "$WORK/platform/platform.c" \
+clang romulus.c json.c zipx.c rapi.c ../titleart/titleart_core.c ../titleart/titleart_gen.c -I../titleart ../common/scaler.c ../common/utils.c ../common/api.c "$WORK/platform/platform.c" \
 	-o "$WORK/romulus" -I. -I../common -I"$WORK/platform" -I/opt/homebrew/include -L/opt/homebrew/lib \
 	-DPLATFORM=\"macos\" -DUSE_SDL2 -Wno-builtin-macro-redefined -U__ARM_ARCH -D__ARM_ARCH=4 \
 	-O1 -g -std=gnu99 -fno-common -Wall -Wno-unused-function -Wno-tautological-constant-out-of-range-compare \

@@ -22,6 +22,7 @@
 #include "utils.h"
 #include "rapi.h"
 #include "zipx.h"
+#include "titleart_gen.h"
 
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -428,6 +429,7 @@ static void finish_download(void) {
 	}
 	sync(); // a ROM the user can see is a ROM that is on the card, even if the power goes now
 	ledger_add(LEDGER_PATH, rom.id);
+	if (TAGen_showArt()) TAGen_forRom(final_path); // the new game gets its title picture at once (see Tools > TitleArt)
 
 	const char* folder = strrchr(dir, '/');
 	char msg[400];
@@ -871,6 +873,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	stop_job();
+	TAGen_close();
 	unlink(list_tmp);
 	rromlist_free(&roms);
 	QuitSettings();

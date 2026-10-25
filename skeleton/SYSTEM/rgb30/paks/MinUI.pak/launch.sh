@@ -57,6 +57,13 @@ cd $(dirname "$0")
 
 #######################################
 
+# new games get a title picture (Tools > Settings > "Art for new games": Automatic): once per boot,
+# no screen, a few seconds at most
+TITLEART=$SDCARD_PATH/Tools/$PLATFORM/TitleArt.pak/titleart.elf
+if [ "$(cat $USERDATA_PATH/titleart-auto 2>/dev/null)" = "1" ] && [ -x "$TITLEART" ]; then
+	"$TITLEART" --auto > "$LOGS_PATH/titleart.txt" 2>&1
+fi
+
 EXEC_PATH=/tmp/minui_exec
 NEXT_PATH="/tmp/next"
 touch "$EXEC_PATH" && sync
