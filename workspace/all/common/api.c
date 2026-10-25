@@ -149,6 +149,35 @@ static int THEME_parse(char* text, ThemeColors* t, char* font, int font_size) {
 }
 // end of the theme file code
 
+// The flat-colored assets (pill ends, bars, dots...) are drawn from the sheet, not filled, so a theme
+// has to recolor them there: every visible pixel of the asset takes the new color, keeping its alpha.
+static void GFX_tintAssets(void) {
+	if (!gfx.assets || gfx.assets->format->BitsPerPixel!=32) return;
+	static const SDL_Color defaults[ASSET_COLORS] = {
+		[ASSET_WHITE_PILL]={TRIAD_WHITE}, [ASSET_BLACK_PILL]={TRIAD_BLACK}, [ASSET_DARK_GRAY_PILL]={TRIAD_DARK_GRAY},
+		[ASSET_OPTION]={TRIAD_DARK_GRAY}, [ASSET_BUTTON]={TRIAD_WHITE}, [ASSET_PAGE_BG]={TRIAD_WHITE},
+		[ASSET_STATE_BG]={TRIAD_WHITE}, [ASSET_PAGE]={TRIAD_BLACK}, [ASSET_BAR]={TRIAD_WHITE},
+		[ASSET_BAR_BG]={TRIAD_BLACK}, [ASSET_BAR_BG_MENU]={TRIAD_DARK_GRAY}, [ASSET_UNDERLINE]={TRIAD_GRAY},
+		[ASSET_DOT]={TRIAD_LIGHT_GRAY}, [ASSET_HOLE]={TRIAD_BLACK},
+	};
+	SDL_Surface* sheet = gfx.assets;
+	SDL_PixelFormat* fmt = sheet->format;
+	for (int i=0; i<ASSET_COLORS; i++) {
+		uint8_t r,g,b;
+		SDL_GetRGB(asset_rgbs[i], gfx.screen->format, &r, &g, &b);
+		if (r==defaults[i].r && g==defaults[i].g && b==defaults[i].b) continue; // unchanged
+		SDL_Rect rect = asset_rects[i];
+		for (int y=rect.y; y<rect.y+rect.h && y<sheet->h; y++) {
+			uint32_t* row = (uint32_t*)((uint8_t*)sheet->pixels + y*sheet->pitch);
+			for (int x=rect.x; x<rect.x+rect.w && x<sheet->w; x++) {
+				uint8_t pr,pg,pb,pa;
+				SDL_GetRGBA(row[x], fmt, &pr, &pg, &pb, &pa);
+				if (pa) row[x] = SDL_MapRGBA(fmt, r, g, b, pa);
+			}
+		}
+	}
+}
+
 static int _;
 
 SDL_Surface* GFX_init(int mode) {
@@ -222,6 +251,7 @@ SDL_Surface* GFX_init(int mode) {
 	sprintf(asset_path, RES_PATH "/assets@%ix.png", FIXED_SCALE);
 	if (!exists(asset_path)) LOG_info("missing assets, you're about to segfault dummy!\n");
 	gfx.assets = IMG_Load(asset_path);
+	GFX_tintAssets();
 	
 	TTF_Init();
 	const char* font_path = FONT_PATH;
