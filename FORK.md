@@ -260,3 +260,6 @@ The same screen as Tools > Info, so nobody has to know the Fn tap exists: fork b
 - **SELECT** in the launcher opens Tools from anywhere (`jumpToTools`).
 - **Title art**: the subtitle and the system tag are drawn at double size (2x2 cells).
 - Settings scrolls (5 rows at a time) now that it has more rows.
+
+## Web installer (docs/)
+`docs/index.html` + `docs/installer.js`: a static page (GitHub Pages, from the `docs` folder) that does what `tools/package/install.sh` does, in a Chromium browser. It downloads the latest release through the GitHub API (so the browser may follow the redirect), checks the `.sha256` and the package's own `SHA256SUMS`, then writes onto a card folder picked with `showDirectoryPicker`: backs up each replaced file to `.system/rgb30/backup-before-fork-<stamp>/`, adds new tools, retires `Power.pak`, creates `update.cfg` and `romulus.cfg` when missing, writes `fork-version.txt`. It only updates a card that already has MinUI (`.system/rgb30/bin`); a fresh card and Moss itself are not covered yet. Test: `tools/package/release.sh ../test-package v2099.01.01.0000` then `node docs/test/installer.test.mjs release-out/MinUIPlus-v2099.01.01.0000.tar.gz` (in-memory card, pretend GitHub).

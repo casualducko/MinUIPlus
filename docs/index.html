@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MinUIPlus Installer</title>
+<style>
+:root { --bg:#f6f5f2; --card:#fff; --ink:#1d1d1f; --muted:#6a6a70; --line:#dcdad4; --accent:#2f5bd8; --accent-ink:#fff; --ok:#1f7a3d; --bad:#b3261e; --code:#efede8; }
+@media (prefers-color-scheme: dark) { :root { --bg:#141416; --card:#1d1d20; --ink:#ececee; --muted:#9a9aa2; --line:#33333a; --accent:#6c8cff; --accent-ink:#0b0b10; --ok:#58c47a; --bad:#ff7b72; --code:#101012; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width:680px; margin:0 auto; padding:32px 16px 64px; }
+h1 { font-size:28px; margin:0 0 4px; }
+.sub { color:var(--muted); margin:0 0 28px; }
+.step { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:0 0 14px; }
+.step h2 { font-size:17px; margin:0 0 6px; display:flex; gap:10px; align-items:center; }
+.num { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-size:14px; font-weight:600; flex:none; }
+.step.off { opacity:.5; }
+p { margin:6px 0; }
+.muted { color:var(--muted); font-size:14px; }
+button { font:inherit; font-weight:600; background:var(--accent); color:var(--accent-ink); border:0; border-radius:8px; padding:10px 18px; cursor:pointer; margin-top:8px; }
+button:disabled { opacity:.45; cursor:default; }
+button.plain { background:transparent; color:var(--accent); border:1px solid var(--line); }
+#status { margin-top:10px; font-weight:600; }
+.ok { color:var(--ok); } .bad { color:var(--bad); }
+pre { background:var(--code); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12.5px; line-height:1.45; max-height:240px; overflow:auto; white-space:pre-wrap; word-break:break-all; margin:10px 0 0; }
+code { background:var(--code); padding:1px 5px; border-radius:4px; font-size:14px; }
+#unsupported { display:none; border:1px solid var(--bad); border-radius:12px; padding:14px 18px; margin:0 0 14px; background:var(--card); }
+a { color:var(--accent); }
+details { margin-top:18px; color:var(--muted); font-size:14px; }
+summary { cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+	<h1>MinUIPlus Installer</h1>
+	<p class="sub">Put the latest MinUIPlus on the games card of your Powkiddy RGB20SX, from this page.</p>
+
+	<div id="unsupported"><strong>This browser can't write to a card.</strong> Open this page in Chrome, Edge, Brave or another Chromium browser on a computer (not a phone).</div>
+
+	<section class="step" id="s1">
+		<h2><span class="num">1</span> Plug in the games card</h2>
+		<p>Take the card with your games and the <code>.system</code> folder (the one MinUI runs from) out of the RGB20SX and put it in your computer. This page is for a card that already has MinUI on it; it does not install Moss.</p>
+	</section>
+
+	<section class="step" id="s2">
+		<h2><span class="num">2</span> Choose the card</h2>
+		<p>Press the button and pick the card's top folder. The browser will ask to let this page edit it; that is only used to copy the update.</p>
+		<button id="pick">Choose the card…</button>
+		<div id="found" class="muted"></div>
+	</section>
+
+	<section class="step off" id="s3">
+		<h2><span class="num">3</span> Install</h2>
+		<p>Downloads the newest release from GitHub, checks it, backs up each file it replaces, then copies it onto the card. Your games, saves and settings are not touched.</p>
+		<button id="go" disabled>Install the latest MinUIPlus</button>
+		<div id="status"></div>
+		<pre id="log" hidden></pre>
+	</section>
+
+	<section class="step off" id="s4">
+		<h2><span class="num">4</span> Eject and play</h2>
+		<p>Eject the card from your computer before you pull it out, put it back in the RGB20SX, and turn it on. After this, <strong>Tools &gt; Update</strong> on the device keeps it current over Wi-Fi.</p>
+		<p class="muted" id="backupnote"></p>
+	</section>
+
+	<details>
+		<summary>Something went wrong, or I want to go back</summary>
+		<p>Every file it replaced was copied first to <code>.system/rgb30/backup-before-fork-&lt;date&gt;</code> on the card. To undo, copy those files back over the ones in the same place. Nothing on the other (Moss) card is touched.</p>
+		<p>The source for this page and the release packages are at <a id="repo" href="https://github.com/casualducko/MinUIPlus">github.com/casualducko/MinUIPlus</a>. Only the RGB20SX has been tested.</p>
+	</details>
+</main>
+
+<script type="module">
+import { downloadLatest, installOnCard, looksLikeMinUICard, DEFAULT_REPO } from './installer.js';
+
+const $ = id => document.getElementById(id);
+const enable = (id, on) => $(id).classList.toggle('off', !on);
+let card = null;
+
+if (!window.showDirectoryPicker) {
+	$('unsupported').style.display = 'block';
+	$('pick').disabled = true;
+}
+
+function say(text, cls) { const s = $('status'); s.textContent = text; s.className = cls || ''; }
+function log(text) { const l = $('log'); l.hidden = false; l.textContent += text + '\n'; l.scrollTop = l.scrollHeight; }
+
+$('pick').addEventListener('click', async () => {
+	try {
+		const handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'minuiplus-card' });
+		if (!(await looksLikeMinUICard(handle))) {
+			card = null;
+			$('go').disabled = true;
+			enable('s3', false);
+			$('found').innerHTML = '<span class="bad">That folder is not the MinUI card</span> (it has no <code>.system/rgb30/bin</code>). Pick the top folder of the card that holds <code>.system</code>.';
+			return;
+		}
+		card = handle;
+		$('found').innerHTML = '<span class="ok">Found a MinUI card:</span> ' + handle.name;
+		$('go').disabled = false;
+		enable('s3', true);
+	}
+	catch (e) { if (e.name !== 'AbortError') $('found').innerHTML = '<span class="bad">' + e.message + '</span>'; }
+});
+
+$('go').addEventListener('click', async () => {
+	if (!card) return;
+	$('go').disabled = true;
+	$('pick').disabled = true;
+	$('log').textContent = '';
+	try {
+		const pkg = await downloadLatest(DEFAULT_REPO, t => { say(t); log(t); });
+		say('Copying to the card… do not unplug it.');
+		const r = await installOnCard(card, pkg, log);
+		say('Installed ' + pkg.tag + ': ' + r.replaced + ' files replaced, ' + r.added + ' added.', 'ok');
+		$('backupnote').textContent = 'Backup of the replaced files: ' + r.backup;
+		enable('s4', true);
+	}
+	catch (e) {
+		say('Stopped: ' + e.message, 'bad');
+		log('ERROR: ' + e.message);
+		$('go').disabled = false;
+	}
+	$('pick').disabled = false;
+});
+</script>
+</body>
+</html>
