@@ -1060,8 +1060,13 @@ static int sshOn(void) {
 	on = 0;
 	static const char* files[] = { "/proc/net/tcp", "/proc/net/tcp6" };
 	for (int i=0; i<2 && !on; i++) {
-		char* text = allocFile((char*)files[i]);
-		if (text) { on = Net_listening(text, 22); free(text); }
+		FILE* f = fopen(files[i], "r"); // read in pieces: a file in /proc says its size is 0 (allocFile would see nothing)
+		if (!f) continue;
+		char text[16384];
+		size_t n = fread(text, 1, sizeof(text)-1, f);
+		fclose(f);
+		text[n] = '\0';
+		on = Net_listening(text, 22);
 	}
 	return on;
 }
