@@ -2,7 +2,7 @@
 # Runs the real Update tool on this computer against a mock GitHub (mock_github.py) with scripted buttons
 # and screenshots (script syntax as in run.sh). The staged package lands in the fake card's .userdata/macos/update.
 #   RES=/path/to/.system/res MODE=good tools/host-harness/update-run.sh "snap:home,A,snap:found,A,sleep:3000,snap:end"
-# Environment: RES (first time), MODE (good|badsum|badfile|badpath|none), TOKEN (written to update.cfg), INSTALLED (a version)
+# Environment: RESULT (ok|failed, with UPDATE_ARGS=--done), RES (first time), MODE (good|badsum|badfile|badpath|none), TOKEN (written to update.cfg), INSTALLED (a version)
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$here/../..
@@ -19,6 +19,7 @@ mkdir -p "$CARD/.userdata/shared/.minui" "$CARD/.userdata/macos" "$CARD/.system/
 rm -rf "$CARD/.userdata/macos/update"
 rm -f "$CARD/.system/macos/fork-version.txt" /tmp/update-ready
 [ -n "$INSTALLED" ] && printf '%s\n' "$INSTALLED" > "$CARD/.system/macos/fork-version.txt"
+[ -n "$RESULT" ] && { mkdir -p "$CARD/.userdata/macos/update"; echo "$RESULT" > "$CARD/.userdata/macos/update/result.txt"; }
 rm -f "$WORK/mock-github.log"
 python3 "$here/mock_github.py" "$WORK" "${MODE:-good}" > "$WORK/mock-github.log" 2>&1 &
 mock=$!

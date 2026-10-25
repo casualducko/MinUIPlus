@@ -213,15 +213,25 @@ static const char* prepare(void) {
 	return NULL;
 }
 
-static int doneMain(void) { // after install.sh: say how it went
+static int doneMain(void) { // after install.sh: say how it went; on success A restarts the device
 	char result[32] = "";
 	getFile(RESULT_FILE, result, sizeof(result));
 	readInstalled();
 	char msg[256];
-	if (!strncmp(result, "ok", 2)) snprintf(msg, sizeof(msg), "Updated to %s.\n\nTo use it, open any game or tool\nand come back, or restart the device.", installed[0] ? installed : "the new build");
-	else snprintf(msg, sizeof(msg), "The update stopped part way.\nYour old files are in the newest\nbackup-before-fork folder in .system/%s.", PLATFORM);
-	waitForA(msg);
-	return 0;
+	if (strncmp(result, "ok", 2)) {
+		snprintf(msg, sizeof(msg), "The update stopped part way.\nYour old files are in the newest\nbackup-before-fork folder in .system/%s.", PLATFORM);
+		waitForA(msg);
+		return 0;
+	}
+	snprintf(msg, sizeof(msg), "Updated to %s.", installed[0] ? installed : "the new build");
+	message(msg, (const char*[]){"A","REBOOT",NULL});
+	while (1) { // only A leaves: the new build is not fully in use until the device restarts
+		GFX_startFrame();
+		PAD_poll();
+		if (PAD_justPressed(BTN_A)) break;
+		GFX_sync();
+	}
+	return 1;
 }
 
 enum { ST_HOME, ST_RESULT };
@@ -234,7 +244,8 @@ int main(int argc, char* argv[]) {
 	InitSettings();
 	readConfig();
 	readInstalled();
-	if (argc>1 && !strcmp(argv[1], "--done")) { doneMain(); goto out; }
+	int reboot_now = 0;
+	if (argc>1 && !strcmp(argv[1], "--done")) { reboot_now = doneMain(); goto out; }
 	if (!Update_repoValid(repo)) { waitForA("update.cfg has a repo that is not\nlike owner/name."); goto out; }
 
 	int quit = 0, dirty = 1, show_setting = 0, state = ST_HOME;
@@ -310,5 +321,9 @@ out:
 	PWR_quit();
 	PAD_quit();
 	GFX_quit();
+	if (reboot_now) {
+		sync();
+		execlp("reboot", "reboot", (char*)NULL);
+	}
 	return EXIT_SUCCESS;
 }
