@@ -30,13 +30,15 @@
 typedef struct { char text[TA_LINE_MAX]; int w, h; uint8_t* a; } Raster;
 static TTF_Font* big_font = NULL;
 static TTF_Font* cell_font = NULL;
+static TTF_Font* big_fallback = NULL;  // for Japanese and the like: the same fonts' fallback (see GFX_renderText)
+static TTF_Font* cell_fallback = NULL;
 static Raster rasters[12];
 static int raster_next = 0;
 
 static Raster* rasterLine(const char* text) { // the line in big letters: its coverage, cropped
 	for (int i=0; i<12; i++) if (rasters[i].a && !strcmp(rasters[i].text, text)) return &rasters[i];
 	SDL_Color white = {255,255,255,0};
-	SDL_Surface* s = TTF_RenderUTF8_Blended(big_font, text, white);
+	SDL_Surface* s = GFX_renderTextWith(big_font, big_fallback, text, white);
 	if (!s) return NULL;
 	Uint32 amask = s->format->Amask, ashift = s->format->Ashift;
 	int x0 = s->w, y0 = s->h, x1 = -1, y1 = -1;
@@ -92,66 +94,93 @@ static void shrink(const Raster* r, int dw, int dh, uint8_t* out) { // box filte
 	}
 }
 
-typedef struct { char ch[TA_ROWS][TA_COLS]; uint8_t lv[TA_ROWS][TA_COLS]; } Grid; // lv: 0..100
-static void gridPut(Grid* g, int x, int y, char c, int lv) {
+#define CONT 0xFFFFFFFFu // the second column of a wide character
+typedef struct { uint32_t ch[TA_ROWS][TA_COLS]; uint8_t lv[TA_ROWS][TA_COLS]; } Grid; // lv: 0..100
+static void gridPut(Grid* g, int x, int y, uint32_t c, int lv) {
 	if (x>=0 && x<TA_COLS && y>=0 && y<TA_ROWS) { g->ch[y][x] = c; g->lv[y][x] = lv; }
 }
-static void gridText(Grid* g, int x, int y, const char* s, int lv) {
-	for (int i=0; s[i]; i++) gridPut(g, x+i, y, s[i], lv);
+static void gridText(Grid* g, int x, int y, const char* s, int lv) { // UTF-8; a wide character takes two columns
+	for (const char* p = s; *p; ) {
+		uint32_t cp;
+		int n = UTF8_next(p, &cp);
+		if (n<=0) break;
+		int w = TA_cellWidth(cp);
+		if (w==2 && x+1>=TA_COLS) break; // no room for the second half
+		gridPut(g, x, y, cp, lv);
+		if (w==2) gridPut(g, x+1, y, CONT, lv);
+		x += w;
+		p += n;
+	}
 }
 static void gridCenter(Grid* g, int y, const char* s, int lv) {
-	int len = strlen(s);
-	if (len>TA_COLS) len = TA_COLS;
-	gridText(g, (TA_COLS-len)/2, y, s, lv);
+	int cells = TA_cells(s);
+	if (cells>TA_COLS) cells = TA_COLS;
+	gridText(g, (TA_COLS-cells)/2, y, s, lv);
 }
 
-static uint8_t glyphs[128][CELL_W*CELL_H];
-static uint8_t glyph_ready[128];
-static const uint8_t* glyphFor(char c) { // a character's coverage, centered in a cell
-	unsigned char u = (unsigned char)c;
-	if (u>=128) u = '?';
-	if (glyph_ready[u]) return glyphs[u];
-	glyph_ready[u] = 1;
-	memset(glyphs[u], 0, sizeof(glyphs[u]));
-	if (u==' ') return glyphs[u];
+// a character's coverage, centered in its one or two cells (CELL_W px each)
+typedef struct { uint32_t cp; int cells; uint8_t cov[CELL_W*2*CELL_H]; } Glyph;
+static Glyph ascii_glyphs[128];
+static uint8_t ascii_ready[128];
+static Glyph other_glyphs[256];
+static int other_count = 0;
+static const Glyph* glyphFor(uint32_t cp) {
+	Glyph* gl;
+	if (cp<128) {
+		gl = &ascii_glyphs[cp];
+		if (ascii_ready[cp]) return gl;
+		ascii_ready[cp] = 1;
+	}
+	else {
+		for (int i=0; i<other_count; i++) if (other_glyphs[i].cp==cp) return &other_glyphs[i];
+		gl = &other_glyphs[other_count<256 ? other_count++ : 0]; // a full cache starts over at the front
+	}
+	memset(gl, 0, sizeof(*gl));
+	gl->cp = cp;
+	gl->cells = cp<0xFFFFFFFFu ? TA_cellWidth(cp) : 1;
+	if (cp==' ' || cp==CONT) return gl;
 	// the three marks the big letters are made of (FILL_BOTH, FILL_TOP, FILL_BOTTOM) are drawn here, so
 	// they are crisp and always fit their cell whatever the font; real H ' . in text come from the font
-	if (u==FILL_BOTH || u==FILL_TOP || u==FILL_BOTTOM) {
-		uint8_t* g = glyphs[u];
+	if (cp==FILL_BOTH || cp==FILL_TOP || cp==FILL_BOTTOM) {
 		for (int y=0; y<CELL_H; y++) for (int x=0; x<CELL_W; x++) {
 			int on = 0;
-			if (u==FILL_BOTH) on = ((x==1 || x==4) && y>=1 && y<=10) || ((x>=1 && x<=4) && (y==5 || y==6));
-			else if (u==FILL_TOP) on = (x==2 || x==3) && y>=1 && y<=4;
+			if (cp==FILL_BOTH) on = ((x==1 || x==4) && y>=1 && y<=10) || ((x>=1 && x<=4) && (y==5 || y==6));
+			else if (cp==FILL_TOP) on = (x==2 || x==3) && y>=1 && y<=4;
 			else on = (x==2 || x==3) && y>=9 && y<=10;
-			g[y*CELL_W + x] = on ? 255 : 0;
+			gl->cov[y*CELL_W*2 + x] = on ? 255 : 0;
 		}
-		return g;
+		return gl;
 	}
+	TTF_Font* use = NULL;
+	if (cp<0x80 || (cp<=0xFFFF && TTF_GlyphIsProvided(cell_font, (Uint16)cp))) use = cell_font;
+	else if (cell_fallback && cp<=0xFFFF && TTF_GlyphIsProvided(cell_fallback, (Uint16)cp)) use = cell_fallback;
+	if (!use) return gl; // nobody has it: a blank cell
 	SDL_Color white = {255,255,255,0};
-	SDL_Surface* s = TTF_RenderGlyph_Blended(cell_font, u, white);
-	if (!s) return glyphs[u];
+	SDL_Surface* s = TTF_RenderGlyph_Blended(use, (Uint16)cp, white);
+	if (!s) return gl;
 	Uint32 amask = s->format->Amask, ashift = s->format->Ashift;
-	int ox = (CELL_W - s->w) / 2;
-	int oy = 0;
+	int width = gl->cells * CELL_W;
+	int ox = (width - s->w) / 2;
+	int oy = (use==cell_font) ? 0 : TTF_FontAscent(cell_font) - TTF_FontAscent(use); // the same baseline
 	for (int y=0; y<s->h; y++) {
 		Uint32* row = (Uint32*)((Uint8*)s->pixels + y*s->pitch);
 		for (int x=0; x<s->w; x++) {
 			int cx = ox + x, cy = oy + y;
-			if (cx<0 || cx>=CELL_W || cy<0 || cy>=CELL_H) continue;
-			glyphs[u][cy*CELL_W + cx] = (row[x] & amask) >> ashift;
+			if (cx<0 || cx>=width || cy<0 || cy>=CELL_H) continue;
+			gl->cov[cy*CELL_W*2 + cx] = (row[x] & amask) >> ashift;
 		}
 	}
 	SDL_FreeSurface(s);
-	return glyphs[u];
+	return gl;
 }
 
 // the layout of one tile: the title in big letters, its subtitle in small ones, a rule and the system
 static void composeTile(const char* file, const char* badge, Grid* g) {
 	memset(g, 0, sizeof(*g));
-	for (int y=0; y<TA_ROWS; y++) memset(g->ch[y], ' ', TA_COLS);
+	for (int y=0; y<TA_ROWS; y++) for (int x=0; x<TA_COLS; x++) g->ch[y][x] = ' ';
 	char title[256], main[256], sub[256];
 	TA_title(file, title, sizeof(title));
-	title[80] = '\0'; // far longer than any tile can show
+	TA_truncate(title, 80); // far longer than any tile can show (and never cut inside a character)
 	TA_split(title, main, sizeof(main), sub, sizeof(sub));
 	char up[256];
 	snprintf(up, sizeof(up), "%s", sub);
@@ -160,7 +189,15 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 	int sub_count = up[0] ? TA_wrapPlain(up, TA_COLS-6, 2, sub_lines) : 0;
 	TA_Layout lay;
 	int max_rows = TA_ROWS - 8 - (sub_count ? sub_count + 1 : 0);
-	if (!TA_layout(main, TA_COLS-4, max_rows, lineAspect, NULL, &lay)) {
+	int wide = 0; // kana and kanji have strokes too fine for letters five rows high: those titles are plain text
+	for (const char* p = main; *p; ) {
+		uint32_t cp;
+		int n = UTF8_next(p, &cp);
+		if (n<=0) break;
+		if (TA_cellWidth(cp)==2) wide = 1;
+		p += n;
+	}
+	if (wide || !TA_layout(main, TA_COLS-4, max_rows, lineAspect, NULL, &lay)) {
 		// too long for letters this big: the whole title in plain characters instead, never a cut one
 		char upper[256];
 		snprintf(upper, sizeof(upper), "%s", main);
@@ -212,17 +249,20 @@ static int writeTile(const Grid* g, const char* path) { // 0 if the PNG is on di
 	memset(tile_pixels, 0, sizeof(tile_pixels));
 	SDL_Color bright = theme.white, dim = theme.dark_text;
 	for (int cy=0; cy<TA_ROWS; cy++) for (int cx=0; cx<TA_COLS; cx++) {
-		char c = g->ch[cy][cx];
-		if (c==' ') continue;
+		uint32_t cp = g->ch[cy][cx];
+		if (cp==' ' || cp==CONT) continue;
 		int lv = g->lv[cy][cx];
 		uint32_t r = dim.r + (bright.r - dim.r) * lv / 100;
 		uint32_t gg = dim.g + (bright.g - dim.g) * lv / 100;
 		uint32_t b = dim.b + (bright.b - dim.b) * lv / 100;
-		const uint8_t* cov = glyphFor(c);
-		for (int y=0; y<CELL_H; y++) for (int x=0; x<CELL_W; x++) {
-			uint32_t a = cov[y*CELL_W + x];
+		const Glyph* gl = glyphFor(cp);
+		int width = gl->cells * CELL_W;
+		for (int y=0; y<CELL_H; y++) for (int x=0; x<width; x++) {
+			uint32_t a = gl->cov[y*CELL_W*2 + x];
 			if (!a) continue;
-			uint32_t* p = &tile_pixels[(cy*CELL_H + y)*TILE + cx*CELL_W + x];
+			int px = cx*CELL_W + x;
+			if (px>=TILE) continue;
+			uint32_t* p = &tile_pixels[(cy*CELL_H + y)*TILE + px];
 			if (a > (*p >> 24)) *p = (a << 24) | (r << 16) | (gg << 8) | b;
 		}
 	}
@@ -242,13 +282,20 @@ int TAGen_open(void) {
 	if (!TTF_WasInit()) TTF_Init();
 	if (!big_font) big_font = TTF_OpenFont(FONT_PATH, BIG_PX);
 	if (!cell_font) cell_font = TTF_OpenFont(FONT_PATH, CELL_PX);
+	if (exists(FALLBACK_FONT_PATH)) {
+		if (!big_fallback) big_fallback = TTF_OpenFont(FALLBACK_FONT_PATH, BIG_PX);
+		if (!cell_fallback) cell_fallback = TTF_OpenFont(FALLBACK_FONT_PATH, CELL_PX);
+	}
 	return (big_font && cell_font) ? 0 : -1;
 }
 void TAGen_close(void) {
 	for (int i=0; i<12; i++) { free(rasters[i].a); rasters[i].a = NULL; rasters[i].text[0] = '\0'; }
 	if (big_font) { TTF_CloseFont(big_font); big_font = NULL; }
 	if (cell_font) { TTF_CloseFont(cell_font); cell_font = NULL; }
-	memset(glyph_ready, 0, sizeof(glyph_ready));
+	if (big_fallback) { TTF_CloseFont(big_fallback); big_fallback = NULL; }
+	if (cell_fallback) { TTF_CloseFont(cell_fallback); cell_fallback = NULL; }
+	memset(ascii_ready, 0, sizeof(ascii_ready));
+	other_count = 0;
 }
 int TAGen_write(const char* file, const char* badge, const char* art_path) {
 	if (TAGen_open()) return -1;

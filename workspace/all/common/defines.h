@@ -15,6 +15,7 @@
 #define SYSTEM_PATH SDCARD_PATH "/.system/" PLATFORM
 #define RES_PATH SDCARD_PATH "/.system/res"
 #define FONT_PATH RES_PATH "/BPreplayBold-unhinted.otf"
+#define FALLBACK_FONT_PATH RES_PATH "/fallback.ttf" // Japanese and punctuation for what the UI font lacks (Noto Sans JP, OFL)
 #define USERDATA_PATH SDCARD_PATH "/.userdata/" PLATFORM
 #define SHARED_USERDATA_PATH SDCARD_PATH "/.userdata/shared"
 #define PAKS_PATH SYSTEM_PATH "/paks"

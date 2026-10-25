@@ -3,6 +3,7 @@
 #include <strings.h>
 #include <ctype.h>
 #include "titleart_core.h"
+#include "utils.h" // UTF8_next
 
 static int ta_isExt(const char* s) { // 1 to 4 letters or digits
 	int n = 0;
@@ -111,33 +112,89 @@ int TA_wrapWords(const char* text, int n, char lines[][TA_LINE_MAX]) {
 	for (int l=0; l<n; l++) memcpy(lines[l], s.lines[l], TA_LINE_MAX);
 	return n;
 }
+int TA_cellWidth(uint32_t cp) { // columns a character takes: the wide East Asian ones are two
+	if ((cp>=0x1100 && cp<=0x115F) || (cp>=0x2E80 && cp<=0xA4CF) || (cp>=0xAC00 && cp<=0xD7A3) ||
+		(cp>=0xF900 && cp<=0xFAFF) || (cp>=0xFE30 && cp<=0xFE6F) || (cp>=0xFF00 && cp<=0xFF60) ||
+		(cp>=0xFFE0 && cp<=0xFFE6) || (cp>=0x20000 && cp<=0x3FFFD)) return 2;
+	return 1;
+}
+int TA_cells(const char* s) {
+	int cells = 0;
+	for (const char* p = s; *p; ) {
+		uint32_t cp;
+		int n = UTF8_next(p, &cp);
+		if (n<=0) break;
+		cells += TA_cellWidth(cp);
+		p += n;
+	}
+	return cells;
+}
+void TA_truncate(char* s, int max_bytes) { // cut at a character boundary, never in the middle of one
+	if (max_bytes<0) max_bytes = 0;
+	if ((int)strlen(s)<=max_bytes) return;
+	int keep = 0;
+	for (const char* p = s; *p && keep<max_bytes; ) {
+		uint32_t cp;
+		int n = UTF8_next(p, &cp);
+		if (n<=0 || keep+n>max_bytes) break;
+		keep += n;
+		p += n;
+	}
+	s[keep] = '\0';
+}
+// appends the characters of s[from..] that fit in `room` cells to out; returns the bytes taken
+static int ta_takeCells(const char* s, int room, char* out, size_t out_size) {
+	int taken = 0, cells = 0;
+	for (const char* p = s; *p; ) {
+		uint32_t cp;
+		int n = UTF8_next(p, &cp);
+		if (n<=0) break;
+		int w = TA_cellWidth(cp);
+		if (cells+w>room || (size_t)(taken+n)>=out_size) break;
+		memcpy(out+taken, p, n);
+		taken += n;
+		cells += w;
+		p += n;
+	}
+	out[taken] = '\0';
+	return taken;
+}
 int TA_wrapPlain(const char* text, int width, int max_lines, char lines[][TA_LINE_MAX]) {
 	char words[TA_MAX_WORDS][TA_LINE_MAX];
 	int count = ta_words(text, words);
 	int n = 0;
 	char cur[TA_LINE_MAX] = "";
 	char all[TA_MAX_LINES+8][TA_LINE_MAX];
+	#define TA_PUSH(s) do { if ((s)[0] && n<TA_MAX_LINES+7) snprintf(all[n++], TA_LINE_MAX, "%s", (s)); } while (0)
 	for (int i=0; i<count; i++) {
-		int add = (cur[0] ? 1 : 0) + (int)strlen(words[i]);
-		if ((int)strlen(cur) + add <= width) {
+		int wcells = TA_cells(words[i]);
+		int add = (cur[0] ? 1 : 0) + wcells;
+		if (TA_cells(cur) + add <= width) {
 			if (cur[0]) strcat(cur, " ");
 			strcat(cur, words[i]);
+			continue;
 		}
-		else {
-			if (cur[0] && n<TA_MAX_LINES+7) snprintf(all[n++], TA_LINE_MAX, "%s", cur);
-			snprintf(cur, sizeof(cur), "%s", words[i]);
+		TA_PUSH(cur);
+		cur[0] = '\0';
+		const char* rest = words[i];
+		while (TA_cells(rest) > width) { // a word wider than a line (Japanese titles have no spaces): broken between characters
+			char chunk[TA_LINE_MAX];
+			int took = ta_takeCells(rest, width, chunk, sizeof(chunk));
+			if (took<=0) { rest += strlen(rest); break; } // a character wider than the whole line: give up on it
+			TA_PUSH(chunk);
+			rest += took;
 		}
+		snprintf(cur, sizeof(cur), "%s", rest);
 	}
-	if (cur[0] && n<TA_MAX_LINES+7) snprintf(all[n++], TA_LINE_MAX, "%s", cur);
+	TA_PUSH(cur);
 	int out = n>max_lines ? max_lines : n;
 	for (int i=0; i<out; i++) snprintf(lines[i], TA_LINE_MAX, "%s", all[i]);
-	if (n>max_lines && out>0 && width>1) {
-		int len = strlen(lines[out-1]);
-		if (len>width-1) len = width-1;
-		lines[out-1][len] = '~';
-		lines[out-1][len+1] = '\0';
+	if (n>max_lines && out>0 && width>1) { // too much: the last line is cut and ends with ~
+		char cut[TA_LINE_MAX];
+		int took = ta_takeCells(lines[out-1], width-1, cut, sizeof(cut));
+		(void)took;
+		snprintf(lines[out-1], TA_LINE_MAX, "%s~", cut);
 	}
-	for (int i=0; i<out; i++) if ((int)strlen(lines[i])>width) lines[i][width] = '\0';
 	return out;
 }
 static int ta_layoutTry(char words[][TA_LINE_MAX], int count, int max_cols, int max_rows, float (*aspect)(const char*, void*), void* ctx, TA_Layout* best, int* have) {

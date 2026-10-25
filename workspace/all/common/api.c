@@ -50,6 +50,7 @@ void LOG_note(int level, const char* fmt, ...) {
 ///////////////////////////////
 
 uint32_t RGB_WHITE;
+static TTF_Font* fallback_fonts[4]; // the second font (see GFX_renderText), at the size of font.large, medium, small, tiny
 uint32_t RGB_BACKGROUND;
 uint32_t RGB_BLACK;
 uint32_t RGB_LIGHT_GRAY;
@@ -300,6 +301,12 @@ SDL_Surface* GFX_init(int mode) {
 	font.small 	= TTF_OpenFont(font_path, SCALE1(FONT_SMALL));
 	font.tiny 	= TTF_OpenFont(font_path, SCALE1(FONT_TINY));
 	
+	if (exists(FALLBACK_FONT_PATH)) { // for the characters the UI font lacks (see GFX_renderText)
+		fallback_fonts[0] = TTF_OpenFont(FALLBACK_FONT_PATH, SCALE1(FONT_LARGE));
+		fallback_fonts[1] = TTF_OpenFont(FALLBACK_FONT_PATH, SCALE1(FONT_MEDIUM));
+		fallback_fonts[2] = TTF_OpenFont(FALLBACK_FONT_PATH, SCALE1(FONT_SMALL));
+		fallback_fonts[3] = TTF_OpenFont(FALLBACK_FONT_PATH, SCALE1(FONT_TINY));
+	}
 	TTF_SetFontStyle(font.large, TTF_STYLE_BOLD);
 	TTF_SetFontStyle(font.medium, TTF_STYLE_BOLD);
 	TTF_SetFontStyle(font.small, TTF_STYLE_BOLD);
@@ -308,6 +315,7 @@ SDL_Surface* GFX_init(int mode) {
 	return gfx.screen;
 }
 void GFX_quit(void) {
+	for (int i=0; i<4; i++) { if (fallback_fonts[i]) TTF_CloseFont(fallback_fonts[i]); fallback_fonts[i] = NULL; }
 	TTF_CloseFont(font.large);
 	TTF_CloseFont(font.medium);
 	TTF_CloseFont(font.small);
@@ -371,10 +379,109 @@ void GFX_sync(void) {
 FALLBACK_IMPLEMENTATION int PLAT_supportsOverscan(void) { return 0; }
 FALLBACK_IMPLEMENTATION void PLAT_setEffectColor(int next_color) { }
 
+// Text with a second font behind the first: the UI font has no Japanese (or Chinese, or Korean), so a
+// game with such a title was blank. Each stretch of characters the font lacks is drawn from
+// .system/res/fallback.ttf (Noto Sans JP, subset) at the same size, and measured the same way, so
+// truncating to a width still works. Without that file everything is as before.
+TTF_Font* GFX_fallbackFont(TTF_Font* f) {
+	if (f==font.large) return fallback_fonts[0];
+	if (f==font.medium) return fallback_fonts[1];
+	if (f==font.small) return fallback_fonts[2];
+	if (f==font.tiny) return fallback_fonts[3];
+	return NULL;
+}
+static int GFX_glyphIn(TTF_Font* f, uint32_t cp) {
+	if (cp<0x80) return 1; // the plain letters are in the UI font
+	return cp<=0xFFFF && TTF_GlyphIsProvided(f, (Uint16)cp);
+}
+#define TEXT_MAX_RUNS 64
+typedef struct { int from, len; TTF_Font* font; } TextRun;
+// the runs of text that one font can draw: the first font where it has the character, else the second
+// (a character neither has goes to the first, which draws its blank box); at most TEXT_MAX_RUNS
+static int GFX_textRuns(TTF_Font* primary, TTF_Font* fb, const char* text, TextRun* runs) {
+	int count = 0;
+	for (int i=0; text[i]; ) {
+		uint32_t cp;
+		int n = UTF8_next(text+i, &cp);
+		if (n<=0) break;
+		TTF_Font* use = (GFX_glyphIn(primary, cp) || !GFX_glyphIn(fb, cp)) ? primary : fb;
+		if (count>0 && (runs[count-1].font==use || count>=TEXT_MAX_RUNS)) runs[count-1].len += n; // (the last run takes the rest of a very mixed text)
+		else { runs[count].from = i; runs[count].len = n; runs[count].font = use; count++; }
+		i += n;
+	}
+	return count;
+}
+static int GFX_needsFallback(TextRun* runs, int count, TTF_Font* primary) {
+	for (int i=0; i<count; i++) if (runs[i].font!=primary) return 1;
+	return 0;
+}
+int GFX_textWidthWith(TTF_Font* primary, TTF_Font* fb, const char* text) {
+	int w = 0;
+	if (!fb) { TTF_SizeUTF8(primary, text, &w, NULL); return w; }
+	TextRun runs[TEXT_MAX_RUNS];
+	int count = GFX_textRuns(primary, fb, text, runs);
+	if (!GFX_needsFallback(runs, count, primary)) { TTF_SizeUTF8(primary, text, &w, NULL); return w; }
+	for (int i=0; i<count; i++) {
+		char piece[512];
+		int len = MIN(runs[i].len, (int)sizeof(piece)-1);
+		memcpy(piece, text + runs[i].from, len);
+		piece[len] = '\0';
+		int pw = 0;
+		TTF_SizeUTF8(runs[i].font, piece, &pw, NULL);
+		w += pw;
+	}
+	return w;
+}
+int GFX_textWidth(TTF_Font* font_, const char* text) { return GFX_textWidthWith(font_, GFX_fallbackFont(font_), text); }
+SDL_Surface* GFX_renderTextWith(TTF_Font* primary, TTF_Font* fb, const char* text, SDL_Color color) {
+	if (!fb || !text || !text[0]) return TTF_RenderUTF8_Blended(primary, text, color);
+	TextRun runs[TEXT_MAX_RUNS];
+	int count = GFX_textRuns(primary, fb, text, runs);
+	if (!GFX_needsFallback(runs, count, primary)) return TTF_RenderUTF8_Blended(primary, text, color);
+	SDL_Surface* pieces[TEXT_MAX_RUNS];
+	int total_w = 0, max_ascent = 0, height = 0;
+	for (int i=0; i<count; i++) {
+		char piece[512];
+		int len = MIN(runs[i].len, (int)sizeof(piece)-1);
+		memcpy(piece, text + runs[i].from, len);
+		piece[len] = '\0';
+		pieces[i] = TTF_RenderUTF8_Blended(runs[i].font, piece, color);
+		if (pieces[i]) {
+			total_w += pieces[i]->w;
+			max_ascent = MAX(max_ascent, TTF_FontAscent(runs[i].font));
+		}
+	}
+	for (int i=0; i<count; i++) {
+		if (!pieces[i]) continue;
+		height = MAX(height, (max_ascent - TTF_FontAscent(runs[i].font)) + pieces[i]->h);
+	}
+	SDL_Surface* out = (total_w>0 && height>0) ? SDL_CreateRGBSurface(SDL_SWSURFACE, total_w, height, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000) : NULL;
+	if (out) {
+		SDL_FillRect(out, NULL, 0); // transparent
+		int x = 0;
+		for (int i=0; i<count; i++) {
+			SDL_Surface* s = pieces[i];
+			if (!s) continue;
+			int y0 = max_ascent - TTF_FontAscent(runs[i].font);
+			if (s->format->BitsPerPixel==32) {
+				for (int y=0; y<s->h && y0+y<out->h; y++) {
+					uint32_t* src = (uint32_t*)((uint8_t*)s->pixels + y*s->pitch);
+					uint32_t* dst = (uint32_t*)((uint8_t*)out->pixels + (y0+y)*out->pitch);
+					for (int xx=0; xx<s->w; xx++) if (src[xx]>>24) dst[x+xx] = src[xx]; // the runs don't overlap: a copy
+				}
+			}
+			x += s->w;
+		}
+	}
+	for (int i=0; i<count; i++) if (pieces[i]) SDL_FreeSurface(pieces[i]);
+	return out ? out : TTF_RenderUTF8_Blended(primary, text, color);
+}
+SDL_Surface* GFX_renderText(TTF_Font* font_, const char* text, SDL_Color color) { return GFX_renderTextWith(font_, GFX_fallbackFont(font_), text, color); }
+
 int GFX_truncateText(TTF_Font* font, const char* in_name, char* out_name, int max_width, int padding) {
 	int text_width;
 	snprintf(out_name, 256, "%s", in_name); // NOTE: out_name needs to be at least 256 bytes
-	TTF_SizeUTF8(font, out_name, &text_width, NULL);
+	text_width = GFX_textWidth(font, out_name);
 	text_width += padding;
 	
 	while (text_width>max_width) {
@@ -385,7 +492,7 @@ int GFX_truncateText(TTF_Font* font, const char* in_name, char* out_name, int ma
 		while (cut>0 && (out_name[cut] & 0xC0)==0x80) cut -= 1; // don't split a multi-byte character
 		strcpy(&out_name[cut], "...");
 		
-		TTF_SizeUTF8(font, out_name, &text_width, NULL);
+		text_width = GFX_textWidth(font, out_name);
 		text_width += padding;
 	}
 	
@@ -414,18 +521,18 @@ int GFX_truncateUniqueText(TTF_Font* font, const char* name, const char* unique,
 	}
 	if (!tag[0]) snprintf(tag, sizeof(tag), "%s", alt);
 	int alt_width;
-	TTF_SizeUTF8(font, tag, &alt_width, NULL);
+	alt_width = GFX_textWidth(font, tag);
 	if (alt_width > max_width * 55 / 100) {
 		char cut[256];
 		GFX_truncateText(font, tag, cut, max_width * 55 / 100, 0);
 		snprintf(tag, sizeof(tag), "%s", cut);
-		TTF_SizeUTF8(font, tag, &alt_width, NULL);
+		alt_width = GFX_textWidth(font, tag);
 	}
 	GFX_truncateText(font, name, out_name, max_width-alt_width, padding);
 	snprintf(out_unique, 256, "%s%s", out_name, tag);
 	
 	int text_width;
-	TTF_SizeUTF8(font, out_unique, &text_width, NULL);
+	text_width = GFX_textWidth(font, out_unique);
 	return text_width + padding;
 }
 int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines) {
@@ -436,7 +543,7 @@ int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines) {
 	char* line = str;
 	char buffer[MAX_PATH];
 	
-	TTF_SizeUTF8(font, line, &line_width, NULL);
+	line_width = GFX_textWidth(font, line);
 	if (line_width<=max_width) {
 		line_width = GFX_truncateText(font,line,buffer,max_width,0);
 		strcpy(line,buffer);
@@ -451,7 +558,7 @@ int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines) {
 		tmp = strchr(tmp, ' ');
 		if (!tmp) {
 			if (prev) {
-				TTF_SizeUTF8(font, line, &line_width, NULL);
+				line_width = GFX_textWidth(font, line);
 				if (line_width>=max_width) {
 					if (line_width>max_line_width) max_line_width = line_width;
 					prev[0] = '\n';
@@ -462,7 +569,7 @@ int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines) {
 		}
 		tmp[0] = '\0';
 		
-		TTF_SizeUTF8(font, line, &line_width, NULL);
+		line_width = GFX_textWidth(font, line);
 
 		if (line_width>=max_width && prev) { // wrap (a first word that is too wide has no earlier space to wrap at)
 			if (line_width>max_line_width) max_line_width = line_width;
@@ -863,7 +970,7 @@ void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_
 		line[len] = '\0';
 		
 		if (len) {
-			text = TTF_RenderUTF8_Blended(font, line, COLOR_WHITE);
+			text = GFX_renderText(font, line, COLOR_WHITE);
 			if (text) {
 				int x = dst_rect->x;
 				x += (dst_rect->w - text->w) / 2;
@@ -1159,7 +1266,7 @@ void GFX_sizeText(TTF_Font* font, char* str, int leading, int* w, int* h) {
 		
 		if (len) {
 			int lw;
-			TTF_SizeUTF8(font, line, &lw, NULL);
+			lw = GFX_textWidth(font, line);
 			if (lw>mw) mw = lw;
 		}
 	}
@@ -1195,7 +1302,7 @@ void GFX_blitText(TTF_Font* font, char* str, int leading, SDL_Color color, SDL_S
 		}
 		
 		if (len) {
-			text = TTF_RenderUTF8_Blended(font, line, color);
+			text = GFX_renderText(font, line, color);
 			SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){x+((dst_rect->w-text->w)/2),y+(i*leading)});
 			SDL_FreeSurface(text);
 		}

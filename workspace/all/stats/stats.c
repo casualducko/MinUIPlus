@@ -43,7 +43,7 @@ static void sortRecords(void) {
 }
 static void text(SDL_Surface* screen, TTF_Font* f, const char* s, SDL_Color color, int x, int y, int max_w, int right_align) {
 	if (!s || !*s) return;
-	SDL_Surface* t = TTF_RenderUTF8_Blended(f, s, color);
+	SDL_Surface* t = GFX_renderText(f, s, color);
 	if (!t) return;
 	int w = MIN(t->w, max_w);
 	SDL_BlitSurface(t, &(SDL_Rect){0,0,w,t->h}, screen, &(SDL_Rect){right_align ? x-w : x, y});

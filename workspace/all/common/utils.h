@@ -19,6 +19,9 @@ void trimTrailingNewlines(char* line);
 void trimSortingMeta(char** str);
 
 int exists(char* path);
+// One UTF-8 character: its code point in *cp and the number of bytes it took (1 to 4). Anything that is not
+// valid UTF-8 (a stray byte, a cut sequence, an overlong form) is one byte and U+FFFD, so a caller always advances.
+int UTF8_next(const char* s, uint32_t* cp);
 // A random game: played[i] is 1 for a game that has been played; the pick is among those that have not
 // (any, if all have). state is the generator's (xorshift32; start it from the clock, never 0).
 int Random_pick(const unsigned char* played, int count, uint32_t* state); // an index, or -1 when count<=0

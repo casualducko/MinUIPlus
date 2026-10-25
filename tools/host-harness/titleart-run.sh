@@ -24,7 +24,7 @@ python3 - "$CARD" <<'PY'
 import os, sys
 card = sys.argv[1]
 games = {
- "GBA (MGBA)": ["Apotris.gba", "Pokemon ROWE (v2.02).gba", "Pokemon Heart and Soul (v1.2.1).gba"],
+ "GBA (MGBA)": ["Apotris.gba", "Pokemon ROWE (v2.02).gba", "Pokemon Heart and Soul (v1.2.1).gba", "ポケットモンスター エメラルド.gba", "ゼルダの伝説 神々のトライフォース.gba", "ロックマンX - ドクターワイリーの罠.gba", "星のカービィ 夢の泉の物語.gba", "スーパーマリオランド２ - 6つの金貨 (Japan).gba", "ドラゴンクエストモンスターズ キャラバンハート 特別版 ダブルパック.gba"],
  "Genesis (MD)": ["Yazzie.bin", "Rocket Knight Adventures.md", "NHL 95 All-Time (Widescreen).bin"],
  "SNES (SFC)": ["Mega Man X.sfc", "Legend of Zelda - 18 Hours Past (v1.12).sfc", "Illusion of Gaia Retranslated (v1.1).sfc", "Legend of Zelda, The (USA).sfc"],
  "GBC (GBC)": ["Dragon's Lair.gbc", "Super Mario Land 2 DX - 6 Golden Coins.gb", "Pocket Bomberman.gbc", "Donkey Kong.gb"],

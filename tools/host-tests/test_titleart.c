@@ -1,6 +1,8 @@
 // the title art logic (titleart_core.c): title cleanup, wrapping, layout, packing
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
+#include "gen/utf8.inc"
 #include "titleart_core.c"
 static int fails = 0;
 #define CHECK(c, msg) do { int sane = (c); printf("%s  %s\n", sane?"ok  ":"FAIL", msg); if (!sane) fails++; } while(0)
@@ -44,7 +46,8 @@ int main(void) {
 	CHECK(TA_wrapPlain("SYMPHONY OF THE NIGHT", 12, 2, lines)==2 && !strcmp(lines[0], "SYMPHONY OF") && !strcmp(lines[1], "THE NIGHT"), "plain wrap");
 	CHECK(TA_wrapPlain("ONE TWO THREE FOUR FIVE SIX SEVEN", 10, 2, lines)==2 && lines[1][strlen(lines[1])-1]=='~', "too many lines: the last is cut with ~");
 	CHECK(TA_wrapPlain("SHORT", 20, 2, lines)==1 && !strcmp(lines[0], "SHORT"), "one line");
-	CHECK(TA_wrapPlain("SUPERCALIFRAGILISTICEXPIALIDOCIOUS", 10, 2, lines)==1 && strlen(lines[0])<=10, "a word wider than the line is cut");
+	CHECK(TA_wrapPlain("SUPERCALIFRAGILISTICEXPIALIDOCIOUS", 10, 5, lines)==4 && !strcmp(lines[0], "SUPERCALIF") && !strcmp(lines[3], "IOUS"), "a word wider than the line is broken into lines");
+	CHECK(TA_wrapPlain("SUPERCALIFRAGILISTICEXPIALIDOCIOUS", 10, 2, lines)==2 && !strcmp(lines[1], "RAGILISTI~"), "and cut with ~ when there are too many");
 	CHECK(TA_wrapPlain("", 10, 2, lines)==0, "empty plain");
 
 	TA_Layout lay;

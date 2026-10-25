@@ -674,3 +674,23 @@ int Random_pick(const unsigned char* played, int count, uint32_t* state) {
 	return count-1; // not reached
 }
 // end of the random game code
+
+// UTF-8 (see utils.h)
+int UTF8_next(const char* s, uint32_t* cp) {
+	const unsigned char* p = (const unsigned char*)s;
+	*cp = 0xFFFD;
+	if (!p[0]) return 0;
+	if (p[0]<0x80) { *cp = p[0]; return 1; }
+	int n = (p[0]&0xE0)==0xC0 ? 2 : (p[0]&0xF0)==0xE0 ? 3 : (p[0]&0xF8)==0xF0 ? 4 : 0;
+	if (!n) return 1; // a continuation byte or 0xF8 and up on its own
+	uint32_t v = p[0] & (n==2 ? 0x1F : n==3 ? 0x0F : 0x07);
+	for (int i=1; i<n; i++) {
+		if ((p[i]&0xC0)!=0x80) return 1; // cut short
+		v = (v<<6) | (p[i]&0x3F);
+	}
+	if ((n==2 && v<0x80) || (n==3 && v<0x800) || (n==4 && v<0x10000)) return 1; // overlong
+	if (v>0x10FFFF || (v>=0xD800 && v<=0xDFFF)) return 1; // not a character
+	*cp = v;
+	return n;
+}
+// end of the UTF-8 code

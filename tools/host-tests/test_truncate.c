@@ -17,6 +17,7 @@ static int valid_utf8(const char* s) {
 	}
 	return 1;
 }
+static int GFX_textWidth(TTF_Font* f, const char* t) { int w = 0; TTF_SizeUTF8(f, t, &w, NULL); return w; } // no fallback font in the tests
 #include "gen/GFX_truncate.inc"
 
 static int fails = 0;

@@ -10,6 +10,7 @@ static int TTF_SizeUTF8(TTF_Font* f, const char* t, int* w, int* h) {
 	int n=0; for (const unsigned char* p=(const unsigned char*)t; *p; p++) if ((*p&0xC0)!=0x80) n++;
 	if (w) *w = n*10; return 0;
 }
+static int GFX_textWidth(TTF_Font* f, const char* t) { int w = 0; TTF_SizeUTF8(f, t, &w, NULL); return w; } // no fallback font in the tests
 #include "gen/GFX_truncate.inc"
 #include "gen/GFX_wrapText.inc"
 

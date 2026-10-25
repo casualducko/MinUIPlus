@@ -300,7 +300,7 @@ static void op_step(void) {
 
 static void blit_text(TTF_Font* ttf, const char* text, SDL_Color color, int x, int y) {
 	if (!text || !*text) return;
-	SDL_Surface* s = TTF_RenderUTF8_Blended(ttf, text, color);
+	SDL_Surface* s = GFX_renderText(ttf, text, color);
 	if (!s) return;
 	SDL_BlitSurface(s, NULL, screen, &(SDL_Rect){x, y});
 	SDL_FreeSurface(s);
@@ -328,7 +328,7 @@ static int draw_row(int j, int selected, const char* name, const char* value, in
 		int room = mw - pill_w - SCALE1(BUTTON_PADDING*2);
 		if (room>SCALE1(BUTTON_PADDING*2)) {
 			GFX_truncateText(font.medium, value, v, room, 0);
-			SDL_Surface* t = TTF_RenderUTF8_Blended(font.medium, v, COLOR_WHITE);
+			SDL_Surface* t = GFX_renderText(font.medium, v, COLOR_WHITE);
 			if (t) {
 				SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){ox + mw - t->w - SCALE1(BUTTON_PADDING), y + (ROW_H - t->h)/2});
 				SDL_FreeSurface(t);
@@ -413,7 +413,7 @@ static void draw_networks(int ow) {
 		int mw = screen->w - SCALE1(PADDING*2);
 		draw_row(j, i==sel_net, n->ssid, "", mw * 55 / 100);
 		if (*tag) {
-			SDL_Surface* t = TTF_RenderUTF8_Blended(font.medium, tag, i==sel_net ? COLOR_WHITE : COLOR_GRAY);
+			SDL_Surface* t = GFX_renderText(font.medium, tag, i==sel_net ? COLOR_WHITE : COLOR_GRAY);
 			if (t) {
 				SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){screen->w - SCALE1(PADDING + BUTTON_PADDING + 72) - t->w, y + (ROW_H - t->h)/2});
 				SDL_FreeSurface(t);
@@ -478,7 +478,7 @@ static void draw_keyboard(int ow) {
 			int on = (kb_y==r && kb_x==c);
 			SDL_Rect cell = { grid_x + c*cell_w + SCALE1(2), grid_y + r*cell_h, cell_w - SCALE1(4), cell_h - SCALE1(4) };
 			if (on) GFX_fillCapsule(screen, cell, SDL_MapRGB(screen->format, 0xff, 0xff, 0xff));
-			SDL_Surface* t = TTF_RenderUTF8_Blended(font.large, ch[0]==' ' ? "_" : ch, on ? COLOR_BLACK : COLOR_WHITE);
+			SDL_Surface* t = GFX_renderText(font.large, ch[0]==' ' ? "_" : ch, on ? COLOR_BLACK : COLOR_WHITE);
 			if (t) {
 				SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){cell.x + (cell.w - t->w)/2, cell.y + (cell.h - t->h)/2});
 				SDL_FreeSurface(t);
@@ -492,7 +492,7 @@ static void draw_keyboard(int ow) {
 		int on = (kb_y==4 && cur==b);
 		SDL_Rect cell = { grid_x + b*2*cell_w + SCALE1(2), grid_y + 4*cell_h, 2*cell_w - SCALE1(4), cell_h - SCALE1(4) };
 		if (on) GFX_fillCapsule(screen, cell, SDL_MapRGB(screen->format, 0xff, 0xff, 0xff));
-		SDL_Surface* t = TTF_RenderUTF8_Blended(font.medium, actions[b], on ? COLOR_BLACK : COLOR_WHITE);
+		SDL_Surface* t = GFX_renderText(font.medium, actions[b], on ? COLOR_BLACK : COLOR_WHITE);
 		if (t) {
 			SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){cell.x + (cell.w - t->w)/2, cell.y + (cell.h - t->h)/2});
 			SDL_FreeSurface(t);

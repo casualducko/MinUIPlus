@@ -487,7 +487,7 @@ static int list_rows(void) { return MAIN_ROW_COUNT - 1; } // the first row is th
 
 static void blit_text(TTF_Font* ttf, const char* text, SDL_Color color, int x, int y, int max_w) {
 	if (!text || !*text) return;
-	SDL_Surface* s = TTF_RenderUTF8_Blended(ttf, text, color);
+	SDL_Surface* s = GFX_renderText(ttf, text, color);
 	if (!s) return;
 	SDL_BlitSurface(s, &(SDL_Rect){0,0,MIN(s->w, max_w),s->h}, screen, &(SDL_Rect){x,y});
 	SDL_FreeSurface(s);
@@ -506,7 +506,7 @@ static void draw_row(int j, int selected, const char* text, const char* right, i
 	int right_w = 0;
 	SDL_Surface* rs = NULL;
 	if (right && *right) {
-		rs = TTF_RenderUTF8_Blended(font.small, right, selected ? COLOR_BLACK : COLOR_DARK_TEXT);
+		rs = GFX_renderText(font.small, right, selected ? COLOR_BLACK : COLOR_DARK_TEXT);
 		if (rs) right_w = rs->w + SCALE1(BUTTON_PADDING);
 	}
 	if (selected) {
@@ -601,7 +601,7 @@ static void draw_osk(void) {
 			int on = (osk_y==r && osk_x==c);
 			if (on) GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){x+2, y, cell_w-4, ROW_H});
 			char ch[2] = { osk_rows[r][c], 0 };
-			SDL_Surface* s = TTF_RenderUTF8_Blended(font.large, ch, on ? COLOR_BLACK : COLOR_WHITE);
+			SDL_Surface* s = GFX_renderText(font.large, ch, on ? COLOR_BLACK : COLOR_WHITE);
 			if (s) { SDL_BlitSurface(s, NULL, screen, &(SDL_Rect){x+(cell_w-s->w)/2, y+4}); SDL_FreeSurface(s); }
 		}
 	}
@@ -614,7 +614,7 @@ static void draw_osk(void) {
 		int ww = widths[b]*cell_w - 4;
 		int on = (osk_y==4 && cur==b);
 		GFX_blitPill(on ? ASSET_WHITE_PILL : ASSET_DARK_GRAY_PILL, screen, &(SDL_Rect){x+2, y, ww, ROW_H});
-		SDL_Surface* s = TTF_RenderUTF8_Blended(font.medium, names[b], on ? COLOR_BLACK : COLOR_WHITE);
+		SDL_Surface* s = GFX_renderText(font.medium, names[b], on ? COLOR_BLACK : COLOR_WHITE);
 		if (s) { SDL_BlitSurface(s, NULL, screen, &(SDL_Rect){x+2+(ww-s->w)/2, y+(ROW_H-s->h)/2}); SDL_FreeSurface(s); }
 	}
 	GFX_blitButtonGroup((char*[]){"START","SEARCH",NULL}, 0, screen, 0);

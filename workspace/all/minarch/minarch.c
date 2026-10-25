@@ -2311,7 +2311,7 @@ static void MSG_init(void) {
 	char* c;
 	int i = 0;
 	while ((c = chars[i])) {
-		digit = TTF_RenderUTF8_Blended(font.tiny, c, COLOR_WHITE);
+		digit = GFX_renderText(font.tiny, c, COLOR_WHITE);
 		SDL_BlitSurface(digit, NULL, digits, &(SDL_Rect){ (i * SCALE1(DIGIT_WIDTH)) + (SCALE1(DIGIT_WIDTH) - digit->w)/2, (SCALE1(DIGIT_HEIGHT) - digit->h)/2});
 		SDL_FreeSurface(digit);
 		i += 1;
@@ -4472,7 +4472,7 @@ static int Menu_options(MenuList* list) {
 						text_color = COLOR_BLACK;
 						if (item->desc) desc = item->desc;
 					}
-					text = TTF_RenderUTF8_Blended(font.large, name, text_color);
+					text = GFX_renderText(font.large, name, text_color);
 					SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){ox+SCALE1(BUTTON_PADDING), y+4});
 					SDL_FreeSurface(text);
 					
@@ -4481,7 +4481,7 @@ static int Menu_options(MenuList* list) {
 						int room = mw - pill_w - SCALE1(BUTTON_PADDING*2);
 						if (room>SCALE1(BUTTON_PADDING*2)) {
 							GFX_truncateText(font.medium, item->values[item->value], value, room, 0);
-							text = TTF_RenderUTF8_Blended(font.medium, value, COLOR_WHITE); // always white
+							text = GFX_renderText(font.medium, value, COLOR_WHITE); // always white
 							SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
 								ox + mw - text->w - SCALE1(BUTTON_PADDING),
 								y + (row_h - text->h) / 2
@@ -4968,7 +4968,7 @@ static void Menu_loop(void) {
 			max_width = MIN(max_width, text_width);
 
 			SDL_Surface* text;
-			text = TTF_RenderUTF8_Blended(font.large, display_name, COLOR_WHITE);
+			text = GFX_renderText(font.large, display_name, COLOR_WHITE);
 			GFX_blitPill(ASSET_BLACK_PILL, screen, &(SDL_Rect){
 				SCALE1(PADDING),
 				SCALE1(PADDING),
@@ -5005,7 +5005,7 @@ static void Menu_loop(void) {
 							screen->w - SCALE1(PADDING * 2),
 							SCALE1(PILL_SIZE)
 						});
-						text = TTF_RenderUTF8_Blended(font.large, disc_name, COLOR_WHITE);
+						text = GFX_renderText(font.large, disc_name, COLOR_WHITE);
 						SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
 							screen->w - SCALE1(PADDING + BUTTON_PADDING) - text->w,
 							SCALE1(oy + PADDING + 4)
@@ -5013,7 +5013,7 @@ static void Menu_loop(void) {
 						SDL_FreeSurface(text);
 					}
 					
-					TTF_SizeUTF8(font.large, item, &ow, NULL);
+					ow = GFX_textWidth(font.large, item);
 					ow += SCALE1(BUTTON_PADDING*2);
 					
 					// pill
@@ -5027,7 +5027,7 @@ static void Menu_loop(void) {
 				}
 				else {
 					// shadow
-					text = TTF_RenderUTF8_Blended(font.large, item, COLOR_BLACK);
+					text = GFX_renderText(font.large, item, COLOR_BLACK);
 					SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
 						SCALE1(2 + PADDING + BUTTON_PADDING),
 						SCALE1(1 + PADDING + oy + (i * PILL_SIZE) + 4)
@@ -5036,7 +5036,7 @@ static void Menu_loop(void) {
 				}
 				
 				// text
-				text = TTF_RenderUTF8_Blended(font.large, item, text_color);
+				text = GFX_renderText(font.large, item, text_color);
 				SDL_BlitSurface(text, NULL, screen, &(SDL_Rect){
 					SCALE1(PADDING + BUTTON_PADDING),
 					SCALE1(oy + PADDING + (i * PILL_SIZE) + 4)

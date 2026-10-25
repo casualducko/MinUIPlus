@@ -187,6 +187,12 @@ enum {
 int GFX_getVsync(void);
 void GFX_setVsync(int vsync);
 
+// text with the characters the UI font lacks (Japanese...) drawn from a second font, .system/res/fallback.ttf
+SDL_Surface* GFX_renderText(TTF_Font* font, const char* text, SDL_Color color); // like TTF_RenderUTF8_Blended
+int GFX_textWidth(TTF_Font* font, const char* text); // like TTF_SizeUTF8's width
+SDL_Surface* GFX_renderTextWith(TTF_Font* font, TTF_Font* fallback, const char* text, SDL_Color color); // for a font that is not font.large...
+int GFX_textWidthWith(TTF_Font* font, TTF_Font* fallback, const char* text);
+TTF_Font* GFX_fallbackFont(TTF_Font* font); // the second font at the size of font.large/medium/small/tiny, else NULL
 int GFX_truncateText(TTF_Font* font, const char* in_name, char* out_name, int max_width, int padding); // returns final width
 int GFX_truncateUniqueText(TTF_Font* font, const char* name, const char* unique, char* out_name, char* out_unique, int max_width, int padding); // truncates name to leave room for the end of unique, returns the final width of unique
 int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines);

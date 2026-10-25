@@ -1660,13 +1660,13 @@ int main (int argc, char *argv[]) {
 					char* extra_val = PLAT_getModel();
 					if (!extra_val || !extra_val[0]) extra_val = "unknown";
 					
-					SDL_Surface* release_txt = TTF_RenderUTF8_Blended(font.large, "Release", COLOR_DARK_TEXT);
-					SDL_Surface* version_txt = TTF_RenderUTF8_Blended(font.large, release, COLOR_WHITE);
-					SDL_Surface* commit_txt = TTF_RenderUTF8_Blended(font.large, "Commit", COLOR_DARK_TEXT);
-					SDL_Surface* hash_txt = TTF_RenderUTF8_Blended(font.large, commit, COLOR_WHITE);
+					SDL_Surface* release_txt = GFX_renderText(font.large, "Release", COLOR_DARK_TEXT);
+					SDL_Surface* version_txt = GFX_renderText(font.large, release, COLOR_WHITE);
+					SDL_Surface* commit_txt = GFX_renderText(font.large, "Commit", COLOR_DARK_TEXT);
+					SDL_Surface* hash_txt = GFX_renderText(font.large, commit, COLOR_WHITE);
 					
-					SDL_Surface* key_txt = TTF_RenderUTF8_Blended(font.large, extra_key, COLOR_DARK_TEXT);
-					SDL_Surface* val_txt = TTF_RenderUTF8_Blended(font.large, extra_val, COLOR_WHITE);
+					SDL_Surface* key_txt = GFX_renderText(font.large, extra_key, COLOR_DARK_TEXT);
+					SDL_Surface* val_txt = GFX_renderText(font.large, extra_val, COLOR_WHITE);
 					
 					int l_width = 0;
 					int r_width = 0;
@@ -1746,7 +1746,7 @@ int main (int argc, char *argv[]) {
 							selected_full = 1; // ... and when that is wider than the pill, it scrolls (below)
 						}
 						else if (entry_unique) {
-							SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, unique_name, COLOR_DARK_TEXT);
+							SDL_Surface* text = GFX_renderText(font.large, unique_name, COLOR_DARK_TEXT);
 							SDL_BlitSurface(text, &(SDL_Rect){
 								0,
 								0,
@@ -1758,7 +1758,7 @@ int main (int argc, char *argv[]) {
 							});
 							SDL_FreeSurface(text);
 						}
-						SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, selected_full ? (entry_unique ? entry_unique : entry_name) : display_name, text_color);
+						SDL_Surface* text = GFX_renderText(font.large, selected_full ? (entry_unique ? entry_unique : entry_name) : display_name, text_color);
 						int clip_w = max_width-SCALE1(BUTTON_PADDING*2);
 						int src_x = 0;
 						if (selected_full && text->w > clip_w) {
