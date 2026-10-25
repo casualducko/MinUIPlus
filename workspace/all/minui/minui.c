@@ -1441,7 +1441,9 @@ int main (int argc, char *argv[]) {
 			else if (PAD_justRepeated(BTN_DOWN) && about_first+about_visible<about_rows) { about_first++; dirty = 1; }
 			else if (PAD_justRepeated(BTN_LEFT) && about_first>0) { about_first = MAX(0, about_first-about_visible); dirty = 1; }
 			else if (PAD_justRepeated(BTN_RIGHT) && about_first+about_visible<about_rows) { about_first = MIN(about_rows-about_visible, about_first+about_visible); dirty = 1; }
+			else if (PAD_justPressed(BTN_X)) { InfoView_toggleWifi(); about_at = now; dirty = 1; }
 			else if (PAD_justPressed(BTN_A)) { InfoView_forceWifi(); InfoView_gather(); about_at = now; dirty = 1; }
+			if (InfoView_poll()) dirty = 1;
 			if (show_version && now-about_at>3000) { InfoView_gather(); about_at = now; dirty = 1; }
 		}
 		else {
@@ -1638,7 +1640,7 @@ int main (int argc, char *argv[]) {
 				if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
 				else GFX_blitButtonGroup((char*[]){ BTN_SLEEP==BTN_POWER?"POWER":"MENU","SLEEP",  NULL }, 0, screen, 0);
 				
-				GFX_blitButtonGroup((char*[]){ "B","BACK","A","REFRESH",  NULL }, 0, screen, 1);
+				GFX_blitButtonGroup((char*[]){ "B","BACK","X",(char*)InfoView_wifiHint(),  NULL }, 0, screen, 1);
 			}
 			else {
 				// list
@@ -1735,7 +1737,7 @@ int main (int argc, char *argv[]) {
 			
 				if (total==0) {
 					if (stack->count>1) {
-						GFX_blitButtonGroup((char*[]){ "B","BACK","A","REFRESH",  NULL }, 0, screen, 1);
+						GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
 					}
 				}
 				else {

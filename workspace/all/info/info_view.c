@@ -52,11 +52,15 @@ static char* readText(const char* path, char* buf, size_t cap) { // a small syst
 static char wifi_line[128] = "";
 static char ip_line[64] = "";
 static uint32_t wifi_at = 0;
+static pid_t power_pid = 0; // wifictl, while it turns the radio on or off
+static int power_on = 0;
+static uint32_t power_at = 0;
 static void gatherWifi(void) {
 	char ssid[WIFI_SSID_MAX] = "";
 	int signal = 0;
 	wifi_line[0] = '\0';
 	ip_line[0] = '\0';
+	if (power_pid) { snprintf(wifi_line, sizeof(wifi_line), power_on ? "Turning on..." : "Turning off..."); snprintf(ip_line, sizeof(ip_line), "none"); return; }
 	if (!wifi_radio_on()) { snprintf(wifi_line, sizeof(wifi_line), "Off"); snprintf(ip_line, sizeof(ip_line), "none"); return; }
 	char text[2048];
 	char* argv[] = { "iw", "dev", "wlan0", "link", NULL };
@@ -221,3 +225,26 @@ void InfoView_draw(SDL_Surface* screen, int first, int ow) {
 		if (first+visible<row_count) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){sx, bottom + SCALE1(2)});
 	}
 }
+
+// X: switch the radio on or off. wifictl takes a few seconds, so it runs on its own and InfoView_poll() watches it.
+void InfoView_toggleWifi(void) {
+	if (power_pid) return;
+	power_on = !wifi_radio_on();
+	char* enable[] = { "wifictl", "enable", NULL };
+	char* disable[] = { "wifictl", "disable", NULL };
+	power_pid = wifi_spawn(power_on ? enable : disable);
+	power_at = SDL_GetTicks();
+	wifi_at = 0;
+	InfoView_gather();
+}
+int InfoView_poll(void) { // 1 when the Wi-Fi row changed and the screen needs drawing again
+	if (!power_pid) return 0;
+	if (wifi_reap(power_pid, NULL) || SDL_GetTicks() - power_at > 40000) {
+		power_pid = 0;
+		wifi_at = 0;
+		InfoView_gather();
+		return 1;
+	}
+	return 0;
+}
+const char* InfoView_wifiHint(void) { return (power_pid || wifi_radio_on()) ? (power_pid && power_on ? "WI-FI ON" : "WI-FI OFF") : "WI-FI ON"; }

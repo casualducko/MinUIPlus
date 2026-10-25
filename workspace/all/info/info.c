@@ -34,7 +34,9 @@ int main(int argc, char* argv[]) {
 		else if (PAD_justRepeated(BTN_DOWN) && first+visible<row_count) { first++; dirty = 1; }
 		else if (PAD_justRepeated(BTN_LEFT) && first>0) { first = MAX(0, first-visible); dirty = 1; }
 		else if (PAD_justRepeated(BTN_RIGHT) && first+visible<row_count) { first = MIN(row_count-visible, first+visible); dirty = 1; }
+		else if (PAD_justPressed(BTN_X)) { InfoView_toggleWifi(); refreshed = SDL_GetTicks(); dirty = 1; }
 		else if (PAD_justPressed(BTN_A)) { InfoView_forceWifi(); InfoView_gather(); refreshed = SDL_GetTicks(); dirty = 1; }
+		if (InfoView_poll()) dirty = 1;
 		if (SDL_GetTicks() - refreshed > 3000) { InfoView_gather(); refreshed = SDL_GetTicks(); dirty = 1; }
 		if (first+visible>row_count) first = MAX(0, row_count-visible);
 
@@ -42,7 +44,7 @@ int main(int argc, char* argv[]) {
 			GFX_clearUI(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			InfoView_draw(screen, first, ow);
-			GFX_blitButtonGroup((char*[]){"B","BACK","A","REFRESH",NULL}, 1, screen, 1);
+			GFX_blitButtonGroup((char*[]){"B","BACK","X",(char*)InfoView_wifiHint(),NULL}, 1, screen, 1);
 			GFX_flip(screen);
 			dirty = 0;
 		}
