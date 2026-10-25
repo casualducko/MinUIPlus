@@ -764,6 +764,15 @@ int PLAT_pickSampleRate(int requested, int max) {
 static char model[256];
 char* PLAT_getModel(void) {
 	char buffer[256];
+	// The RGB20SX runs the RGB30's device tree (Moss has no other), so the unit can't say what it is:
+	// a one-line .userdata/rgb30/model.txt names it.
+	char* name = allocFile(USERDATA_PATH "/model.txt");
+	if (name) {
+		name[strcspn(name, "\r\n")] = '\0';
+		snprintf(model, sizeof(model), "%s", name);
+		free(name);
+		if (model[0]) return model;
+	}
 	getFile("/proc/device-tree/model", buffer, 256);
 	
 	char* tmp = strrchr(buffer, ' ');
