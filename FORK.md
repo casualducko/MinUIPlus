@@ -163,3 +163,19 @@ font=MyFont.ttf
 ```
 
 Names: `white black light_gray gray dark_gray light_text dark_text button_text` (RRGGBB, with or without `#` or `0x`) and `font` (a .ttf/.otf in the same folder, or an absolute path; a font that fails to open falls back to the default with a log line). `white`, `black`, `light_gray`, `gray` and `dark_gray` also recolor the pills, bars and other tinted assets (they are drawn in these colors). Unknown names and bad values are ignored. `COLOR_*` in `defines.h` now read from the `theme` struct in `api.c`; `THEME_parse` is covered by `test_theme.c`. Builds and passes the host tests; **not yet seen on the device**.
+
+## Cheats
+
+In a game: Menu > Options > **Cheats** lists the cheats for that game, each Off/On (left/right or A). They're read from a RetroArch-style `.cht` file:
+
+```
+cheats = 2
+cheat0_desc = "Infinite Lives"
+cheat0_code = "SXIOPO"
+cheat0_enable = false
+cheat1_desc = "Max Coins"
+cheat1_code = "AAA+BBB"
+cheat1_enable = false
+```
+
+Put it at `Cheats/<system tag>/<game>.cht` on the card (`<system tag>` is the part in parentheses in the Roms folder name, eg. `Cheats/FC/Bobl.cht` for `Roms/NES (FC)/Bobl.nes`; both `Bobl.nes.cht` and `Bobl.cht` are found). The codes are whatever the core understands (Game Genie / Pro Action Replay / GameShark, `+` joins several), passed straight to `retro_cheat_set`. The `.cht` files of the libretro-database project use this format (their names must be changed to match your ROM's name). Which cheats are on is remembered per game in `.userdata/rgb30/<system>-<core>/<game file>.cheats` (`index<TAB>description` lines); once that file exists it wins over the `cheatN_enable` flags. The game log says `cheats: N from <file>, M on`. Without a file the page says where to put one. Code: `Cheat_parse`, `Cheat_readState`, `Cheat_writeState` (covered by `test_cheats.c`), `Cheats_load/apply`, `OptionCheats_*` in `minarch.c`. Every core in the build exports `retro_cheat_set`. **Builds and passes the host tests; not yet tried in a game on the device** (nobody has a .cht on the card yet; try a Game Genie code on a NES game).
