@@ -27,7 +27,7 @@ Last refreshed 2026-10-24 (evening). `FORK.md` lists what has been done; this is
 
 ~~1. Screenshot hotkey. Fn+something saves the current frame as a PNG to `Screenshots/<system>/`. Nothing like it exists today; the frame is already in a buffer. Pairs well with Romulus-style sharing later.~~ (done, see FORK.md)
 ~~2. Left stick as D-pad (with deadzone setting). The RGB20SX has two sticks and NES/GB/SNES games ignore them. A per-system option makes the sticks useful for the games you actually play.~~ (done, see FORK.md)
-3. **Theme file.** Colors and fonts are compile-time constants (`TRIAD_*` in `defines.h`). Read them from `.userdata/rgb30/theme.cfg` (and an optional font path) so the look can change without a rebuild. Fun and very visible.
+~~3. Theme file.~~ (done, see FORK.md) **Theme file.** Colors and fonts are compile-time constants (`TRIAD_*` in `defines.h`). Read them from `.userdata/rgb30/theme.cfg` (and an optional font path) so the look can change without a rebuild. Fun and very visible.
 4. **Random game ("Surprise me").** One entry in the launcher that picks an unplayed game from the current folder or collection.
 5. "Set time from network" in the Clock tool. Romulus already knows how to bring Wi-Fi up; the Clock tool could fetch the time from the server's HTTP `Date:` header (no NTP client needed) and set it, with the timezone handled properly. Also fixes certificate errors caused by a wrong clock. (not done)
 6. **Low-battery protection.** Below ~5%: autosave the state, then shut down cleanly instead of dying mid-write (the atomic saves make this safe now).
@@ -36,10 +36,10 @@ Last refreshed 2026-10-24 (evening). `FORK.md` lists what has been done; this is
 
 ## Medium (M)
 
-9. **Cheats.** libretro cores (fceumm, snes9x, gambatte, mGBA) accept cheats; MinUI has no UI for them. Read `.cht` files from `Cheats/<system>/`, list them in the in-game menu with on/off toggles, remember per game. High fun factor.
+~~9. Cheats.~~ (done, with per-game download, see FORK.md) **Cheats.** libretro cores (fceumm, snes9x, gambatte, mGBA) accept cheats; MinUI has no UI for them. Read `.cht` files from `Cheats/<system>/`, list them in the in-game menu with on/off toggles, remember per game. High fun factor.
 10. **Cover art for the launcher.** The launcher already shows `.res/<rom>.png` next to a game. Add a Romulus action (or a separate tool) that fetches thumbnails for the games on the card, from the libretro-thumbnails GitHub repo by name, or from the server if it ever serves art. Instantly makes the launcher feel finished.
 ~~11. Wi-Fi tool v2. Scan, pick a network from a list, type the password with the on-screen keyboard (reuse Romulus's), remember several networks, show status. Ends the "edit `wifi.txt` on a computer" step.~~ (done, see FORK.md)
-12. **Playtime and stats.** Log start/stop per game; show "Recently played" with hours, a stats screen (most played, streaks, totals). Cheap to log, surprisingly engaging.
+~~12. Playtime and stats.~~ (done, Tools > Stats) **Playtime and stats.** Log start/stop per game; show "Recently played" with hours, a stats screen (most played, streaks, totals). Cheap to log, surprisingly engaging.
 ~~13. Save backups. Keep the last N versions of each `.sav` (rolling `.bak1/.bak2`) and the autosave state, plus a "restore previous save" menu item. Atomic writes stop corruption; this stops *accidents* (overwritten a good save with a bad one).~~ (done, see FORK.md)
 14. **Rewind.** A ring of state snapshots in RAM gives rewind for NES/GB/GBA/SNES. The A55 has headroom; per-system on/off because of memory and CPU.
 15. **Crash recovery.** If a core crashes, the device hangs or reboots. Install a signal handler that logs the crash (core, game, backtrace if possible), saves what it can, and returns to the launcher with a message. Makes experimenting with cores painless.
