@@ -51,6 +51,7 @@ static void SanitizeSettings(Settings* s) {
 #define SHM_KEY "/SharedSettings"
 static char SettingsPath[256];
 static int shm_fd = -1;
+static int settings_private = 0; // settings is a malloc'd copy of the defaults: the shared memory couldn't be used
 static int is_host = 0;
 static int shm_size = sizeof(Settings);
 
@@ -74,10 +75,26 @@ void InitSettings(void) {
 	sprintf(SettingsPath, "%s/msettings.bin", getenv("USERDATA_PATH"));
 	
 	shm_fd = shm_open(SHM_KEY, O_RDWR | O_CREAT | O_EXCL, 0644); // see if it exists
-	if (shm_fd==-1 && errno==EEXIST) { // already exists
+	if (shm_fd==-1 && errno!=EEXIST) { // the shared memory can't be had at all: private defaults, so nothing dereferences a failed mapping
+		puts("Settings: no shared memory, using defaults");
+		settings = malloc(shm_size);
+		memcpy(settings, &DefaultSettings, shm_size);
+		settings_private = 1;
+	}
+	else if (shm_fd==-1) { // already exists
 		puts("Settings client");
 		shm_fd = shm_open(SHM_KEY, O_RDWR, 0644);
-		settings = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+		// the host may be between creating it and sizing it: wait for it to be whole (touching a short mapping is SIGBUS)
+		struct stat st;
+		for (int i=0; i<100 && (shm_fd==-1 || fstat(shm_fd, &st)!=0 || st.st_size<shm_size); i++) usleep(10000);
+		settings = MAP_FAILED;
+		if (shm_fd!=-1 && fstat(shm_fd, &st)==0 && st.st_size>=shm_size) settings = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+		if (settings==MAP_FAILED) {
+			puts("Settings: the shared memory is not usable, using defaults");
+			settings = malloc(shm_size);
+			memcpy(settings, &DefaultSettings, shm_size);
+			settings_private = 1;
+		}
 	}
 	else { // host
 		puts("Settings host"); // should always be keymon
@@ -116,7 +133,8 @@ void InitSettings(void) {
 	// system("echo $(< " BRIGHTNESS_PATH ")");
 }
 void QuitSettings(void) {
-	munmap(settings, shm_size);
+	if (settings_private) free(settings); // the private copy (see InitSettings)
+	else munmap(settings, shm_size);
 	if (is_host) shm_unlink(SHM_KEY);
 }
 static inline void SaveSettings(void) {
@@ -148,6 +166,7 @@ void SetBrightness(int value) {
 		case 8: raw=128; break;		// 32
 		case 9: raw=192; break;		// 64
 		case 10: raw=255; break;	// 64
+		default: return; // not a level: leave everything as it is
 	}
 	SetRawBrightness(raw);
 	settings->brightness = value;

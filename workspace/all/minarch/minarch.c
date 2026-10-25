@@ -204,6 +204,15 @@ static struct Game {
 	size_t size;
 	int is_open;
 } game;
+static void Game_removeTmp(void) { // the file extracted from a zip, and the folder made for it
+	if (!game.tmp_path[0]) return;
+	remove(game.tmp_path);
+	char dir[MAX_PATH];
+	snprintf(dir, sizeof(dir), "%s", game.tmp_path);
+	char* slash = strrchr(dir, '/');
+	if (slash && !strncmp(dir, "/tmp/minarch-", 13)) { *slash = '\0'; rmdir(dir); } // only a folder this made
+	game.tmp_path[0] = '\0';
+}
 static void Game_open(char* path) {
 	LOG_info("Game_open\n");
 	memset(&game, 0, sizeof(game));
@@ -278,15 +287,25 @@ static void Game_open(char* path) {
 				char tmp_template[MAX_PATH];
 				strcpy(tmp_template, "/tmp/minarch-XXXXXX");
 				char* tmp_dirname = mkdtemp(tmp_template);
+				if (!tmp_dirname) {
+					LOG_error("Error extracting file: %s\n\tno temporary folder: %s\n", filename, strerror(errno));
+					fclose(zip);
+					return;
+				}
 				// LOG_info("tmp_dirname: %s\n", tmp_dirname);
-				sprintf(game.tmp_path, "%s/%s", tmp_dirname, basename(filename));
-				
-				// TODO: we need to clear game.tmp_path if anything below this point fails!
+				if (snprintf(game.tmp_path, sizeof(game.tmp_path), "%s/%s", tmp_dirname, basename(filename)) >= (int)sizeof(game.tmp_path)) { // (a long name in the zip)
+					game.tmp_path[0] = '\0';
+					rmdir(tmp_dirname);
+					LOG_error("Error extracting file: %s\n\tthe name is too long\n", filename);
+					fclose(zip);
+					return;
+				}
 				
 				FILE* dst = fopen(game.tmp_path, "w");
 				if (dst==NULL) {
-					game.tmp_path[0] = '\0';
 					LOG_error("Error extracting file: %s\n\t%s\n", filename, strerror(errno));
+					Game_removeTmp();
+					fclose(zip);
 					return;
 				}
 				
@@ -297,8 +316,10 @@ static void Game_open(char* path) {
 				}
 				
 				if (!extract || extract(zip,dst,compressed_size)) {
-					game.tmp_path[0] = '\0';
 					LOG_error("Error extracting file: %s\n\t%s\n", filename, strerror(errno));
+					fclose(dst);
+					Game_removeTmp(); // the half-written file and its folder
+					fclose(zip);
 					return;
 				}
 				
@@ -323,18 +344,31 @@ static void Game_open(char* path) {
 		}
 	
 		fseek(file, 0, SEEK_END);
-		game.size = ftell(file);
+		long size = ftell(file);
+		if (size<0) {
+			LOG_error("Error reading game: %s\n", path);
+			fclose(file);
+			return;
+		}
+		game.size = size;
 	
 		rewind(file);
 		game.data = malloc(game.size);
 		if (game.data==NULL) {
 			LOG_error("Couldn't allocate memory for file: %s\n", path);
+			fclose(file);
 			return;
 		}
 	
-		fread(game.data, sizeof(uint8_t), game.size, file);
-	
+		size_t got = fread(game.data, sizeof(uint8_t), game.size, file);
 		fclose(file);
+		if (got!=game.size) { // a short read would hand the core a game with a hole in it
+			LOG_error("Error reading game: %s (%zu of %zu bytes)\n", path, got, (size_t)game.size);
+			free(game.data);
+			game.data = NULL;
+			game.size = 0;
+			return;
+		}
 	}
 	
 	// m3u-based?
@@ -371,7 +405,7 @@ static void Game_open(char* path) {
 }
 static void Game_close(void) {
 	if (game.data) free(game.data);
-	if (game.tmp_path[0]) remove(game.tmp_path);
+	Game_removeTmp();
 	game.is_open = 0;
 	VIB_setStrength(0); // just in case
 }
@@ -1440,21 +1474,17 @@ static void Config_readControls(void) {
 	Config_readControlsString(config.user_cfg);
 }
 static void Config_write(int override) {
-	char path[MAX_PATH];
+	char path[MAX_PATH], game_path[MAX_PATH];
 	// sprintf(path, "%s/%s.cfg", core.config_dir, game.name);
-	Config_getPath(path, CONFIG_WRITE_GAME);
-	
-	if (!override) {
-		if (config.loaded==CONFIG_GAME) unlink(path);
-		Config_getPath(path, CONFIG_WRITE_ALL);
-	}
-	config.loaded = override ? CONFIG_GAME : CONFIG_CONSOLE;
+	Config_getPath(game_path, CONFIG_WRITE_GAME);
+	if (override) snprintf(path, sizeof(path), "%s", game_path);
+	else Config_getPath(path, CONFIG_WRITE_ALL);
 	
 	// written beside it and renamed over it, so a full card or a power cut can't leave half a config
 	char tmp_path[MAX_PATH+8];
 	snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 	FILE *file = fopen(tmp_path, "wb");
-	if (!file) return;
+	if (!file) { LOG_error("Error writing config: %s (%s)\n", path, strerror(errno)); return; } // nothing was removed or changed
 	
 	for (int i=0; config.frontend.options[i].key; i++) {
 		Option* option = &config.frontend.options[i];
@@ -1488,6 +1518,11 @@ static void Config_write(int override) {
 	if (!wrote) {
 		LOG_error("Error writing config: %s (%s)\n", path, strerror(errno));
 		unlink(tmp_path);
+	}
+	else {
+		// only now that the new file is in place: saving for the whole system retires this game's own config
+		if (!override && config.loaded==CONFIG_GAME) unlink(game_path);
+		config.loaded = override ? CONFIG_GAME : CONFIG_CONSOLE;
 	}
 	sync();
 }
@@ -1814,6 +1849,7 @@ static void Menu_afterSleep(void);
 static void Menu_saveState(void);
 static void Menu_loadState(void);
 static void Screenshot_take(void);
+static volatile int screenshot_pending = 0; // asked for in the input callback (which can run on the core's thread), done by the main loop
 
 static int setFastForward(int enable) {
 	if (!fast_forward && enable && thread_video) {
@@ -1949,7 +1985,7 @@ static void input_poll_callback(void) {
 						if (screen_effect>=EFFECT_COUNT) screen_effect -= EFFECT_COUNT;
 						Config_syncFrontend(config.frontend.options[FE_OPT_EFFECT].key, screen_effect);
 						break;
-					case SHORTCUT_SCREENSHOT: Screenshot_take(); break;
+					case SHORTCUT_SCREENSHOT: screenshot_pending = 1; break;
 					default: break;
 				}
 				
@@ -3335,13 +3371,10 @@ static void Cheats_load(void) { // after the game is loaded
 	cheat_count = cheats ? Cheat_parse(text, cheats, CHEAT_MAX) : 0;
 	free(text);
 	if (exists(cheat_state_path)) {
-		char state[16*1024] = "";
-		FILE* sf = fopen(cheat_state_path, "r");
-		if (sf) {
-			size_t m = fread(state, 1, sizeof(state)-1, sf);
-			state[m] = '\0';
-			fclose(sf);
+		char* state = allocFile(cheat_state_path); // whatever size it is
+		if (state) {
 			Cheat_readState(state, cheats, cheat_count);
+			free(state);
 		}
 	}
 	int on = 0;
@@ -3350,9 +3383,12 @@ static void Cheats_load(void) { // after the game is loaded
 	Cheats_apply();
 }
 static void Cheats_saveState(void) {
-	char state[16*1024];
-	Cheat_writeState(cheats, cheat_count, state, sizeof(state));
+	size_t cap = (size_t)cheat_count * (CHEAT_DESC_MAX + 16) + 16; // every cheat could be on
+	char* state = malloc(cap);
+	if (!state) return;
+	Cheat_writeState(cheats, cheat_count, state, (int)cap);
 	putFile(cheat_state_path, state);
+	free(state);
 }
 
 void Core_open(const char* core_path, const char* tag_name) {
@@ -4199,7 +4235,21 @@ static pid_t Net_spawn(char* const argv[]) {
 }
 // Shows the message with B to cancel until the process exits (returns its exit code) or, with
 // wait_route, until there is a network route. -2 cancelled, -3 timed out.
+static pid_t net_pending_pid = 0; // a wifictl left to finish on its own: collected later so it never stays a zombie
+static void Net_reap(void) {
+	if (net_pending_pid>0 && waitpid(net_pending_pid, NULL, WNOHANG)!=0) net_pending_pid = 0;
+}
+static void Net_stop(pid_t pid) { // asks it to stop, then insists after a second
+	kill(pid, SIGTERM);
+	for (int i=0; i<20; i++) {
+		if (waitpid(pid, NULL, WNOHANG)==pid) return;
+		usleep(50000);
+	}
+	kill(pid, SIGKILL);
+	waitpid(pid, NULL, 0);
+}
 static int Net_wait(const char* message, pid_t pid, int wait_route, int timeout_s) {
+	Net_reap();
 	GFX_setMode(MODE_MAIN);
 	int dirty = 1, status = -1, exited = 0;
 	uint32_t start = SDL_GetTicks(), drawn = 0;
@@ -4228,7 +4278,10 @@ static int Net_wait(const char* message, pid_t pid, int wait_route, int timeout_
 		}
 		else GFX_sync();
 	}
-	if (pid>0 && !exited) { kill(pid, SIGKILL); waitpid(pid, NULL, 0); }
+	if (pid>0 && !exited) {
+		if (result==0 && wait_route) net_pending_pid = pid; // the network is up: wifictl may still be finishing, and cutting it off could leave Wi-Fi half set up
+		else Net_stop(pid);
+	}
 	GFX_setMode(MODE_MENU);
 	return result;
 }
@@ -4250,6 +4303,17 @@ static int Cheats_download(void) { // 1 if a cheat file was saved and loaded; sa
 	if (dot) *dot = '\0';
 	const char* folder = Cheatdb_folder(core.tag);
 	if (!folder) return 0;
+	
+	// the page only offers a download when no cheats were found, so a cheat file that is already there
+	// has none that could be read: it is the user's, and a download must never replace (or delete) it
+	char there[MAX_PATH];
+	snprintf(there, sizeof(there), SDCARD_PATH "/Cheats/%s/%s.cht", core.tag, game.name);
+	if (!exists(there)) snprintf(there, sizeof(there), SDCARD_PATH "/Cheats/%s/%s.cht", core.tag, base);
+	if (exists(there)) {
+		snprintf(message, sizeof(message), "There is a cheat file already\n(%s.cht)\nbut no cheats in it.\n\nFix or remove it first.", strrchr(there, '/') + 1);
+		Menu_message(message, okay);
+		return 0;
+	}
 	
 	if (!Net_hasRoute()) {
 		pid_t pid = Net_spawn((char*[]){ "wifictl", "enable", NULL });
@@ -5329,6 +5393,11 @@ static void limitFF(void) {
 }
 
 static void* coreThread(void *arg) {
+	{ // this thread's own emergency stack for the crash reporter (the one set up in main belongs to the main thread)
+		static char core_altstack[64*1024];
+		stack_t ss = { .ss_sp = core_altstack, .ss_size = sizeof(core_altstack), .ss_flags = 0 };
+		sigaltstack(&ss, NULL);
+	}
 	// force a vsync immediately before loop
 	// for better frame pacing?
 	GFX_clearAll();
@@ -5378,6 +5447,7 @@ static void crash_where(const char* label, void* addr) {
 	crash_say("\n");
 }
 static void crash_handler(int sig, siginfo_t* info, void* ctx) {
+	alarm(3); // backtrace() can wait on a lock another thread holds: if so, SIGALRM's default action ends the process anyway
 	crash_say("\nCRASH: signal ");
 	crash_hex((unsigned long long)sig);
 	crash_say(" (hex: 4=ILL 6=ABRT 7=BUS 8=FPE b=SEGV)\n");
@@ -5555,6 +5625,11 @@ int main(int argc , char* argv[]) {
 			}
 			core_rq = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
 			pthread_mutex_unlock(&core_mx);
+		}
+		
+		if (screenshot_pending) { // here, on the main thread: the PNG and the toast don't belong on the core's
+			screenshot_pending = 0;
+			Screenshot_take();
 		}
 		
 		if (show_menu) {
