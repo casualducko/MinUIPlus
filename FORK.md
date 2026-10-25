@@ -150,3 +150,16 @@ The row under the state preview used to be eight dots, with no numbers and nothi
 `PLAT_setRumble` was an empty stub. Now `SetRawRumble()` in libmsettings (rgb30) drives the motor: the first input device that supports force feedback (`FF_RUMBLE`, how the joypad driver exposes its PWM motor) via `EVIOCSFF` plus an `EV_FF` play event (effect length 60 s, restarted when the strength changes, stopped with 0); if there is none, Moss's PWM (`/sys/class/pwm/pwmchip1/pwm0`, set up at boot as period 1 ms with duty = period meaning off) is driven directly, but only if that exact setup is already there (period 1000000 and enabled), so the backlight's PWM can't be touched by a wrong guess. `VIB_quit` now sets the motor off itself (the thread could be cancelled before it applied the 0). Strength setting: `.userdata/rgb30/rumble` (0 to 100 percent of what the game asks, default 100), in Tools > Settings (the tool was Power & Audio), which buzzes briefly when you change it and says whether a motor was found. The game log says `rumble: <backend>` the first time a core rumbles. **Not run on the device**: the driver details come from the Moss RK3399 joypad patch (same driver family) and the RGB30 quirk script; if the note says "No rumble motor found", check `cat /proc/bus/input/devices` for a device whose `B: EV=` has bit 0x15 set (force feedback) and `ls /sys/class/pwm`.
 
 **Rumble result on the device (2026-10-24):** no force feedback device; Moss's PWM exists and is configured as expected (period 1000000, inverse polarity, enabled), but driving it directly (duty 0, 300000, 600000 inverse; 1000000 and 500000 normal polarity, 1.5 to 2 s each) produced no vibration, and Drill Dozer at 100% did not rumble. The device tree has no motor or rumble property on the joypad node. Conclusion: this RGB20SX most likely has no vibration motor (the DTB is the RGB30's). The code is kept (harmless, and it would work on a unit with a motor); the Settings tool now says "The RGB20SX has no rumble motor."
+
+## Theme file
+
+Colors and the font are no longer compile-time only. `.userdata/rgb30/theme.cfg` (read when the launcher, a game or a tool starts) can contain lines like
+
+```
+# a warm theme
+white=ffd98c
+dark_gray=2a1f14
+font=MyFont.ttf
+```
+
+Names: `white black light_gray gray dark_gray light_text dark_text button_text` (RRGGBB, with or without `#` or `0x`) and `font` (a .ttf/.otf in the same folder, or an absolute path; a font that fails to open falls back to the default with a log line). `white`, `black`, `light_gray`, `gray` and `dark_gray` also recolor the pills, bars and other tinted assets (they are drawn in these colors). Unknown names and bad values are ignored. `COLOR_*` in `defines.h` now read from the `theme` struct in `api.c`; `THEME_parse` is covered by `test_theme.c`. Builds and passes the host tests; **not yet seen on the device**.

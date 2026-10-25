@@ -40,12 +40,13 @@
 #define TRIAD_LIGHT_TEXT 	0xcc,0xcc,0xcc
 #define TRIAD_DARK_TEXT 	0x66,0x66,0x66
 
-#define COLOR_WHITE			(SDL_Color){TRIAD_WHITE}
-#define COLOR_GRAY			(SDL_Color){TRIAD_GRAY}
-#define COLOR_BLACK			(SDL_Color){TRIAD_BLACK}
-#define COLOR_LIGHT_TEXT	(SDL_Color){TRIAD_LIGHT_TEXT}
-#define COLOR_DARK_TEXT		(SDL_Color){TRIAD_DARK_TEXT}
-#define COLOR_BUTTON_TEXT	(SDL_Color){TRIAD_GRAY}
+// the colors in use: the defaults above unless .userdata/<platform>/theme.cfg changes them (see api.c)
+#define COLOR_WHITE			(theme.white)
+#define COLOR_GRAY			(theme.gray)
+#define COLOR_BLACK			(theme.black)
+#define COLOR_LIGHT_TEXT	(theme.light_text)
+#define COLOR_DARK_TEXT		(theme.dark_text)
+#define COLOR_BUTTON_TEXT	(theme.button_text)
 
 // all before scale
 #define PILL_SIZE 30

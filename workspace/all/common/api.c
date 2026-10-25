@@ -89,6 +89,66 @@ static struct PWR_Context {
 
 ///////////////////////////////
 
+// The theme file, .userdata/<platform>/theme.cfg: lines of name=RRGGBB (a leading # or 0x is fine)
+// for white, black, light_gray, gray, dark_gray, light_text, dark_text and button_text, and
+// font=<file> (a .ttf or .otf in the same folder, or an absolute path). Anything else is ignored.
+ThemeColors theme = {
+	{TRIAD_WHITE}, {TRIAD_BLACK}, {TRIAD_LIGHT_GRAY}, {TRIAD_GRAY}, {TRIAD_DARK_GRAY},
+	{TRIAD_LIGHT_TEXT}, {TRIAD_DARK_TEXT}, {TRIAD_GRAY},
+};
+static int THEME_parseColor(const char* s, SDL_Color* out) { // 1 if s is a color
+	if (!s) return 0;
+	if (*s=='#') s++;
+	else if (s[0]=='0' && (s[1]=='x' || s[1]=='X')) s += 2;
+	unsigned v = 0;
+	int n = 0;
+	for (; n<7 && *s; s++, n++) {
+		char c = *s;
+		int d = c>='0'&&c<='9' ? c-'0' : c>='a'&&c<='f' ? c-'a'+10 : c>='A'&&c<='F' ? c-'A'+10 : -1;
+		if (d<0) break;
+		v = v*16 + d;
+	}
+	while (*s==' ' || *s=='\t' || *s=='\r' || *s=='\n') s++;
+	if (n!=6 || *s) return 0;
+	out->r = (v>>16) & 0xff;
+	out->g = (v>>8) & 0xff;
+	out->b = v & 0xff;
+	return 1;
+}
+// applies the file's text (which it edits) to t; font gets the font= value; returns how many lines were used
+static int THEME_parse(char* text, ThemeColors* t, char* font, int font_size) {
+	struct { const char* name; SDL_Color* color; } names[] = {
+		{"white", &t->white}, {"black", &t->black}, {"light_gray", &t->light_gray},
+		{"gray", &t->gray}, {"dark_gray", &t->dark_gray}, {"light_text", &t->light_text},
+		{"dark_text", &t->dark_text}, {"button_text", &t->button_text},
+	};
+	int used = 0;
+	char* save = NULL;
+	for (char* line = strtok_r(text, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+		while (*line==' ' || *line=='\t') line++;
+		if (*line=='#' || !*line) continue;
+		char* eq = strchr(line, '=');
+		if (!eq) continue;
+		*eq = '\0';
+		char* key = line;
+		char* value = eq + 1;
+		char* end = key + strlen(key);
+		while (end>key && (end[-1]==' ' || end[-1]=='\t')) *--end = '\0';
+		while (*value==' ' || *value=='\t') value++;
+		end = value + strlen(value);
+		while (end>value && (end[-1]==' ' || end[-1]=='\t' || end[-1]=='\r')) *--end = '\0';
+		if (!strcmp(key, "font")) {
+			if (*value && font && (int)strlen(value)<font_size) { strcpy(font, value); used++; }
+			continue;
+		}
+		for (int i=0; i<(int)(sizeof(names)/sizeof(names[0])); i++) {
+			if (!strcmp(key, names[i].name) && THEME_parseColor(value, names[i].color)) { used++; break; }
+		}
+	}
+	return used;
+}
+// end of the theme file code
+
 static int _;
 
 SDL_Surface* GFX_init(int mode) {
@@ -100,11 +160,22 @@ SDL_Surface* GFX_init(int mode) {
 	gfx.vsync = VSYNC_STRICT;
 	gfx.mode = mode;
 	
-	RGB_WHITE		= SDL_MapRGB(gfx.screen->format, TRIAD_WHITE);
-	RGB_BLACK		= SDL_MapRGB(gfx.screen->format, TRIAD_BLACK);
-	RGB_LIGHT_GRAY	= SDL_MapRGB(gfx.screen->format, TRIAD_LIGHT_GRAY);
-	RGB_GRAY		= SDL_MapRGB(gfx.screen->format, TRIAD_GRAY);
-	RGB_DARK_GRAY	= SDL_MapRGB(gfx.screen->format, TRIAD_DARK_GRAY);
+	char theme_font[MAX_PATH] = "";
+	{
+		char text[2048] = "";
+		FILE* f = fopen(USERDATA_PATH "/theme.cfg", "r");
+		if (f) {
+			size_t n = fread(text, 1, sizeof(text)-1, f);
+			text[n] = '\0';
+			fclose(f);
+			LOG_info("theme.cfg: %i settings used\n", THEME_parse(text, &theme, theme_font, sizeof(theme_font)));
+		}
+	}
+	RGB_WHITE		= SDL_MapRGB(gfx.screen->format, theme.white.r, theme.white.g, theme.white.b);
+	RGB_BLACK		= SDL_MapRGB(gfx.screen->format, theme.black.r, theme.black.g, theme.black.b);
+	RGB_LIGHT_GRAY	= SDL_MapRGB(gfx.screen->format, theme.light_gray.r, theme.light_gray.g, theme.light_gray.b);
+	RGB_GRAY		= SDL_MapRGB(gfx.screen->format, theme.gray.r, theme.gray.g, theme.gray.b);
+	RGB_DARK_GRAY	= SDL_MapRGB(gfx.screen->format, theme.dark_gray.r, theme.dark_gray.g, theme.dark_gray.b);
 	
 	asset_rgbs[ASSET_WHITE_PILL]	= RGB_WHITE;
 	asset_rgbs[ASSET_BLACK_PILL]	= RGB_BLACK;
@@ -153,10 +224,19 @@ SDL_Surface* GFX_init(int mode) {
 	gfx.assets = IMG_Load(asset_path);
 	
 	TTF_Init();
-	font.large 	= TTF_OpenFont(FONT_PATH, SCALE1(FONT_LARGE));
-	font.medium = TTF_OpenFont(FONT_PATH, SCALE1(FONT_MEDIUM));
-	font.small 	= TTF_OpenFont(FONT_PATH, SCALE1(FONT_SMALL));
-	font.tiny 	= TTF_OpenFont(FONT_PATH, SCALE1(FONT_TINY));
+	const char* font_path = FONT_PATH;
+	char custom_font[MAX_PATH] = "";
+	if (*theme_font) { // a font from the theme file, if it opens
+		if (theme_font[0]=='/') snprintf(custom_font, sizeof(custom_font), "%s", theme_font);
+		else snprintf(custom_font, sizeof(custom_font), USERDATA_PATH "/%s", theme_font);
+		TTF_Font* probe = TTF_OpenFont(custom_font, SCALE1(FONT_LARGE));
+		if (probe) { TTF_CloseFont(probe); font_path = custom_font; }
+		else LOG_info("theme.cfg: can't open font %s, using the default\n", custom_font);
+	}
+	font.large 	= TTF_OpenFont(font_path, SCALE1(FONT_LARGE));
+	font.medium = TTF_OpenFont(font_path, SCALE1(FONT_MEDIUM));
+	font.small 	= TTF_OpenFont(font_path, SCALE1(FONT_SMALL));
+	font.tiny 	= TTF_OpenFont(font_path, SCALE1(FONT_TINY));
 	
 	TTF_SetFontStyle(font.large, TTF_STYLE_BOLD);
 	TTF_SetFontStyle(font.medium, TTF_STYLE_BOLD);

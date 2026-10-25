@@ -53,6 +53,13 @@ void LOG_note(int level, const char* fmt, ...);
 
 ///////////////////////////////
 
+// theme colors (api.c fills them from the defaults, then from theme.cfg)
+typedef struct {
+	SDL_Color white, black, light_gray, gray, dark_gray;
+	SDL_Color light_text, dark_text, button_text;
+} ThemeColors;
+extern ThemeColors theme;
+
 extern uint32_t RGB_WHITE;
 extern uint32_t RGB_BLACK;
 extern uint32_t RGB_LIGHT_GRAY;

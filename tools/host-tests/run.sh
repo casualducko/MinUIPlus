@@ -32,6 +32,8 @@ x "$all/minui/minui.c" 'static int getFirstDisc' 'static void addEntries' > "$ou
 x "$all/common/api.c" '#define SLEEP_TIMEOUT_DEFAULT' 'void PWR_update' > "$out/gen/PWR_sleep.inc"
 x "$all/common/api.c" 'static int SND_parseBufferMs' 'void SND_init' > "$out/gen/SND_bufferMs.inc"
 x "$all/common/api.c" '// How strong the motor runs' 'static struct VIB_Context' > "$out/gen/VIB_scale.inc"
+x "$all/common/api.h" '// theme colors' 'extern uint32_t RGB_WHITE;' > "$out/gen/theme_types.inc"
+x "$all/common/api.c" '// The theme file,' '// end of the theme file code' > "$out/gen/theme.inc"
 x "$all/common/api.c" 'static int PAD_parseDeadzone' 'static int PAD_deadzone' > "$out/gen/PAD_deadzone.inc"
 x "$all/../rgb30/libmsettings/msettings.c" '#define SETTINGS_VERSION 2' '#define SHM_KEY' > "$out/gen/msettings_types.inc"
 x "$all/minarch/minarch.c" 'void Core_getName' 'void Core_open' > "$out/gen/Core_getName.inc"
@@ -44,7 +46,7 @@ x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
 
 failed=0
-for t in rumble sram lowbattery backup bufferms deadzone emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
+for t in rumble sram lowbattery backup bufferms deadzone theme emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
 	echo "== $t"
 	$CC $FLAGS -I"$out" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi
