@@ -31,6 +31,7 @@
 #define CFG_PATH		USERDATA_PATH "/romulus.cfg"
 #define LEDGER_PATH		USERDATA_PATH "/romulus-downloaded.txt"
 #define ROMULUS_LAST_PATH		USERDATA_PATH "/romulus-last.txt"
+#define PLAY_NEXT_PATH	"/tmp/romulus-play" // the launch script runs this after Romulus quits
 #define DOWNLOAD_TMP	USERDATA_PATH "/romulus-download.tmp"
 #define PAGE_LIMIT		50
 #define MAX_PLATS		40
@@ -38,7 +39,7 @@
 
 typedef enum { SCR_PLATFORMS, SCR_GAMES, SCR_OSK } Screen;
 typedef enum { JOB_NONE, JOB_PLATFORMS, JOB_ROMS, JOB_DOWNLOAD } JobKind;
-typedef enum { MODAL_NONE, MODAL_MESSAGE, MODAL_CONFIRM } ModalKind;
+typedef enum { MODAL_NONE, MODAL_MESSAGE, MODAL_CONFIRM, MODAL_PLAY } ModalKind;
 
 typedef struct { char slug[48]; int count; char label[96]; } PlatRow;
 
@@ -119,6 +120,36 @@ static int is_saved(const RRom* rom) {
 	rom_safe_name(rom->file_name, sys_for_slug(rom->platform), safe, sizeof(safe));
 	snprintf(path, sizeof(path), "%s/%s", dir, safe);
 	return exists(path);
+}
+
+// A game just downloaded can be played from the confirmation: the same command the launcher
+// would run ('emulator launch.sh' 'rom'), written for Romulus's launch.sh to run after we quit.
+static char play_cmd[MAX_PATH*2+64];
+static void shell_quote(const char* in, char* out, size_t size) { // 'it'\''s'
+	size_t n = 0;
+	out[n++] = '\'';
+	for (; *in && n+5<size; in++) {
+		if (*in=='\'') { memcpy(out+n, "'\\''", 4); n += 4; }
+		else out[n++] = *in;
+	}
+	out[n++] = '\'';
+	out[n] = '\0';
+}
+static int make_play_cmd(const char* rom_path) { // 1 if this system has an emulator on the card
+	char emu_name[MAX_PATH], emu_path[MAX_PATH];
+	getEmuName(rom_path, emu_name);
+	getEmuPath(emu_name, emu_path);
+	if (!emu_path[0] || !exists(emu_path)) return 0;
+	char a[MAX_PATH*2], b[MAX_PATH*2];
+	shell_quote(emu_path, a, sizeof(a));
+	shell_quote(rom_path, b, sizeof(b));
+	snprintf(play_cmd, sizeof(play_cmd), "%s %s\n", a, b);
+	return 1;
+}
+static void start_play(void) {
+	putFile(PLAY_NEXT_PATH, play_cmd);
+	putInt(RESUME_SLOT_PATH, 8); // a new game: no auto-resume of an old state
+	quit = 1;
 }
 
 static void say(const char* msg, int ms) { // ms==0: until a button is pressed
@@ -409,7 +440,13 @@ static void finish_download(void) {
 	if (tag) *tag = '\0'; // "Super Nintendo (SFC)" -> "Super Nintendo"
 	GFX_wrapText(font.large, title, screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2), 2);
 	snprintf(msg, sizeof(msg), "Downloaded\n\n%s\n\nSaved to %s", title, place);
-	say(msg, 3000);
+	if (make_play_cmd(final_path)) {
+		snprintf(modal_msg, sizeof(modal_msg), "%s", msg);
+		modal = MODAL_PLAY;
+		modal_until = 0;
+		dirty = 1;
+	}
+	else say(msg, 3000);
 }
 
 static void start_download(int index) {
@@ -608,6 +645,7 @@ static void draw_modal(void) {
 	if (!strchr(text, '\n')) GFX_wrapText(font.large, text, w, 6); // long one-line messages, the rest already have their breaks
 	GFX_blitMessage(font.large, text, screen, &(SDL_Rect){x, y, w, h});
 	if (modal==MODAL_CONFIRM) GFX_blitButtonGroup((char*[]){"B","NO","A","YES",NULL}, 1, screen, 1);
+	else if (modal==MODAL_PLAY) GFX_blitButtonGroup((char*[]){"B","BACK","A","PLAY",NULL}, 1, screen, 1);
 	else if (!modal_until) GFX_blitButtonGroup((char*[]){"A","OK",NULL}, 1, screen, 1);
 }
 
@@ -659,6 +697,12 @@ static void handle_modal_input(void) {
 	if (modal==MODAL_MESSAGE) {
 		if (modal_until && SDL_GetTicks()>=modal_until) { modal = MODAL_NONE; dirty = 1; return; }
 		if (PAD_justPressed(BTN_A) || PAD_justPressed(BTN_B)) { modal = MODAL_NONE; dirty = 1; }
+		return;
+	}
+	if (modal==MODAL_PLAY) {
+		if (PAD_justPressed(BTN_A)) { modal = MODAL_NONE; start_play(); }
+		else if (PAD_justPressed(BTN_B)) modal = MODAL_NONE;
+		dirty = 1;
 		return;
 	}
 	if (PAD_justPressed(BTN_A)) {
