@@ -4287,6 +4287,7 @@ static int Menu_options(MenuList* list) {
 	OptionSaveChanges_updateDesc();
 	
 	int defer_menu = false;
+	int selected_cut = 0; // the selected row's name was cut short when it was last drawn
 	while (show_options) {
 		if (await_input) {
 			defer_menu = true;
@@ -4419,6 +4420,15 @@ static int Menu_options(MenuList* list) {
 			}
 		}
 		
+		if (PAD_justPressed(BTN_Y) && selected_cut) { // the whole line, when it didn't fit
+			char full[1024];
+			MenuItem* item = &items[selected];
+			if (item->desc && item->desc[0]) snprintf(full, sizeof(full), "%s\n\n%s", item->name, item->desc);
+			else snprintf(full, sizeof(full), "%s", item->name);
+			Menu_message(full, (char*[]){ "B","BACK", NULL });
+			dirty = 1;
+		}
+		
 		if (!defer_menu) PWR_update(&dirty, &show_settings, Menu_beforeSleep, Menu_afterSleep);
 		
 		if (defer_menu && PAD_justReleased(BTN_MENU)) defer_menu = false;
@@ -4428,6 +4438,7 @@ static int Menu_options(MenuList* list) {
 			GFX_blitHardwareGroup(screen, show_settings);
 			
 			char* desc = NULL;
+			char cut_hint[64];
 			SDL_Surface* text;
 
 			{
@@ -4447,7 +4458,13 @@ static int Menu_options(MenuList* list) {
 					
 					char name[256];
 					int name_max = has_values ? mw * 6 / 10 : mw; // leave the value its room
+					if (has_values && j==selected_row && item->value>=0) { // the selected row may use all but what its value needs
+						int value_w = 0;
+						TTF_SizeUTF8(font.medium, item->values[item->value], &value_w, NULL);
+						name_max = MAX(name_max, mw - value_w - SCALE1(BUTTON_PADDING*4));
+					}
 					int pill_w = GFX_truncateText(font.large, item->name, name, name_max, SCALE1(BUTTON_PADDING*2));
+					if (j==selected_row) selected_cut = strcmp(name, item->name)!=0;
 					
 					if (j==selected_row) {
 						if (has_values) GFX_blitPill(ASSET_DARK_GRAY_PILL, screen, &(SDL_Rect){ox, y, mw, row_h});
@@ -4485,6 +4502,10 @@ static int Menu_options(MenuList* list) {
 			}
 			
 			if (!desc && list->desc) desc = list->desc;
+			if (selected_cut) { // there is more of this name than fits
+				snprintf(cut_hint, sizeof(cut_hint), "Press Y to read the whole line");
+				desc = cut_hint;
+			}
 			
 			if (desc) {
 				int w,h;
