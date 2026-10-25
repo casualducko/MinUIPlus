@@ -100,6 +100,8 @@ static struct Core {
 	void (*set_controller_port_device)(unsigned port, unsigned device);
 	
 	void (*reset)(void);
+	void (*cheat_reset)(void); // optional
+	void (*cheat_set)(unsigned index, bool enabled, const char* code); // optional
 	void (*run)(void);
 	size_t (*serialize_size)(void);
 	bool (*serialize)(void *data, size_t size);
@@ -3088,6 +3090,142 @@ void Core_getName(char* in_name, char* out_name) { // NOTE: out_name is core.nam
 	char* tmp = strrchr(out_name, '_'); // eg. gambatte_libretro.so
 	if (tmp) tmp[0] = '\0';
 }
+// Cheats: RetroArch-style .cht files (cheatN_desc / cheatN_code / cheatN_enable lines) in
+// Cheats/<system tag>/<game>.cht, the on/off choices remembered per game in the core's config folder.
+#define CHEAT_MAX 512
+#define CHEAT_DESC_MAX 96
+#define CHEAT_CODE_MAX 512
+typedef struct Cheat {
+	char desc[CHEAT_DESC_MAX];
+	char code[CHEAT_CODE_MAX];
+	int enabled;
+	int present; // while parsing: a code was seen
+} Cheat;
+static char* Cheat_trim(char* s) { // in place, also takes one pair of quotes off
+	while (*s==' ' || *s=='\t' || *s=='\r') s++;
+	char* end = s + strlen(s);
+	while (end>s && (end[-1]==' ' || end[-1]=='\t' || end[-1]=='\r')) *--end = '\0';
+	if (end-s>=2 && s[0]=='"' && end[-1]=='"') { s++; *--end = '\0'; }
+	return s;
+}
+// reads the text of a .cht file (which it edits), returns how many cheats with a code it found (at most max)
+static int Cheat_parse(char* text, Cheat* out, int max) {
+	memset(out, 0, sizeof(Cheat) * max);
+	char* save = NULL;
+	for (char* line = strtok_r(text, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+		char* eq = strchr(line, '=');
+		if (!eq) continue;
+		*eq = '\0';
+		char* key = Cheat_trim(line);
+		char* value = Cheat_trim(eq + 1);
+		if (strncmp(key, "cheat", 5)) continue;
+		char* p = key + 5;
+		if (*p<'0' || *p>'9') continue;
+		int n = 0;
+		while (*p>='0' && *p<='9' && n<100000) n = n*10 + (*p++ - '0');
+		if (n>=max) continue;
+		Cheat* c = &out[n];
+		if (!strcmp(p, "_desc")) snprintf(c->desc, sizeof(c->desc), "%s", value);
+		else if (!strcmp(p, "_code")) {
+			if (*value && strlen(value)<sizeof(c->code)) { strcpy(c->code, value); c->present = 1; }
+		}
+		else if (!strcmp(p, "_enable")) c->enabled = !strcmp(value, "true") || !strcmp(value, "1");
+	}
+	int count = 0;
+	for (int i=0; i<max; i++) {
+		if (!out[i].present) continue;
+		if (i!=count) out[count] = out[i];
+		if (!out[count].desc[0]) snprintf(out[count].desc, sizeof(out[count].desc), "Cheat %i", i+1);
+		count++;
+	}
+	if (count<max) memset(&out[count], 0, sizeof(Cheat) * (max-count));
+	return count;
+}
+// the remembered choices: "number<tab>description" for each cheat that is on (the number tells
+// apart cheats that share a description; if the file changed, the description alone finds it)
+static void Cheat_readState(char* text, Cheat* cheats, int count) {
+	for (int i=0; i<count; i++) cheats[i].enabled = 0;
+	char* save = NULL;
+	for (char* line = strtok_r(text, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+		char* tab = strchr(line, '\t');
+		if (!tab) continue;
+		*tab = '\0';
+		int index = atoi(line);
+		char* desc = Cheat_trim(tab + 1);
+		if (index>=0 && index<count && !cheats[index].enabled && !strcmp(cheats[index].desc, desc)) {
+			cheats[index].enabled = 1;
+			continue;
+		}
+		for (int i=0; i<count; i++) {
+			if (!cheats[i].enabled && !strcmp(cheats[i].desc, desc)) { cheats[i].enabled = 1; break; }
+		}
+	}
+}
+static int Cheat_writeState(const Cheat* cheats, int count, char* out, int size) {
+	int len = 0;
+	out[0] = '\0';
+	for (int i=0; i<count; i++) {
+		if (!cheats[i].enabled) continue;
+		int n = snprintf(out + len, size - len, "%i\t%s\n", i, cheats[i].desc);
+		if (n<0 || n>=size - len) break;
+		len += n;
+	}
+	return len;
+}
+// end of the cheat file code
+
+static Cheat* cheats = NULL;
+static int cheat_count = 0;
+static char cheat_state_path[MAX_PATH];
+static void Cheats_apply(void) { // hands the cheats that are on to the core
+	if (!core.cheat_reset || !core.cheat_set) return;
+	core.cheat_reset();
+	for (int i=0; i<cheat_count; i++) {
+		if (cheats[i].enabled) core.cheat_set(i, true, cheats[i].code);
+	}
+}
+static void Cheats_load(void) { // after the game is loaded
+	char path[MAX_PATH];
+	char base[MAX_PATH];
+	snprintf(base, sizeof(base), "%s", game.name);
+	char* dot = strrchr(base, '.');
+	if (dot) *dot = '\0'; // game.name still has its extension
+	snprintf(path, sizeof(path), SDCARD_PATH "/Cheats/%s/%s.cht", core.tag, game.name);
+	if (!exists(path)) snprintf(path, sizeof(path), SDCARD_PATH "/Cheats/%s/%s.cht", core.tag, base);
+	snprintf(cheat_state_path, sizeof(cheat_state_path), "%s/%s.cheats", core.config_dir, game.name);
+	if (!exists(path)) { LOG_info("cheats: none (%s)\n", path); return; }
+	
+	FILE* f = fopen(path, "r");
+	if (!f) return;
+	char* text = calloc(1, 256*1024);
+	size_t n = text ? fread(text, 1, 256*1024-1, f) : 0;
+	fclose(f);
+	if (!text) return;
+	text[n] = '\0';
+	cheats = calloc(CHEAT_MAX, sizeof(Cheat));
+	cheat_count = cheats ? Cheat_parse(text, cheats, CHEAT_MAX) : 0;
+	free(text);
+	if (exists(cheat_state_path)) {
+		char state[16*1024] = "";
+		FILE* sf = fopen(cheat_state_path, "r");
+		if (sf) {
+			size_t m = fread(state, 1, sizeof(state)-1, sf);
+			state[m] = '\0';
+			fclose(sf);
+			Cheat_readState(state, cheats, cheat_count);
+		}
+	}
+	int on = 0;
+	for (int i=0; i<cheat_count; i++) on += cheats[i].enabled;
+	LOG_info("cheats: %i from %s, %i on\n", cheat_count, path, on);
+	Cheats_apply();
+}
+static void Cheats_saveState(void) {
+	char state[16*1024];
+	Cheat_writeState(cheats, cheat_count, state, sizeof(state));
+	putFile(cheat_state_path, state);
+}
+
 void Core_open(const char* core_path, const char* tag_name) {
 	LOG_info("Core_open\n");
 	core.handle = dlopen(core_path, RTLD_LAZY);
@@ -3100,6 +3238,8 @@ void Core_open(const char* core_path, const char* tag_name) {
 	core.get_system_av_info = dlsym(core.handle, "retro_get_system_av_info");
 	core.set_controller_port_device = dlsym(core.handle, "retro_set_controller_port_device");
 	core.reset = dlsym(core.handle, "retro_reset");
+	core.cheat_reset = dlsym(core.handle, "retro_cheat_reset");
+	core.cheat_set = dlsym(core.handle, "retro_cheat_set");
 	core.run = dlsym(core.handle, "retro_run");
 	core.serialize_size = dlsym(core.handle, "retro_serialize_size");
 	core.serialize = dlsym(core.handle, "retro_serialize");
@@ -3882,6 +4022,46 @@ static int OptionRestoreSave_openMenu(MenuList* list, int i) {
 	return MENU_CALLBACK_NOP;
 }
 
+static int OptionCheats_toggled(MenuList* list, int i) {
+	MenuItem* item = &list->items[i];
+	cheats[i].enabled = item->value;
+	LOG_info("cheat %i (%s) %s\n", i, cheats[i].desc, item->value ? "on" : "off");
+	Cheats_apply();
+	Cheats_saveState();
+	return MENU_CALLBACK_NOP;
+}
+static int OptionCheats_flip(MenuList* list, int i) { // A turns the cheat on or off too
+	MenuItem* item = &list->items[i];
+	item->value = !item->value;
+	return OptionCheats_toggled(list, i);
+}
+static MenuList OptionCheats_menu = {
+	.type = MENU_VAR,
+	.on_confirm = OptionCheats_flip,
+	.on_change = OptionCheats_toggled,
+	.items = NULL,
+};
+static int OptionCheats_openMenu(MenuList* list, int i) {
+	if (!cheat_count) {
+		char message[MAX_PATH + 128];
+		snprintf(message, sizeof(message), "No cheats for this game.\n\nPut a .cht file at\nCheats/%s/%s.cht", core.tag, game.name);
+		Menu_message(message, (char*[]){ "B","BACK", NULL });
+		return MENU_CALLBACK_NOP;
+	}
+	if (!OptionCheats_menu.items) {
+		OptionCheats_menu.items = calloc(cheat_count+1, sizeof(MenuItem));
+		for (int j=0; j<cheat_count; j++) {
+			MenuItem* item = &OptionCheats_menu.items[j];
+			item->name = cheats[j].desc;
+			item->desc = cheats[j].code;
+			item->values = onoff_labels;
+		}
+	}
+	for (int j=0; j<cheat_count; j++) OptionCheats_menu.items[j].value = cheats[j].enabled;
+	Menu_options(&OptionCheats_menu);
+	return MENU_CALLBACK_NOP;
+}
+
 static MenuList options_menu = {
 	.type = MENU_LIST,
 	.items = (MenuItem[]) {
@@ -3889,6 +4069,7 @@ static MenuList options_menu = {
 		{"Emulator",.on_confirm=OptionEmulator_openMenu},
 		{"Controls",.on_confirm=OptionControls_openMenu},
 		{"Shortcuts",.on_confirm=OptionShortcuts_openMenu}, 
+		{"Cheats",.on_confirm=OptionCheats_openMenu},
 		{"Save Changes",.on_confirm=OptionSaveChanges_openMenu},
 		{"Restore Save","Go back to an earlier save",.on_confirm=OptionRestoreSave_openMenu},
 		{NULL},
@@ -3897,7 +4078,7 @@ static MenuList options_menu = {
 };
 
 static void OptionSaveChanges_updateDesc(void) {
-	options_menu.items[4].desc = getSaveDesc();
+	options_menu.items[5].desc = getSaveDesc();
 }
 
 #define OPTION_PADDING 8
@@ -4979,6 +5160,7 @@ int main(int argc , char* argv[]) {
 	options_menu.items[1].desc = (char*)core.version;
 	
 	Core_load();
+	Cheats_load();
 	Input_init(NULL);
 	Config_readOptions(); // but others load and report options later (eg. nes)
 	Config_readControls(); // restore controls (after the core has reported its defaults)
