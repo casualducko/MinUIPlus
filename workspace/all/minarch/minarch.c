@@ -703,6 +703,9 @@ static char* tearing_labels[] = {
 	"Strict",
 	NULL
 };
+static char* turbo_rate_labels[] = {
+	"Slow", "Medium", "Fast", "Very fast", NULL // 7.5, 10, 15 and 30 presses a second at 60 frames a second
+};
 static char* max_ff_labels[] = {
 	"None",
 	"2x",
@@ -726,6 +729,13 @@ enum {
 	FE_OPT_THREAD,
 	FE_OPT_DEBUG,
 	FE_OPT_MAXFF,
+	FE_OPT_TURBO_RATE,
+	FE_OPT_TURBO_A,
+	FE_OPT_TURBO_B,
+	FE_OPT_TURBO_X,
+	FE_OPT_TURBO_Y,
+	FE_OPT_TURBO_L,
+	FE_OPT_TURBO_R,
 	FE_OPT_COUNT,
 };
 
@@ -985,6 +995,76 @@ static struct Config {
 				.values = max_ff_labels,
 				.labels = max_ff_labels,
 			},
+			[FE_OPT_TURBO_RATE] = {
+				.key	= "minarch_turbo_speed",
+				.name	= "Turbo Speed",
+				.desc	= "How fast a turbo button repeats: Slow is\n7 presses a second, Very fast is 30.",
+				.default_value = 2, // Fast
+				.value = 2,
+				.count = 4,
+				.values = turbo_rate_labels,
+				.labels = turbo_rate_labels,
+			},
+			[FE_OPT_TURBO_A] = {
+				.key	= "minarch_turbo_a",
+				.name	= "Turbo A",
+				.desc	= "While A is held, the game sees it pressed\nand released over and over (see Turbo Speed).",
+				.default_value = 0,
+				.value = 0,
+				.count = 2,
+				.values = onoff_labels,
+				.labels = onoff_labels,
+			},
+			[FE_OPT_TURBO_B] = {
+				.key	= "minarch_turbo_b",
+				.name	= "Turbo B",
+				.desc	= "While B is held, the game sees it pressed\nand released over and over (see Turbo Speed).",
+				.default_value = 0,
+				.value = 0,
+				.count = 2,
+				.values = onoff_labels,
+				.labels = onoff_labels,
+			},
+			[FE_OPT_TURBO_X] = {
+				.key	= "minarch_turbo_x",
+				.name	= "Turbo X",
+				.desc	= "While X is held, the game sees it pressed\nand released over and over (see Turbo Speed).",
+				.default_value = 0,
+				.value = 0,
+				.count = 2,
+				.values = onoff_labels,
+				.labels = onoff_labels,
+			},
+			[FE_OPT_TURBO_Y] = {
+				.key	= "minarch_turbo_y",
+				.name	= "Turbo Y",
+				.desc	= "While Y is held, the game sees it pressed\nand released over and over (see Turbo Speed).",
+				.default_value = 0,
+				.value = 0,
+				.count = 2,
+				.values = onoff_labels,
+				.labels = onoff_labels,
+			},
+			[FE_OPT_TURBO_L] = {
+				.key	= "minarch_turbo_l",
+				.name	= "Turbo L",
+				.desc	= "While L is held, the game sees it pressed\nand released over and over (see Turbo Speed).",
+				.default_value = 0,
+				.value = 0,
+				.count = 2,
+				.values = onoff_labels,
+				.labels = onoff_labels,
+			},
+			[FE_OPT_TURBO_R] = {
+				.key	= "minarch_turbo_r",
+				.name	= "Turbo R",
+				.desc	= "While R is held, the game sees it pressed\nand released over and over (see Turbo Speed).",
+				.default_value = 0,
+				.value = 0,
+				.count = 2,
+				.values = onoff_labels,
+				.labels = onoff_labels,
+			},
 			[FE_OPT_COUNT] = {NULL}
 		}
 	},
@@ -1036,6 +1116,12 @@ static void setOverclock(int i) {
 		case 2: PWR_setCPUSpeed(CPU_SPEED_PERFORMANCE); break;
 	}
 }
+// Turbo: for the game's buttons set to On in Options > Frontend, holding the button presses and releases it
+// over and over. `half` is the frames of each press and each release (2: 15 presses a second at 60 fps).
+static int turbo_mask = 0;	// bits of the game's (retro) buttons
+static int turbo_half = 2;
+static int turbo_held[16];	// frames each turbo button has been held
+static const int turbo_buttons[6] = { RETRO_DEVICE_ID_JOYPAD_A, RETRO_DEVICE_ID_JOYPAD_B, RETRO_DEVICE_ID_JOYPAD_X, RETRO_DEVICE_ID_JOYPAD_Y, RETRO_DEVICE_ID_JOYPAD_L, RETRO_DEVICE_ID_JOYPAD_R };
 static int toggle_thread = 0;
 static void Config_syncFrontend(char* key, int value) {
 	int i = -1;
@@ -1083,6 +1169,20 @@ static void Config_syncFrontend(char* key, int value) {
 	else if (exactMatch(key,config.frontend.options[FE_OPT_MAXFF].key)) {
 		max_ff_speed = value;
 		i = FE_OPT_MAXFF;
+	}
+	else if (exactMatch(key,config.frontend.options[FE_OPT_TURBO_RATE].key)) {
+		static const int halves[4] = { 4, 3, 2, 1 };
+		turbo_half = halves[value<0 ? 0 : value>3 ? 3 : value];
+		i = FE_OPT_TURBO_RATE;
+	}
+	else {
+		for (int t=0; t<6; t++) {
+			if (!exactMatch(key,config.frontend.options[FE_OPT_TURBO_A+t].key)) continue;
+			int bit = 1 << turbo_buttons[t];
+			turbo_mask = value ? (turbo_mask | bit) : (turbo_mask & ~bit);
+			i = FE_OPT_TURBO_A + t;
+			break;
+		}
 	}
 	if (i==-1) return;
 	Option* option = &config.frontend.options[i];
@@ -1732,6 +1832,22 @@ static int setFastForward(int enable) {
 
 static uint32_t buttons = 0; // RETRO_DEVICE_ID_JOYPAD_* buttons
 static int ignore_menu = 0;
+// Turbo (see turbo_mask): the bits of `buttons` that are turbo buttons go on for `half` frames, off for
+// `half`, starting with on the frame they are first held. held[] counts the frames each has been held.
+static int Turbo_apply(int buttons, int mask, int half, int held[16]) {
+	if (half<1) half = 1;
+	int out = buttons;
+	for (int bit=0; bit<16; bit++) {
+		int b = 1 << bit;
+		if (!(mask & b)) { held[bit] = 0; continue; }
+		if (!(buttons & b)) { held[bit] = 0; continue; }
+		if (held[bit]<(1<<24)) held[bit]++;
+		if (((held[bit]-1) / half) % 2) out &= ~b; // the off half
+	}
+	return out;
+}
+// end of the turbo code
+
 static void input_poll_callback(void) {
 	PAD_poll();
 
@@ -1883,6 +1999,7 @@ static void input_poll_callback(void) {
 	}
 	
 	// if (buttons) LOG_info("buttons: %i\n", buttons);
+	buttons = Turbo_apply(buttons, turbo_mask, turbo_half, turbo_held); // after the controls are read: turbo buttons repeat
 }
 static int16_t input_state_callback(unsigned port, unsigned device, unsigned index, unsigned id) {
 	if (port==0 && device==RETRO_DEVICE_JOYPAD && index==0) {
