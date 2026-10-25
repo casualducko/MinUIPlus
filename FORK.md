@@ -188,6 +188,9 @@ Y in the launcher picks a random game: in a folder of games it moves the selecti
 ## System info (Tools > Info)
 One screen of facts: battery (exact percent, charging), Wi-Fi (network and signal, from `iw dev wlan0 link`), IP address, card (free of total, `statvfs`), memory (`/proc/meminfo`, MemAvailable), play time (from `playtime.txt`), CPU (frequency and temperature from sysfs), uptime, clock, build (date and commit, baked in like minarch's), kernel and platform. A refreshes now, Up/Down scroll, and it updates by itself every 3 s (the network ones every 4 s, they start programs). It reuses `wifi_core.c` (`wifi_run`, `wifi_parse_link`, `wifi_ip_address`, `wifi_radio_on`). `info_core.c` has the formatting and parsing and no graphics (`test_info.c`: bytes, durations, meminfo, temperature, frequency). The Mac harness is `tools/host-harness/info-run.sh`. Not tried on the device.
 
+## Screenshot gallery (Tools > Screenshots)
+Browses what the screenshot hotkey saved in `Screenshots/<system>/` (png, or the bmp fallback), newest first across all systems. Left/Right: previous/next, Up/Down: ten at a time, A: only the picture (A or B returns), X: delete (asks first), B: quit. A small picture (a Game Boy frame) is scaled by whole numbers so it stays sharp, a large one is averaged down to fit; a file that can't be read says so and can still be deleted. The title and date come from the file name (`<game> YYYYMMDD-HHMMSS[-n].png`, `Shots_parse`; `Shots_compare` orders them, a -10 after a -9): `gallery_core.c`, tested in `test_gallery.c`. The Mac harness `tools/host-harness/gallery-run.sh` makes fake screenshots (including a broken one) and takes screenshots of the tool. Not tried on the device.
+
 ## Cheats
 
 In a game: Menu > Options > **Cheats** lists the cheats for that game, each Off/On (left/right or A). They're read from a RetroArch-style `.cht` file:
