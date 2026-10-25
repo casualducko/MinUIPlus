@@ -24,6 +24,7 @@ all:
 	cd ./all/minput/ && make
 	cd ./all/romulus/ && make
 	cd ./all/power/ && make
+	cd ./all/stats/ && make
 	cd ./all/wifi/ && make
 	cd ./all/syncsettings/ && make
 	cd ./all/say/ && make
@@ -39,6 +40,7 @@ clean:
 	cd ./all/minput/ && make clean
 	cd ./all/romulus/ && make clean
 	cd ./all/power/ && make clean
+	cd ./all/stats/ && make clean
 	cd ./all/wifi/ && make clean
 	cd ./all/syncsettings/ && make clean
 	cd ./all/say/ && make clean

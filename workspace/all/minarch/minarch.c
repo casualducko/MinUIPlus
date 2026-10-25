@@ -3174,6 +3174,17 @@ static int Cheat_writeState(const Cheat* cheats, int count, char* out, int size)
 }
 // end of the cheat file code
 
+// Play time: counted while the game runs (not in the menu, not asleep), added to the shared
+// playtime.txt every five minutes and when the game closes, and a launch is counted at the start.
+static uint64_t play_ms = 0;
+static long play_saved_s = 0;
+static void PlayStats_flush(int launch) {
+	long s = (long)(play_ms / 1000);
+	if (s==play_saved_s && !launch) return;
+	Playtime_save(PLAYTIME_PATH, game.path, s - play_saved_s, launch, (long)time(NULL));
+	play_saved_s = s;
+}
+
 static Cheat* cheats = NULL;
 static int cheat_count = 0;
 static char cheat_state_path[MAX_PATH];
@@ -5161,6 +5172,7 @@ int main(int argc , char* argv[]) {
 	
 	Core_load();
 	Cheats_load();
+	PlayStats_flush(1);
 	Input_init(NULL);
 	Config_readOptions(); // but others load and report options later (eg. nes)
 	Config_readControls(); // restore controls (after the core has reported its defaults)
@@ -5202,6 +5214,7 @@ int main(int argc , char* argv[]) {
 		uint32_t ft_now = SDL_GetTicks();
 		if (!ft_skip) {
 			uint32_t period = ft_now - ft_last;
+			if (period<1000) play_ms += period;
 			ft_frames++;
 			if (period>ft_max) ft_max = period;
 			if (period>25) ft_over25++;
@@ -5210,6 +5223,7 @@ int main(int argc , char* argv[]) {
 		}
 		ft_skip = 0;
 		ft_last = ft_now;
+		if (play_ms/1000 - play_saved_s >= 300) PlayStats_flush(0);
 		if (ft_now - ft_logged >= 5000) {
 			LOG_info("frames: %u in %ums, slowest %ums (core %ums), over 25ms: %u, over 50ms: %u, over 100ms: %u\n", ft_frames, ft_now-ft_logged, ft_max, ft_run_max, ft_over25, ft_over50, ft_over100);
 			ft_logged = ft_now; ft_frames = ft_over25 = ft_over50 = ft_over100 = 0; ft_max = ft_run_max = 0;
@@ -5278,6 +5292,7 @@ int main(int argc , char* argv[]) {
 	
 finish:
 
+	PlayStats_flush(0);
 	Game_close();
 	Core_unload();
 	

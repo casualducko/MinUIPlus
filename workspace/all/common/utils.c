@@ -301,3 +301,100 @@ uint64_t getMicroseconds(void) {
 
     return ret;
 }
+
+// Play time (see utils.h)
+int Playtime_parse(char* text, PlayRecord* out, int max) {
+	int count = 0;
+	char* save = NULL;
+	for (char* line = strtok_r(text, "\n", &save); line && count<max; line = strtok_r(NULL, "\n", &save)) {
+		char* t1 = strchr(line, '\t');
+		if (!t1) continue;
+		char* t2 = strchr(t1+1, '\t');
+		if (!t2) continue;
+		char* t3 = strchr(t2+1, '\t');
+		if (!t3) continue;
+		*t1 = *t2 = *t3 = '\0';
+		char* path = t3 + 1;
+		int len = strlen(path);
+		while (len>0 && (path[len-1]=='\r' || path[len-1]==' ')) path[--len] = '\0';
+		if (!len || len>=(int)sizeof(out[count].path)) continue;
+		long seconds = atol(line);
+		if (seconds<0) seconds = 0;
+		out[count].seconds = seconds;
+		out[count].launches = atoi(t1+1);
+		out[count].last = atol(t2+1);
+		strcpy(out[count].path, path);
+		count++;
+	}
+	return count;
+}
+int Playtime_add(PlayRecord* records, int count, int max, const char* path, long seconds, int launches, long now) {
+	if (!path || !*path || strlen(path)>=sizeof(records[0].path) || strchr(path, '\t') || strchr(path, '\n')) return count;
+	int i;
+	for (i=0; i<count; i++) if (!strcmp(records[i].path, path)) break;
+	if (i==count) {
+		if (count>=max) return count;
+		memset(&records[i], 0, sizeof(PlayRecord));
+		strcpy(records[i].path, path);
+		count++;
+	}
+	if (seconds>0) records[i].seconds += seconds;
+	if (launches>0) records[i].launches += launches;
+	if (now>records[i].last) records[i].last = now;
+	return count;
+}
+int Playtime_format(const PlayRecord* records, int count, char* out, int size) {
+	int len = 0;
+	out[0] = '\0';
+	for (int i=0; i<count; i++) {
+		int n = snprintf(out + len, size - len, "%ld\t%i\t%ld\t%s\n", records[i].seconds, records[i].launches, records[i].last, records[i].path);
+		if (n<0 || n>=size - len) break;
+		len += n;
+	}
+	return len;
+}
+void Playtime_name(const char* path, char* out, int size) {
+	const char* base = strrchr(path, '/');
+	base = base ? base+1 : path;
+	snprintf(out, size, "%s", base);
+	char* dot = strrchr(out, '.');
+	if (dot && strlen(dot)>1 && strlen(dot)<=5) { // .nes, .gba, .chd (but not the dot in "Mr. Do!")
+		int ext = 1;
+		for (char* p=dot+1; *p; p++) if (!isalnum((unsigned char)*p)) ext = 0;
+		if (ext) *dot = '\0';
+	}
+	for (;;) { // trailing (USA) [!] style tags
+		int len = strlen(out);
+		while (len>0 && out[len-1]==' ') out[--len] = '\0';
+		if (len>1 && (out[len-1]==')' || out[len-1]==']')) {
+			char open = out[len-1]==')' ? '(' : '[';
+			char* p = strrchr(out, open);
+			if (p && p>out) { *p = '\0'; continue; }
+		}
+		break;
+	}
+}
+void Playtime_duration(long seconds, char* out, int size) {
+	if (seconds<60) snprintf(out, size, "<1 min");
+	else if (seconds<3600) snprintf(out, size, "%ld min", seconds/60);
+	else snprintf(out, size, "%ldh %02ldm", seconds/3600, (seconds%3600)/60);
+}
+void Playtime_save(const char* file, const char* path, long seconds, int launches, long now) {
+	PlayRecord* records = calloc(PLAYTIME_MAX, sizeof(PlayRecord));
+	char* text = calloc(1, PLAYTIME_MAX * 600);
+	if (!records || !text) { free(records); free(text); return; }
+	int count = 0;
+	FILE* f = fopen(file, "r");
+	if (f) {
+		size_t n = fread(text, 1, PLAYTIME_MAX*600 - 1, f);
+		text[n] = '\0';
+		fclose(f);
+		count = Playtime_parse(text, records, PLAYTIME_MAX);
+	}
+	count = Playtime_add(records, count, PLAYTIME_MAX, path, seconds, launches, now);
+	Playtime_format(records, count, text, PLAYTIME_MAX * 600);
+	putFile((char*)file, text);
+	free(records);
+	free(text);
+}
+// end of the play time code
