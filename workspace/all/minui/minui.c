@@ -1297,8 +1297,8 @@ static void Menu_quit(void) {
 ///////////////////////////////////////
 
 ///////////////////////////////////////
-// The random button (Y): a game that has not been played, if there is one. In a folder of games it
-// moves the selection (A opens it, Y again picks another); at the root it opens a random folder first.
+// The random button (Y): any game in the library, wherever the cursor is. It opens a random folder
+// (in proportion to its games) and selects a random game there; A opens it, Y picks another.
 
 static uint32_t random_state = 0;
 static void showSelected(Directory* d, int index) { // selects it and scrolls the list so it is on screen, with some of what is around it
@@ -1320,39 +1320,25 @@ static void showSelected(Directory* d, int index) { // selects it and scrolls th
 static void seedRandom(void) {
 	if (!random_state) random_state = (uint32_t)time(NULL) ^ (SDL_GetTicks() * 2654435761u);
 }
-static int pickGameHere(void) { // selects a random game in the open folder; 1 if there was one
+static int pickGameHere(void) { // selects a random game in the open folder, played or not; 1 if there was one
 	Directory* d = top;
 	int count = d->entries->count;
 	if (count<=0) return 0;
 	int* index = malloc(sizeof(int) * count);
-	unsigned char* played = calloc(count, 1);
-	PlayRecord* records = calloc(PLAYTIME_MAX, sizeof(PlayRecord));
-	char* text = allocFile(PLAYTIME_PATH);
-	int record_count = (text && records) ? Playtime_parse(text, records, PLAYTIME_MAX) : 0;
-	int n = 0, chosen = -1;
-	if (index && played) {
-		for (int i=0; i<count; i++) {
-			Entry* entry = d->entries->items[i];
-			if (entry->type!=ENTRY_ROM) continue;
-			index[n] = i;
-			for (int j=0; j<record_count; j++) if (!strcmp(records[j].path, entry->path)) { played[n] = 1; break; }
-			n++;
-		}
-		seedRandom();
-		int pick = Random_pick(played, n, &random_state);
-		if (pick>=0) chosen = index[pick];
-	}
+	if (!index) return 0;
+	int n = 0;
+	for (int i=0; i<count; i++) if (((Entry*)d->entries->items[i])->type==ENTRY_ROM) index[n++] = i;
+	seedRandom();
+	int pick = Random_pick(NULL, n, &random_state);
+	int chosen = pick>=0 ? index[pick] : -1;
 	free(index);
-	free(played);
-	free(records);
-	free(text);
 	if (chosen<0) return 0;
 	showSelected(d, chosen);
 	return 1;
 }
 static int isPlainFolder(Entry* entry) { // not Recently Played, not a folder of discs that opens a game
 	char cue[MAX_PATH];
-	return entry->type==ENTRY_DIR && !exactMatch(entry->path, FAUX_RECENT_PATH) && !hasCue(entry->path, cue);
+	return entry->type==ENTRY_DIR && !exactMatch(entry->path, FAUX_RECENT_PATH) && !prefixMatch(COLLECTIONS_PATH, entry->path) && !prefixMatch(SDCARD_PATH "/Tools", entry->path) && !hasCue(entry->path, cue);
 }
 static int visibleCount(char* path) { // roughly how many games a folder holds: its entries that are not hidden
 	int n = 0;
@@ -1366,8 +1352,9 @@ static int visibleCount(char* path) { // roughly how many games a folder holds: 
 // Looks for a random game here, or (at the root, or in a folder of folders) in a random folder. 1 if it
 // found one: the selection, and maybe the open folder, changed. 0 leaves everything as it was.
 static int jumpToRandomGame(void) {
-	if (pickGameHere()) return 1;
+	while (stack->count>1) closeDirectory(); // from the top, wherever the cursor was: it picks from the whole library
 	int depth = stack->count;
+	if (pickGameHere()) return 1;
 	for (int attempt=0; attempt<8; attempt++) {
 		Directory* d = top;
 		// a folder is picked in proportion to its games, so one lonely PlayStation game isn't as likely as a whole library
