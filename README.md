@@ -1,110 +1,29 @@
-# MinUI
+# MinUIPlus
 
-MinUI is a focused, custom launcher and libretro frontend for [a variety of retro handhelds](#supported-devices).
+A maintained fork of [MinUI](https://github.com/shauninman/MinUI) for the **Powkiddy RGB20SX** running Moss/JELOS (720x720 screen). It keeps MinUI's simple launcher and adds the things that were missing on this handheld: working volume and Fn keys, sleep and power settings, cheats, a settings app, Wi-Fi, a self-updater and more.
 
-<img src="github/minui-main.png" width=320 /> <img src="github/minui-menu-gbc.png" width=320 /> 
+> **Status:** built for and tested on one RGB20SX only. It might work on the Powkiddy RGB30 (same screen and chip). Other devices need their own platform work. Use at your own risk, and keep your backups.
 
-## Features
+## Install or update
 
-- Simple launcher, simple SD card
-- No settings or configuration
-- No boxart, themes, or distractions
-- Automatically hides hidden files
-  and extension and region/version 
-  cruft in display names
-- Consistent in-emulator menu with
-  quick access to save states, disc
-  changing, and emulator options
-- Automatically sleeps after 30 seconds 
-  or press POWER to sleep (and wake)
-- Automatically powers off while asleep
-  after two minutes or hold POWER for
-  one second
-- Automatically resumes right where
-  you left off if powered off while
-  in-game, manually or while asleep
-- Resume from manually created, last 
-  used save state by pressing X in 
-  the launcher instead of A
-- Streamlined emulator frontend 
-  (minarch + libretro cores)
-- Single SD card compatible with
-  multiple devices from different
-  manufacturers
+This is an add-on for a card that already runs MinUI under Moss; it does not install Moss.
 
-You can [grab the latest version here](https://github.com/shauninman/MinUI/releases).
+- **From the browser (Chrome, Edge or another Chromium browser):** https://casualducko.github.io/MinUIPlus/ , pick the games card and press Install. It backs up everything it replaces.
+- **On the device:** Tools > Update checks the latest release over Wi-Fi.
+- **By hand:** download the package from the [latest release](https://github.com/casualducko/MinUIPlus/releases/latest), unpack it, run `./install.sh /path/to/card` (a backup of replaced files goes on the card; `revert.sh` undoes it).
 
-> Devices with a physical power switch
-> use MENU to sleep and wake instead of
-> POWER. Once asleep the device can safely
-> be powered off manually with the switch.
+## What it adds
 
-## Supported consoles
+- **Launcher:** Y picks a random game from the whole library, SELECT opens Tools, the Fn page shows system info (battery, Wi-Fi, IP, card, memory, versions) and turns Wi-Fi on and off with X, an optional clock beside the Wi-Fi and battery icons, scrolling long names, Japanese titles.
+- **In games:** fixed volume keys and audio, numbered save slots, screenshots, cheats (download per game, Turn All Cheats Off), turbo buttons, restore earlier saves.
+- **Tools:** Settings, Info, Screenshots gallery, Stats, Theme, Title Art, Clock (sets itself from the network), Wi-Fi, SSH, Romulus (download games from your own server), Update.
 
-Base:
+Details of every change are in [FORK.md](FORK.md); ideas and open items are in [IDEAS.md](IDEAS.md).
 
-- Game Boy
-- Game Boy Color
-- Game Boy Advance
-- Nintendo Entertainment System
-- Super Nintendo Entertainment System
-- Sega Genesis
-- PlayStation
+## Build and test
 
-Extras:
+The device build runs in Docker (`make PLATFORM=rgb30 build`). The host tests (`tools/host-tests/run.sh`) and the Mac harnesses (`tools/host-harness/`) run without a device. Releases are made with `tools/package/release.sh`.
 
-- Neo Geo Pocket (and Color)
-- Pico-8
-- Pokémon mini
-- Sega Game Gear
-- Sega Master System
-- Super Game Boy
-- TurboGrafx-16 (and TurboGrafx-CD)
-- Virtual Boy
+## License and credits
 
-## Supported Devices
-
-| Device | Added | Status |
-| -- | -- | -- |
-| Anbernic RG28xx | MinUI-20240429b-2 | Legacy |
-| Anbernic RG34xx | MinUI-20241227-0 | Legacy |
-| Anbernic RG34xxSP | MinUI-20250920-0 | Legacy |
-| Anbernic RG35xx | MinUI-20230922b-2 | Legacy |
-| Anbernic RG35xx Plus | MinUI-20240106b-0 | Legacy |
-| Anbernic RG35xxH | MinUI-20240120b-1 | Legacy |
-| Anbernic RG35xxSP | MinUI-20240525-0 | Legacy |
-| Anbernic RG40xxH | MinUI-20240717-1 | Legacy |
-| Anbernic RG40xxV | MinUI-20240831-0 | Legacy | 
-| Anbernic RG CubeXX | MinUI-202401028-0 | Legacy | 
-| GKD Pixel | MinUI-20240120b-1 | Legacy |
-| M17 | MinUI-20231126b-2 | Legacy |
-| MagicX XU Mini M | MinUI-20240831-0 | Legacy | 
-| MagicX Mini Zero 28 | MinUI-20250111-0 | Legacy |
-| Miyoo A30 | MinUI-20240705-0 | Legacy |
-| Miyoo Flip | MinUI-20250111-0 | Legacy |
-| Miyoo Mini | MinUI-20230922b-2 | Legacy |
-| Miyoo Mini Flip | MinUI-20251023-0 | Legacy |
-| Miyoo Mini Plus | MinUI-20230922b-2 | Legacy |
-| Powkiddy RGB30 | MinUI-20231014b-1 | Legacy |
-| Trimui Brick | MinUI-20241028-0 | Legacy |
-| Trimui Smart | MinUI-20230922b-2 | Legacy |
-| Trimui Smart Pro | MinUI-20231111b-2 | Legacy |
-
-> [!NOTE]
-> **Active** actively working on compatibility and improvements specific to this device  
-> **Maintained** inheriting improvements to common functionality  
-> **Legacy** will be retired in a future update  
-> **Retired** removed from repo, no longer updated or packaged with new releases
-
-## Legacy versions
-
-The original Trimui Model S version of MinUI (2021/04/03-2021/08/06) has been archived [here](https://github.com/shauninman/MinUI-Legacy-Trimui-Model-S).
-
-The sequel, MiniUI for the Miyoo Mini (2022/04/20-2022/10/23), has been archived [here](https://github.com/shauninman/MiniUI-Legacy-Miyoo-Mini).
-
-The return of MinUI for the original Anbernic RG35XX (2023/02/26-2023/03/26) has been archived [here](https://github.com/shauninman/MinUI-Legacy-RG35XX).
-
-The current MinUI which introduced support for multiple devices starting with the Trimui Smart, Miyoo Mini (and Plus), and the original Anbernic RG35XX was released on [2023/09/22][init-release] with the initial functional commit 6 months earlier on [2023/03/27][init-commit].
-
-[init-release]:https://github.com/shauninman/MinUI/releases/tag/v20230922b-2
-[init-commit]:https://github.com/shauninman/MinUI/commit/53e0296ea5a2794290fb5783765af6cee0063445#diff-b993e61ab6e66a19b67c88cfb98261aa9267d250de8bb56463662f67aae1a558
+MinUI is by Shaun Inman and has no license file; this fork's own additions are MIT-licensed. [NOTICE.md](NOTICE.md) says exactly what is covered and lists the third-party parts. The original MinUI README is `UPSTREAM-README.md`.
