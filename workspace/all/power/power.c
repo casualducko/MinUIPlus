@@ -128,7 +128,6 @@ int main(int argc, char* argv[]) {
 
 	for (int i=0; i<ROW_COUNT; i++) rows[i].seconds = readValue(&rows[i]);
 	SetRawRumble(0); // only to find out whether there is a motor to drive (it does not move it)
-	int rumble_backend = GetRumbleBackend();
 
 	int quit = 0, dirty = 1, show_setting = 0, sel = 0;
 	while (!quit) {
@@ -156,8 +155,8 @@ int main(int argc, char* argv[]) {
 			}
 			for (int i=0; i<ROW_COUNT; i++) drawRow(screen, i, i==sel, &rows[i]);
 			{
-				static const char* motor[] = { "No rumble motor found.", "Rumble motor: found (force feedback).", "Moss's rumble output found, motor unconfirmed." };
-				SDL_Surface* m = TTF_RenderUTF8_Blended(font.small, motor[rumble_backend], rumble_backend ? COLOR_GRAY : COLOR_WHITE);
+				// the RGB20SX has no rumble motor (checked on the device); the setting is kept for units that have one
+				SDL_Surface* m = TTF_RenderUTF8_Blended(font.small, "The RGB20SX has no rumble motor.", COLOR_GRAY);
 				if (m) {
 					SDL_BlitSurface(m, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE)});
 					SDL_FreeSurface(m);
