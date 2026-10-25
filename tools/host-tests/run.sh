@@ -28,7 +28,7 @@ x "$all/common/utils.c" '// Keeping older versions' 'int mkdirs' > "$out/gen/bac
 x "$all/common/utils.c" 'void putFile' 'void getFile' > "$out/gen/putFile.inc"
 x "$all/common/utils.c" 'int mkdirs' 'void normalizeNewline' > "$out/gen/mkdirs.inc"
 x "$all/minarch/minarch.c" '// Older versions of the save are kept' 'static void RTC_getPath' > "$out/gen/SRAM_versions.inc"
-x "$all/minui/minui.c" 'static void splitVersion' 'static int getFirstDisc' > "$out/gen/splitVersion.inc"
+x "$all/info/info_view.c" 'static void splitVersion' 'void InfoView_gather' > "$out/gen/splitVersion.inc"
 x "$all/minui/minui.c" 'static int getFirstDisc' 'static void addEntries' > "$out/gen/getFirstDisc.inc"
 x "$all/common/api.c" '#define SLEEP_TIMEOUT_DEFAULT' 'void PWR_update' > "$out/gen/PWR_sleep.inc"
 x "$all/common/api.c" 'static int SND_parseBufferMs' 'void SND_init' > "$out/gen/SND_bufferMs.inc"

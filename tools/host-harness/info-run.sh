@@ -16,7 +16,7 @@ cp -R "$repo/workspace/macos/platform" "$WORK/platform"
 python3 "$here/platform-patch.py" "$WORK/platform" "$CARD"
 mkdir -p "$CARD/.userdata/shared/.minui"
 cd "$repo/workspace/all/info"
-clang info.c info_core.c ../wifi/wifi_core.c -I../wifi ../common/scaler.c ../common/utils.c ../common/api.c "$WORK/platform/platform.c" \
+clang info.c info_view.c info_core.c ../wifi/wifi_core.c -I../wifi ../common/scaler.c ../common/utils.c ../common/api.c "$WORK/platform/platform.c" \
 	-o "$WORK/info" -I. -I../common -I"$WORK/platform" -I/opt/homebrew/include -L/opt/homebrew/lib \
 	-DPLATFORM=\"macos\" -DUSE_SDL2 -Wno-builtin-macro-redefined -U__ARM_ARCH -D__ARM_ARCH=4 \
 	-O1 -g -std=gnu99 -fno-common -Wall -Wno-unused-function -Wno-tautological-constant-out-of-range-compare \

@@ -7,13 +7,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include <ifaddrs.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
 
 #include "defines.h"
 #include "api.h"
 #include "utils.h"
+#include "info_view.h"
 
 ///////////////////////////////////////
 
@@ -818,19 +816,6 @@ static Array* getDiscs(char* path){
 	}
 	return entries;
 }
-// version.txt is "release\ncommit\n". Cuts text after the release line and points commit at the next line.
-static void splitVersion(char* text, char** commit) {
-	*commit = text + strlen(text); // an empty string
-	char* nl = strchr(text, '\n');
-	if (nl) {
-		*nl = '\0';
-		*commit = nl + 1;
-		char* end = strchr(*commit, '\n');
-		if (end) *end = '\0';
-		trimTrailingNewlines(*commit);
-	}
-	trimTrailingNewlines(text);
-}
 static int getFirstDisc(char* m3u_path, char* disc_path) { // based on getDiscs() natch
 	int found = 0;
 
@@ -1386,36 +1371,6 @@ static int jumpToRandomGame(void) {
 	return 0;
 }
 
-typedef struct { char key[16]; char val[96]; } AboutRow;
-static AboutRow about[5];
-static void aboutRow(int i, const char* key, const char* val) {
-	snprintf(about[i].key, sizeof(about[i].key), "%s", key);
-	snprintf(about[i].val, sizeof(about[i].val), "%s", (val && val[0]) ? val : "unknown");
-}
-static void fillAbout(void) {
-	char fork[64] = "", release[MAX_PATH], ip[64] = "none";
-	getFile(SYSTEM_PATH "/fork-version.txt", fork, sizeof(fork));
-	for (char* p=fork; *p; p++) if (*p=='\n' || *p=='\r') { *p = '\0'; break; }
-	getFile(ROOT_SYSTEM_PATH "/version.txt", release, MAX_PATH);
-	char* commit;
-	splitVersion(release, &commit); // a missing or short version.txt doesn't crash
-	struct ifaddrs* list = NULL;
-	if (!getifaddrs(&list)) {
-		for (struct ifaddrs* a=list; a; a=a->ifa_next) {
-			if (!a->ifa_addr || a->ifa_addr->sa_family!=AF_INET || !strcmp(a->ifa_name, "lo")) continue;
-			inet_ntop(AF_INET, &((struct sockaddr_in*)a->ifa_addr)->sin_addr, ip, sizeof(ip));
-			if (!strncmp(a->ifa_name, "wlan", 4)) break; // the Wi-Fi address if there is one
-		}
-		freeifaddrs(list);
-	}
-	memset(about, 0, sizeof(about));
-	aboutRow(0, "MinUIPlus", fork[0] ? fork : "not recorded");
-	aboutRow(1, "Release", release);
-	aboutRow(2, "Commit", commit);
-	aboutRow(3, "IP", ip);
-	aboutRow(4, "Model", PLAT_getModel());
-}
-
 int main (int argc, char *argv[]) {
 	// LOG_info("time from launch to:\n");
 	// unsigned long main_begin = SDL_GetTicks();
@@ -1454,6 +1409,8 @@ int main (int argc, char *argv[]) {
 	char thumb_path[MAX_PATH] = ""; // the picture shown, kept so it isn't decoded again on every redraw
 	SDL_Surface* thumb_cache = NULL;
 	int show_version = 0;
+	int about_first = 0; // first row showing on the Fn page
+	uint32_t about_at = 0;
 	int show_setting = 0; // 1=brightness,2=volume
 	int was_online = PLAT_isOnline();
 	
@@ -1474,16 +1431,26 @@ int main (int argc, char *argv[]) {
 		was_online = is_online;
 		
 		if (show_version) {
+			int about_visible = InfoView_visibleRows(screen), about_rows = InfoView_rowCount();
 			if (PAD_justPressed(BTN_B) || PAD_tappedMenu(now)) {
 				show_version = 0;
 				dirty = 1;
 				if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
 			}
+			else if (PAD_justRepeated(BTN_UP) && about_first>0) { about_first--; dirty = 1; }
+			else if (PAD_justRepeated(BTN_DOWN) && about_first+about_visible<about_rows) { about_first++; dirty = 1; }
+			else if (PAD_justRepeated(BTN_LEFT) && about_first>0) { about_first = MAX(0, about_first-about_visible); dirty = 1; }
+			else if (PAD_justRepeated(BTN_RIGHT) && about_first+about_visible<about_rows) { about_first = MIN(about_rows-about_visible, about_first+about_visible); dirty = 1; }
+			else if (PAD_justPressed(BTN_A)) { InfoView_forceWifi(); InfoView_gather(); about_at = now; dirty = 1; }
+			if (show_version && now-about_at>3000) { InfoView_gather(); about_at = now; dirty = 1; }
 		}
 		else {
 			if (PAD_tappedMenu(now)) {
 				show_version = 1;
-				fillAbout();
+				about_first = 0;
+				InfoView_forceWifi();
+				InfoView_gather();
+				about_at = now;
 				dirty = 1;
 				if (!HAS_POWER_BUTTON && !simple_mode) PWR_enableSleep();
 			}
@@ -1664,41 +1631,14 @@ int main (int argc, char *argv[]) {
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			
 			if (show_version) {
-				// the About page: this fork's build, MinUI's release and commit, the address, the model
-				#define ABOUT_ROWS 5
-				#define VERSION_LINE_HEIGHT 24
-				SDL_Surface* key_txt[ABOUT_ROWS] = {NULL};
-				SDL_Surface* val_txt[ABOUT_ROWS] = {NULL};
-				int l_width = 0, r_width = 0, count = 0;
-				for (int i=0; i<ABOUT_ROWS; i++) {
-					if (!about[i].key[0]) continue;
-					key_txt[i] = GFX_renderText(font.large, about[i].key, COLOR_DARK_TEXT);
-					val_txt[i] = GFX_renderText(font.large, about[i].val, COLOR_WHITE);
-					if (!key_txt[i] || !val_txt[i]) continue;
-					if (key_txt[i]->w>l_width) l_width = key_txt[i]->w;
-					if (val_txt[i]->w>r_width) r_width = val_txt[i]->w;
-					count++;
-				}
-				int x = l_width + SCALE1(8);
-				int left = (screen->w - (x + r_width))/2;
-				if (left<SCALE1(PADDING)) left = SCALE1(PADDING);
-				int top_y = (screen->h - SCALE1(VERSION_LINE_HEIGHT)*count)/2;
-				int line = 0;
-				for (int i=0; i<ABOUT_ROWS; i++) {
-					if (key_txt[i] && val_txt[i]) {
-						int y = top_y + SCALE1(VERSION_LINE_HEIGHT)*line++;
-						SDL_BlitSurface(key_txt[i], NULL, screen, &(SDL_Rect){left, y});
-						SDL_BlitSurface(val_txt[i], NULL, screen, &(SDL_Rect){left + x, y});
-					}
-					if (key_txt[i]) SDL_FreeSurface(key_txt[i]);
-					if (val_txt[i]) SDL_FreeSurface(val_txt[i]);
-				}
+				// the Fn page is the same screen as Tools > Info
+				InfoView_draw(screen, about_first, ow);
 				
 				// buttons (duped and trimmed from below)
 				if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
 				else GFX_blitButtonGroup((char*[]){ BTN_SLEEP==BTN_POWER?"POWER":"MENU","SLEEP",  NULL }, 0, screen, 0);
 				
-				GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
+				GFX_blitButtonGroup((char*[]){ "B","BACK","A","REFRESH",  NULL }, 0, screen, 1);
 			}
 			else {
 				// list
@@ -1795,7 +1735,7 @@ int main (int argc, char *argv[]) {
 			
 				if (total==0) {
 					if (stack->count>1) {
-						GFX_blitButtonGroup((char*[]){ "B","BACK",  NULL }, 0, screen, 1);
+						GFX_blitButtonGroup((char*[]){ "B","BACK","A","REFRESH",  NULL }, 0, screen, 1);
 					}
 				}
 				else {

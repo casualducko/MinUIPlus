@@ -1,4 +1,4 @@
-// splitVersion() from minui.c: the version screen's reading of .system/version.txt.
+// splitVersion() from info_view.c: the version screen's reading of .system/version.txt.
 // It used to strrchr() for newlines and write through the result: a missing or one-line file crashed the launcher.
 #include <stdio.h>
 #include <stdlib.h>

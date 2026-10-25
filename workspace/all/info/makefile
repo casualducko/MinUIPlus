@@ -21,7 +21,7 @@ SDL?=SDL
 
 TARGET = info
 INCDIR = -I. -I../common/ -I../wifi/ -I../../$(PLATFORM)/platform/
-SOURCE = $(TARGET).c info_core.c ../wifi/wifi_core.c ../common/utils.c ../common/api.c ../common/scaler.c ../../$(PLATFORM)/platform/platform.c
+SOURCE = $(TARGET).c info_view.c info_core.c ../wifi/wifi_core.c ../common/utils.c ../common/api.c ../common/scaler.c ../../$(PLATFORM)/platform/platform.c
 
 CC = $(CROSS_COMPILE)gcc
 CFLAGS   = $(ARCH) -fomit-frame-pointer
