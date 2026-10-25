@@ -8,7 +8,7 @@ want to reuse MinUI code, ask upstream. The upstream README is kept as `UPSTREAM
 
 ## Original to this fork (MIT, see `LICENSE`)
 Folders and files that did not exist in MinUI:
-- `workspace/all/update/`, `info/`, `gallery/`, `stats/`, `theme/`, `titleart/`, `romulus/`, `wifi/`, `power/` (the tools: Update, Info, Screenshots, Stats, Theme, TitleArt, Romulus, Wi-Fi, Settings)
+- `workspace/all/update/`, `info/`, `gallery/`, `stats/`, `theme/`, `titleart/`, `romulus/`, `wifi/`, `power/` (the tools: Update, Info, Screenshots, Stats, Themes, ASCIIArt, Romulus, Wi-Fi, Settings)
 - `skeleton/EXTRAS/Tools/rgb30/` launch scripts for those tools
 - `docs/` (the web installer)
 - `tools/` (installer and release scripts, host tests, Mac harnesses, ASCII-art helpers)

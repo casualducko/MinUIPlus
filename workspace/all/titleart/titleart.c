@@ -292,7 +292,7 @@ int main(int argc, char* argv[]) {
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			int tx = SCALE1(PADDING+BUTTON_PADDING);
 			char out[160];
-			GFX_truncateText(font.large, "Title Art", out, screen->w - SCALE1(PADDING*2) - ow, SCALE1(BUTTON_PADDING*2));
+			GFX_truncateText(font.large, "ASCIIArt", out, screen->w - SCALE1(PADDING*2) - ow, SCALE1(BUTTON_PADDING*2));
 			text(screen, font.large, out, COLOR_LIGHT_TEXT, tx, SCALE1(PADDING)+4, screen->w);
 			int y = SCALE1(PADDING) + row_h + SCALE1(8);
 			if (state==ST_HOME) {

@@ -8,7 +8,7 @@ const ENC = new TextEncoder();
 
 // files install.sh adds even when the card doesn't have them yet (new tools), everything else is only replaced
 const NEW_FILE = [
-	/^Tools\/rgb30\/(Romulus|Stats|Theme|TitleArt|Info|Update|Screenshots|Settings|SSH)\.pak\//,
+	/^Tools\/rgb30\/(Romulus|Stats|Themes|ASCIIArt|Info|Update|Screenshots|Settings|SSH)\.pak\//,
 	/^\.system\/res\/fallback(\.ttf|-OFL\.txt)$/,
 	/^Tools\/rgb30\/Wi-Fi\.pak\/(wifi\.elf|launch-old\.sh)$/,
 ];
@@ -177,11 +177,13 @@ export async function installOnCard(root, pkg, log = () => {}, now = new Date())
 		if (old) { out.replaced++; log('  replaced: ' + f.path); }
 		else { out.added++; log('  added: ' + f.path); }
 	}
-	// the Settings tool used to be called Power
-	if (await copyTree(root, 'Tools/rgb30/Power.pak', backup + '/Tools/rgb30/Power.pak')) {
-		const tools = await dirAt(root, 'Tools/rgb30', false);
-		await tools.removeEntry('Power.pak', { recursive: true });
-		log('  retired the old Power tool (it is Settings now)');
+	// tools that were renamed: the old folder goes into the backup
+	for (const [old, now] of [['Power', 'Settings'], ['Theme', 'Themes'], ['TitleArt', 'ASCIIArt']]) {
+		if (await copyTree(root, 'Tools/rgb30/' + old + '.pak', backup + '/Tools/rgb30/' + old + '.pak')) {
+			const tools = await dirAt(root, 'Tools/rgb30', false);
+			await tools.removeEntry(old + '.pak', { recursive: true });
+			log('  retired the old ' + old + ' tool (it is ' + now + ' now)');
+		}
 	}
 	// settings files the tools read: made once, never overwritten
 	if (await dirAt(root, '.userdata/rgb30', false)) {

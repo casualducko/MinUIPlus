@@ -59,7 +59,8 @@ cd $(dirname "$0")
 
 # new games get a title picture (Tools > Settings > "Art for new games": Automatic): once per boot,
 # no screen, a few seconds at most
-TITLEART=$SDCARD_PATH/Tools/$PLATFORM/TitleArt.pak/titleart.elf
+TITLEART=$SDCARD_PATH/Tools/$PLATFORM/ASCIIArt.pak/titleart.elf
+[ -x "$TITLEART" ] || TITLEART=$SDCARD_PATH/Tools/$PLATFORM/TitleArt.pak/titleart.elf # the tool's old folder name
 if [ "$(cat $USERDATA_PATH/titleart-auto 2>/dev/null)" = "1" ] && [ -x "$TITLEART" ]; then
 	# the tool keeps to a few seconds itself; the limit is for the case where it never comes back (nothing may hold up a boot)
 	if command -v timeout >/dev/null 2>&1; then timeout 15 "$TITLEART" --auto > "$LOGS_PATH/titleart.txt" 2>&1

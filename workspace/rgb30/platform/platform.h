@@ -122,7 +122,7 @@
 
 ///////////////////////////////
 
-#define MAIN_ROW_COUNT 8
+#define MAIN_ROW_COUNT 9 // 8 fit with room to spare: nine rows still end 40 px above the button pills
 #define PADDING 20 // was 40 (80 px on every edge) from the RGB30; this panel can use more of its edges
 
 ///////////////////////////////

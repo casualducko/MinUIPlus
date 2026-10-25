@@ -11,7 +11,7 @@ p = plat + '/platform.h'
 s = open(p).read()
 s = re.sub(r'#define SDCARD_PATH ".*"', '#define SDCARD_PATH "%s"' % card, s)
 s = s.replace('#define FIXED_WIDTH\t\t640', '#define FIXED_WIDTH\t\t720').replace('#define FIXED_HEIGHT\t480', '#define FIXED_HEIGHT\t720')
-s = s.replace('#define MAIN_ROW_COUNT 6', '#define MAIN_ROW_COUNT 8').replace('#define PADDING 10', '#define PADDING ' + os.environ.get('PADDING', '40'))
+s = s.replace('#define MAIN_ROW_COUNT 6', '#define MAIN_ROW_COUNT ' + os.environ.get('ROWS', '8')).replace('#define PADDING 10', '#define PADDING ' + os.environ.get('PADDING', '40'))
 open(p, 'w').write(s)
 
 p = plat + '/platform.c'

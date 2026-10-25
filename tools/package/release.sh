@@ -23,7 +23,7 @@ COPYFILE_DISABLE=1 tar --format ustar -czf "$out/$name" -C "$stage" .
 rm -r "$stage"
 # the web installer (docs/index.html) can't download release files from GitHub (CORS), so it reads its own copy
 pages=$(cd "$(dirname "$0")/../.." && pwd)/docs/latest
-if [ -d "$(dirname "$pages")" ]; then
+if [ -z "$NO_PAGES" ] && [ -d "$(dirname "$pages")" ]; then # NO_PAGES=1 for a test release that must not replace the web installer's copy
 	rm -rf "$pages"; mkdir -p "$pages"
 	cp "$out/$name" "$pages/$name"
 	printf '{"tag":"%s","file":"%s","sha256":"%s","size":%s}\n' "$tag" "$name" "$(cut -d' ' -f1 < "$out/$name.sha256")" "$(wc -c < "$out/$name" | tr -d ' ')" > "$pages/version.json"

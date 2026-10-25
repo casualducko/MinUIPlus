@@ -58,8 +58,8 @@ system:
 	cp ./workspace/all/power/build/$(PLATFORM)/power.elf ./build/EXTRAS/Tools/$(PLATFORM)/Settings.pak/settings.elf
 	cp ./workspace/all/wifi/build/$(PLATFORM)/wifi.elf ./build/EXTRAS/Tools/$(PLATFORM)/Wi-Fi.pak/
 	cp ./workspace/all/stats/build/$(PLATFORM)/stats.elf ./build/EXTRAS/Tools/$(PLATFORM)/Stats.pak/
-	cp ./workspace/all/theme/build/$(PLATFORM)/theme.elf ./build/EXTRAS/Tools/$(PLATFORM)/Theme.pak/
-	cp ./workspace/all/titleart/build/$(PLATFORM)/titleart.elf ./build/EXTRAS/Tools/$(PLATFORM)/TitleArt.pak/
+	cp ./workspace/all/theme/build/$(PLATFORM)/theme.elf ./build/EXTRAS/Tools/$(PLATFORM)/Themes.pak/
+	cp ./workspace/all/titleart/build/$(PLATFORM)/titleart.elf ./build/EXTRAS/Tools/$(PLATFORM)/ASCIIArt.pak/
 	cp ./workspace/all/info/build/$(PLATFORM)/info.elf ./build/EXTRAS/Tools/$(PLATFORM)/Info.pak/
 	cp ./workspace/all/update/build/$(PLATFORM)/update.elf ./build/EXTRAS/Tools/$(PLATFORM)/Update.pak/
 	cp ./workspace/all/gallery/build/$(PLATFORM)/gallery.elf ./build/EXTRAS/Tools/$(PLATFORM)/Screenshots.pak/

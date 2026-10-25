@@ -16,7 +16,7 @@ echo "backing up to $backup"
 cd "$here"
 find .system Tools Emus -type f | while read f; do
 	case "$f" in
-		Tools/rgb30/Romulus.pak/*|.system/res/fallback.ttf|.system/res/fallback-OFL.txt|Tools/rgb30/Stats.pak/*|Tools/rgb30/Theme.pak/*|Tools/rgb30/TitleArt.pak/*|Tools/rgb30/Info.pak/*|Tools/rgb30/Update.pak/*|Tools/rgb30/Screenshots.pak/*|Tools/rgb30/Settings.pak/*|Tools/rgb30/SSH.pak/*|Tools/rgb30/Wi-Fi.pak/wifi.elf|Tools/rgb30/Wi-Fi.pak/launch-old.sh) # a new tool: added (and replaced next time), nothing to back up the first time
+		Tools/rgb30/Romulus.pak/*|.system/res/fallback.ttf|.system/res/fallback-OFL.txt|Tools/rgb30/Stats.pak/*|Tools/rgb30/Themes.pak/*|Tools/rgb30/ASCIIArt.pak/*|Tools/rgb30/Info.pak/*|Tools/rgb30/Update.pak/*|Tools/rgb30/Screenshots.pak/*|Tools/rgb30/Settings.pak/*|Tools/rgb30/SSH.pak/*|Tools/rgb30/Wi-Fi.pak/wifi.elf|Tools/rgb30/Wi-Fi.pak/launch-old.sh) # a new tool: added (and replaced next time), nothing to back up the first time
 			mkdir -p "$card/$(dirname "$f")"
 			if [ -f "$card/$f" ]; then mkdir -p "$backup/$(dirname "$f")"; cp -p "$card/$f" "$backup/$f"; fi
 			cp "$f" "$card/$f.new" && mv "$card/$f.new" "$card/$f"; chmod +x "$card/$f" 2>/dev/null || true
@@ -29,12 +29,15 @@ find .system Tools Emus -type f | while read f; do
 	cp "$f" "$card/$f.new" && mv "$card/$f.new" "$card/$f" # a running program can't be overwritten in place, but it can be replaced
 	echo "  replaced: $f"
 done
-# the Settings tool used to be called Power: its old folder goes into the backup, so the Tools list shows one
-if [ -d "$card/Tools/rgb30/Power.pak" ]; then
-	mkdir -p "$backup/Tools/rgb30"
-	mv "$card/Tools/rgb30/Power.pak" "$backup/Tools/rgb30/Power.pak"
-	echo "  retired the old Power tool (it is Settings now)"
-fi
+# tools that were renamed: the old folder goes into the backup, so the Tools list shows one
+for old in Power:Settings Theme:Themes TitleArt:ASCIIArt; do
+	name=${old%%:*}; now=${old##*:}
+	if [ -d "$card/Tools/rgb30/$name.pak" ]; then
+		mkdir -p "$backup/Tools/rgb30"
+		mv "$card/Tools/rgb30/$name.pak" "$backup/Tools/rgb30/$name.pak"
+		echo "  retired the old $name tool (it is $now now)"
+	fi
+done
 # the Romulus tool reads its server from here; an empty one to fill in (never overwritten)
 cfg="$card/.userdata/rgb30/romulus.cfg"
 if [ -d "$card/.userdata/rgb30" ] && [ ! -f "$cfg" ]; then

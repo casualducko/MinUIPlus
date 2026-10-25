@@ -16,7 +16,7 @@ This is an add-on for a card that already runs MinUI under Moss; it does not ins
 
 - **Launcher:** Y picks a random game from the whole library, SELECT opens Tools, the Fn page shows system info (battery, Wi-Fi, IP, card, memory, versions) and turns Wi-Fi on and off with X, an optional clock beside the Wi-Fi and battery icons, scrolling long names, Japanese titles.
 - **In games:** fixed volume keys and audio, numbered save slots, screenshots, cheats (download per game, Turn All Cheats Off), turbo buttons, restore earlier saves.
-- **Tools:** Settings, Info, Screenshots gallery, Stats, Theme, Title Art, Clock (sets itself from the network), Wi-Fi, SSH, Romulus (download games from your own server), Update.
+- **Tools:** Settings, Info, Screenshots gallery, Stats, Themes, ASCIIArt, Clock (sets itself from the network), Wi-Fi, SSH, Romulus (download games from your own server), Update.
 
 Details of every change are in [FORK.md](FORK.md); ideas and open items are in [IDEAS.md](IDEAS.md).
 

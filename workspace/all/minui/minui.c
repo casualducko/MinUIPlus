@@ -1801,7 +1801,7 @@ int main (int argc, char *argv[]) {
 				if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
 				else GFX_blitButtonGroup((char*[]){ BTN_SLEEP==BTN_POWER?"POWER":"MENU","SLEEP",  NULL }, 0, screen, 0);
 				
-				GFX_blitButtonGroup((char*[]){ "B","BACK","X",(char*)InfoView_wifiHint(),  NULL }, 0, screen, 1);
+				GFX_blitButtonGroup((char*[]){ "X",(char*)InfoView_wifiHint(),"B","BACK",  NULL }, 0, screen, 1);
 			}
 			else {
 				// list

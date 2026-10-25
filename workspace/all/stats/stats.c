@@ -1,5 +1,6 @@
 // Play stats: how long each game has been played, from the shared playtime.txt that minarch keeps.
-// Up/Down scroll, L/R page, X changes the order (most played / recently played), B quits.
+// Up/Down scroll, L/R page, X changes the order (most played / recently played), Y resets all the stats
+// (after asking), B quits.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +51,29 @@ static void text(SDL_Surface* screen, TTF_Font* f, const char* s, SDL_Color colo
 	SDL_FreeSurface(t);
 }
 
+// Y: erase every game's play time. Asks first. 1 if it was done.
+static int resetStats(SDL_Surface* screen, int* show_setting) {
+	int dirty = 1, answer = 0;
+	while (!answer) {
+		GFX_startFrame();
+		PAD_poll();
+		PWR_update(&dirty, show_setting, NULL, NULL);
+		if (PAD_justPressed(BTN_B)) answer = -1;
+		else if (PAD_justPressed(BTN_A)) answer = 1;
+		if (dirty) {
+			GFX_clearUI(screen);
+			GFX_blitHardwareGroup(screen, *show_setting);
+			GFX_blitMessage(font.large, "Reset all play stats?\n\nThe play time and start count of\nevery game are erased.\nThis can't be undone.", screen, &(SDL_Rect){0,0,screen->w,screen->h-SCALE1(PADDING+PILL_SIZE)});
+			GFX_blitButtonGroup((char*[]){"B","CANCEL","A","RESET",NULL}, 1, screen, 1);
+			GFX_flip(screen);
+			dirty = 0;
+		}
+		else GFX_sync();
+	}
+	if (answer<0) return 0;
+	return writeFileAtomic(PLAYTIME_PATH, "", 0)==0;
+}
+
 int main(int argc, char* argv[]) {
 	(void)argc; (void)argv;
 	PWR_setCPUSpeed(CPU_SPEED_MENU);
@@ -80,6 +104,10 @@ int main(int argc, char* argv[]) {
 		else if (count>0 && PAD_justRepeated(BTN_DOWN)) { sel = (sel+1) % count; dirty = 1; }
 		else if (count>0 && PAD_justRepeated(BTN_LEFT)) { sel = MAX(0, sel-visible); dirty = 1; }
 		else if (count>0 && PAD_justRepeated(BTN_RIGHT)) { sel = MIN(count-1, sel+visible); dirty = 1; }
+		else if (count>0 && PAD_justPressed(BTN_Y)) {
+			if (resetStats(screen, &show_setting)) { count = 0; total = 0; sel = first = 0; }
+			dirty = 1;
+		}
 		else if (PAD_justPressed(BTN_X)) { by_recent = !by_recent; sortRecords(); sel = first = 0; dirty = 1; }
 
 		if (sel<first) first = sel;
@@ -139,6 +167,7 @@ int main(int argc, char* argv[]) {
 				snprintf(detail, sizeof(detail), "Started %i time%s, last played %s", r->launches, r->launches==1 ? "" : "s", when);
 				text(screen, font.small, detail, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), screen->h - SCALE1(PADDING) - row_h - row_h + SCALE1(6), screen->w - SCALE1(PADDING*2), 0);
 			}
+			if (count) GFX_blitButtonGroup((char*[]){"Y","RESET",NULL}, 0, screen, 0);
 			GFX_blitButtonGroup((char*[]){"X", by_recent ? "MOST PLAYED" : "RECENT", "B","BACK",NULL}, 1, screen, 1);
 			GFX_flip(screen);
 			dirty = 0;

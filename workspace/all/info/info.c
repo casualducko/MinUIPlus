@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
 			GFX_clearUI(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			InfoView_draw(screen, first, ow);
-			GFX_blitButtonGroup((char*[]){"B","BACK","X",(char*)InfoView_wifiHint(),NULL}, 1, screen, 1);
+			GFX_blitButtonGroup((char*[]){"X",(char*)InfoView_wifiHint(),"B","BACK",NULL}, 1, screen, 1);
 			GFX_flip(screen);
 			dirty = 0;
 		}

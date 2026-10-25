@@ -62,6 +62,8 @@ await assert.rejects(installOnCard(card, { tag: 'v1', files }), /not the MinUI c
 await put(card, '.system/rgb30/bin/minui.elf', 'OLD MINUI');
 await put(card, 'Tools/rgb30/Clock.pak/clock.elf', 'OLD CLOCK');
 await put(card, 'Tools/rgb30/Power.pak/launch.sh', 'old power');
+await put(card, 'Tools/rgb30/Theme.pak/launch.sh', 'old theme');
+await put(card, 'Tools/rgb30/TitleArt.pak/launch.sh', 'old titleart');
 await put(card, '.userdata/rgb30/sleep-timeout', '60\n');
 await put(card, 'Roms/GBA/game.gba', 'ROM');
 const pkg = { tag: 'v2099.01.01.0000', files };
@@ -71,6 +73,10 @@ assert.equal(await get(card, '.system/rgb30/backup-before-fork-20261025-123005/.
 assert.equal(await get(card, '.system/rgb30/backup-before-fork-20261025-123005/Tools/rgb30/Clock.pak/clock.elf'), 'OLD CLOCK');
 assert.equal(await get(card, '.system/rgb30/backup-before-fork-20261025-123005/Tools/rgb30/Power.pak/launch.sh'), 'old power');
 assert.ok(!(await has(card, 'Tools/rgb30/Power.pak/launch.sh')), 'old Power tool retired');
+assert.equal(await get(card, '.system/rgb30/backup-before-fork-20261025-123005/Tools/rgb30/Theme.pak/launch.sh'), 'old theme');
+assert.equal(await get(card, '.system/rgb30/backup-before-fork-20261025-123005/Tools/rgb30/TitleArt.pak/launch.sh'), 'old titleart');
+assert.ok(!(await has(card, 'Tools/rgb30/Theme.pak/launch.sh')) && !(await has(card, 'Tools/rgb30/TitleArt.pak/launch.sh')), 'the renamed tools are retired');
+assert.ok(await has(card, 'Tools/rgb30/Themes.pak/launch.sh') && await has(card, 'Tools/rgb30/ASCIIArt.pak/launch.sh'), 'the new names are added');
 assert.ok(await has(card, 'Tools/rgb30/Info.pak/info.elf'), 'a new tool is added');
 assert.ok(await has(card, 'Tools/rgb30/Update.pak/launch.sh'), 'the Update tool is added');
 assert.ok(!(await has(card, 'install.sh')) && !(await has(card, 'SHA256SUMS')), 'package files are not copied');
