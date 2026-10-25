@@ -202,7 +202,7 @@ int main(int argc, char* argv[]) {
 			}
 			else if (PAD_justRepeated(BTN_UP)) { sel = (sel+ROW_COUNT-1) % ROW_COUNT; dirty = 1; }
 			else if (PAD_justRepeated(BTN_DOWN)) { sel = (sel+1) % ROW_COUNT; dirty = 1; }
-			else if (sel==ROW_PRESET && (PAD_justRepeated(BTN_LEFT) || PAD_justRepeated(BTN_RIGHT) || PAD_justPressed(BTN_A))) {
+			else if (sel==ROW_PRESET && (PAD_justRepeated(BTN_LEFT) || PAD_justRepeated(BTN_RIGHT))) {
 				int dir = PAD_justRepeated(BTN_LEFT) ? -1 : 1;
 				int cur = currentPreset();
 				int next = cur<0 ? (dir>0 ? 0 : PRESET_COUNT-1) : (cur + dir + PRESET_COUNT) % PRESET_COUNT;
@@ -217,7 +217,7 @@ int main(int argc, char* argv[]) {
 					undo = *slotColor(&work, slot);
 					screen_kind = SCR_COLOR;
 				}
-				else if (sel==ROW_SAVE) modal = save() ? MODAL_SAVED : MODAL_FAILED;
+				else if (sel==ROW_SAVE || sel==ROW_PRESET) modal = save() ? MODAL_SAVED : MODAL_FAILED;
 				else if (sel==ROW_RESET) {
 					for (int i=0; i<SLOT_COUNT; i++) *slotColor(&work, i) = slots[i].stock;
 					apply_needed = 1;
@@ -319,13 +319,13 @@ int main(int argc, char* argv[]) {
 					if (first>0) GFX_blitAsset(ASSET_SCROLL_UP, NULL, screen, &(SDL_Rect){sx, SCALE1(PADDING) + soy});
 					if (first+visible<ROW_COUNT) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){sx, bottom + soy - SCALE1(2)});
 				}
-				const char* note = sel==ROW_PRESET ? "Left and right try a preset"
+				const char* note = sel==ROW_PRESET ? "Left and right try a preset, A applies it"
 					: (sel>=ROW_FIRST_SLOT && sel<ROW_FIRST_SLOT+SLOT_COUNT) ? slots[sel-ROW_FIRST_SLOT].hint
 					: sel==ROW_SAVE ? "Writes theme.cfg; the launcher restarts with it"
 					: "Back to the stock look (then Save to keep it)";
 				text(screen, font.small, note, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), bottom + row_h/2, w, 0); // under the scroll arrow
 				hints[0] = "B"; hints[1] = "BACK";
-				hints[2] = "A"; hints[3] = sel==ROW_SAVE ? "SAVE" : sel==ROW_RESET ? "RESET" : sel==ROW_PRESET ? "NEXT" : "EDIT";
+				hints[2] = "A"; hints[3] = sel==ROW_SAVE ? "SAVE" : sel==ROW_RESET ? "RESET" : sel==ROW_PRESET ? "APPLY" : "EDIT";
 			}
 			else {
 				SDL_Color* c = slotColor(&work, slot);
