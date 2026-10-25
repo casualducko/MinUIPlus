@@ -196,12 +196,12 @@ int main(int argc, char* argv[]) {
 				int sx = (screen->w - SCALE1(24))/2;
 				int soy = SCALE1((PILL_SIZE - 4) / 2);
 				if (first>0) GFX_blitAsset(ASSET_SCROLL_UP, NULL, screen, &(SDL_Rect){sx, SCALE1(PADDING) + soy});
-				if (first+visible<ROW_COUNT) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){sx, SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + soy - SCALE1(PILL_SIZE)/2});
+				if (first+visible<ROW_COUNT) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){sx, SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + SCALE1(3)});
 			}
 			// small text under the rows: what the selected setting does, then what applies to all of them
 			{
 				const char* notes[3] = { noteFor(&rows[sel]), "Changes apply when a game or the launcher starts.", NULL };
-				int y = SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + SCALE1(8);
+				int y = SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + SCALE1(16); // below the arrow
 				for (int i=0; notes[i]; i++) {
 					SDL_Surface* n = TTF_RenderUTF8_Blended(font.small, notes[i], i==0 ? COLOR_LIGHT_TEXT : COLOR_GRAY);
 					if (!n) continue;
