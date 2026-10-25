@@ -83,6 +83,7 @@ static void ta_join(char words[][TA_LINE_MAX], int from, int to, char* out) { //
 }
 typedef struct { int best; char lines[TA_MAX_LINES][TA_LINE_MAX]; int found; } TA_WrapSearch;
 static void ta_wrapRec(char words[][TA_LINE_MAX], int count, int i, int k, char cur[][TA_LINE_MAX], int used, TA_WrapSearch* s) {
+	if (used<0 || used>=TA_MAX_LINES) return; // never more lines than the arrays hold
 	if (k==1) {
 		ta_join(words, i, count, cur[used]);
 		int score = 0;
