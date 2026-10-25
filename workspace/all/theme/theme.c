@@ -317,13 +317,13 @@ int main(int argc, char* argv[]) {
 					int sx = (screen->w - SCALE1(24))/2;
 					int soy = SCALE1((PILL_SIZE - 4) / 2);
 					if (first>0) GFX_blitAsset(ASSET_SCROLL_UP, NULL, screen, &(SDL_Rect){sx, SCALE1(PADDING) + soy});
-					if (first+visible<ROW_COUNT) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){sx, bottom + soy - SCALE1(2)});
+					if (first+visible<ROW_COUNT) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){sx, top + visible*row_h + SCALE1(3)}); // right under the last row
 				}
 				const char* note = sel==ROW_PRESET ? "Left and right try a preset, A applies it"
 					: (sel>=ROW_FIRST_SLOT && sel<ROW_FIRST_SLOT+SLOT_COUNT) ? slots[sel-ROW_FIRST_SLOT].hint
 					: sel==ROW_SAVE ? "Writes theme.cfg; the launcher restarts with it"
 					: "Back to the stock look (then Save to keep it)";
-				text(screen, font.small, note, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), bottom + row_h/2 - SCALE1(6), w, 0); // under the scroll arrow
+				text(screen, font.small, note, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), top + visible*row_h + SCALE1(14), w, 0); // under the scroll arrow
 				hints[0] = "B"; hints[1] = "BACK";
 				hints[2] = "A"; hints[3] = sel==ROW_SAVE ? "SAVE" : sel==ROW_RESET ? "RESET" : sel==ROW_PRESET ? "APPLY" : "EDIT";
 			}
