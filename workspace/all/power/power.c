@@ -19,6 +19,7 @@
 #define RUMBLE_PATH USERDATA_PATH "/rumble"
 #define ART_PATH SHOW_ART_PATH
 #define CLOCK_PATH SHOW_CLOCK_PATH
+#define NEW_PATH SHOW_NEW_PATH
 #define DEFAULT_SECONDS 120 // what the system uses when there is no file
 
 typedef struct { int seconds; const char* label; } Choice;
@@ -69,6 +70,7 @@ static Row rows[] = { // alphabetical
 	{"Clock in corner", CLOCK_PATH, clock_choices, 0, 12, 24, 0},
 	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1},
 	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
+	{"New game dot", NEW_PATH, art_choices, 1, 1, 1, 1},
 	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 	{"Rumble", RUMBLE_PATH, rumble_choices, 100, 1, 100, 100},
 	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
@@ -119,6 +121,7 @@ static const char* noteFor(const Row* row) { // what a setting does, in one shor
 	if (!strcmp(row->name, "Clock in corner")) return "Shows the time beside the Wi-Fi and battery icons.";
 	if (!strcmp(row->name, "Game art")) return "Off: only text in the launcher.";
 	if (!strcmp(row->name, "Low battery shutdown")) return "At this level the game is saved and the device powers off.";
+	if (!strcmp(row->name, "New game dot")) return "A dot in the left margin beside games you have not played.";
 	if (!strcmp(row->name, "Power off after sleep")) return "How long it sleeps before it powers off.";
 	if (!strcmp(row->name, "Rumble")) return "The RGB20SX has no rumble motor (kept for units that have one).";
 	if (!strcmp(row->name, "Sleep after")) return "Games don't sleep by themselves; power still does.";

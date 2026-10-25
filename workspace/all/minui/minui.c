@@ -1340,6 +1340,33 @@ static int visibleCount(char* path) { // roughly how many games a folder holds: 
 }
 // Looks for a random game here, or (at the root, or in a folder of folders) in a random folder. 1 if it
 // found one: the selection, and maybe the open folder, changed. 0 leaves everything as it was.
+// games that have been played, by title (play time is recorded by the emulator): the rest get a dot in the launcher
+static char (*played)[96] = NULL;
+static int played_count = 0;
+static int show_new = 1;
+static void loadPlayed(void) {
+	char flag[16] = "";
+	getFile(SHOW_NEW_PATH, flag, sizeof(flag));
+	show_new = flag[0]!='0';
+	if (!show_new) return;
+	char* file = allocFile(PLAYTIME_PATH);
+	PlayRecord* records = file ? calloc(PLAYTIME_MAX, sizeof(PlayRecord)) : NULL;
+	int count = records ? Playtime_parse(file, records, PLAYTIME_MAX) : 0;
+	played = count>0 ? calloc(count, sizeof(*played)) : NULL;
+	if (played) {
+		for (int i=0; i<count; i++) Playtime_name(records[i].path, played[i], sizeof(played[i]));
+		played_count = count;
+	}
+	free(records);
+	free(file);
+}
+static int isNew(const Entry* entry) { // nothing recorded yet: nothing to compare with, so no dots
+	if (!show_new || !played_count || entry->type!=ENTRY_ROM) return 0;
+	char name[96];
+	Playtime_name(entry->path, name, sizeof(name));
+	for (int i=0; i<played_count; i++) if (!strcmp(played[i], name)) return 0;
+	return 1;
+}
 static int jumpToTools(void) { // SELECT: the Tools folder from anywhere
 	while (stack->count>1) closeDirectory();
 	for (int i=0; i<top->entries->count; i++) {
@@ -1394,6 +1421,7 @@ int main (int argc, char *argv[]) {
 	if (autoResume()) return 0; // nothing to do
 	
 	simple_mode = exists(SIMPLE_MODE_PATH);
+	loadPlayed();
 
 	LOG_info("MinUI\n");
 	InitSettings();
@@ -1674,6 +1702,10 @@ int main (int argc, char *argv[]) {
 						Entry* entry = top->entries->items[i];
 						char* entry_name = entry->name;
 						char* entry_unique = entry->unique;
+						if (isNew(entry)) { // a dot in the left margin
+							int d = SCALE1(6);
+							GFX_fillCapsule(screen, (SDL_Rect){(SCALE1(PADDING)-d)/2, SCALE1(PADDING+(j*PILL_SIZE)) + (SCALE1(PILL_SIZE)-d)/2, d, d}, SDL_MapRGB(screen->format, 255,255,255));
+						}
 						// with a picture showing, every row (the selected one too) stops short of it
 						int available_width = (had_thumb ? ox : screen->w) - SCALE1(PADDING * 2);
 						if (i==top->start && !had_thumb) available_width -= ow; // 

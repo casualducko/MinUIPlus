@@ -48,11 +48,11 @@ Last refreshed 2026-10-25 (early morning). `FORK.md` lists what has been done in
 The ones I would do first are at the top of each size.
 
 ### Small (S)
-1. **Quiet logging.** Every key press is logged; a `debug-log` flag file turns it on, off by default (less I/O during play).
+1. ~~Quiet logging~~ done: a `debug-log` flag file turns key logging on.
 2. **Cheat page polish.** Re-download, delete a cheat file, and "enable all" from the cheat list.
 
-3. **A "new" mark.** A dot or tag on games you have not played yet (play time already knows), so new downloads stand out in a long list.
-4. **Bigger plain-text title tiles.** Titles in kana/kanji (and a few very long Latin ones) are drawn as small plain text in the picture; drawing them at double size would fill the tile like the ASCII letters do.
+3. ~~A "new" mark~~ done: a dot beside unplayed games (Settings > New game dot).
+4. ~~Bigger plain-text title tiles~~ done: double size when the title fits.
 5. **Chinese and Korean in the fallback font.** The subset is JIS (Japanese) only; a bigger subset built the same way (a few MB more) covers hanzi and hangul.
 6. **Per-game turbo / a hotkey.** Turbo is a frontend option now (saved per game with Save Changes); a shortcut to toggle it without opening the menu.
 

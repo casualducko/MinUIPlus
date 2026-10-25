@@ -224,10 +224,19 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		snprintf(upper, sizeof(upper), "%s", main);
 		for (char* p = upper; *p; p++) *p = toupper((unsigned char)*p);
 		char plain[TA_MAX_LINES][TA_LINE_MAX];
-		int n = TA_wrapPlain(upper, TA_COLS-8, TA_MAX_LINES, plain);
-		int block = n + (sub_count ? sub_rows + 1 : 0);
+		// double size when the whole title fits that way (never a cut one), else the small plain letters
+		int sub_block = sub_count ? sub_rows + 1 : 0;
+		int max_big = MIN(TA_MAX_LINES, (TA_ROWS - 8 - sub_block) / 2);
+		int n = max_big>0 ? TA_wrapPlain(upper, (TA_COLS-8)/2, max_big, plain) : 0;
+		int big = n>0 && plain[n-1][strlen(plain[n-1])-1]!='~';
+		if (!big) n = TA_wrapPlain(upper, TA_COLS-8, TA_MAX_LINES, plain);
+		int block = (big ? n*2 : n) + sub_block;
 		int top = (TA_ROWS - 3 - block) / 2;
-		for (int i=0; i<n; i++) gridCenter(g, top + i, plain[i], 100);
+		for (int i=0; i<n; i++) {
+			if (big) gridCenterBig(g, top + i*2, plain[i], 100);
+			else gridCenter(g, top + i, plain[i], 100);
+		}
+		if (big) n *= 2; // rows used, for the subtitle below
 		for (int i=0; i<sub_count; i++) gridCenterBig(g, top + n + 1 + i*2, sub_lines[i], 70);
 		for (int x=2; x<TA_COLS-2; x++) gridPut(g, x, TA_ROWS-4, '-', 40);
 		char tag[96];

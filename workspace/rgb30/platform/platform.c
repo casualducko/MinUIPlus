@@ -111,7 +111,9 @@ void PLAT_pollInput(void) {
 				if (value>1) continue; // ignore repeats
 			
 				pressed = value;
-				LOG_info("key event: %i (%i)\n", code,pressed);
+				static int log_keys = -1; // every key press is logged only when .userdata/rgb30/debug-log exists
+				if (log_keys<0) log_keys = exists(USERDATA_PATH "/debug-log");
+				if (log_keys) LOG_info("key event: %i (%i)\n", code,pressed);
 					 if (code==RAW_UP) 	{ btn = BTN_DPAD_UP; 		id = BTN_ID_DPAD_UP; }
 	 			else if (code==RAW_DOWN)	{ btn = BTN_DPAD_DOWN; 	id = BTN_ID_DPAD_DOWN; }
 				else if (code==RAW_LEFT)	{ btn = BTN_DPAD_LEFT; 	id = BTN_ID_DPAD_LEFT; }
