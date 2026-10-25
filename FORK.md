@@ -185,6 +185,9 @@ Y in the Clock tool asks the network for the time: if there is no default route 
 ## Random game (launcher, Y)
 Y in the launcher picks a random game: in a folder of games it moves the selection to one (A opens it, Y again picks another), preferring games that were never played (those with no line in `playtime.txt`; if all were played, any). At the root, where there are only folders, it opens a random folder (not Recently Played, not a folder of discs that would start a game) and selects a game in it; if a folder turns out to have no games it tries another, and if nothing is found everything is left as it was. The root shows "Y RANDOM" next to "A OPEN". Code: `Random_pick` in `utils.c` (xorshift32, tested in `test_random.c`: unplayed first, even spread, repaired zero state) and `jumpToRandomGame` in `minui.c`; checked in the real launcher on the Mac (from the root, in a folder, and 4 of 4 picks were the one unplayed game). Not tried on the device.
 
+## System info (Tools > Info)
+One screen of facts: battery (exact percent, charging), Wi-Fi (network and signal, from `iw dev wlan0 link`), IP address, card (free of total, `statvfs`), memory (`/proc/meminfo`, MemAvailable), play time (from `playtime.txt`), CPU (frequency and temperature from sysfs), uptime, clock, build (date and commit, baked in like minarch's), kernel and platform. A refreshes now, Up/Down scroll, and it updates by itself every 3 s (the network ones every 4 s, they start programs). It reuses `wifi_core.c` (`wifi_run`, `wifi_parse_link`, `wifi_ip_address`, `wifi_radio_on`). `info_core.c` has the formatting and parsing and no graphics (`test_info.c`: bytes, durations, meminfo, temperature, frequency). The Mac harness is `tools/host-harness/info-run.sh`. Not tried on the device.
+
 ## Cheats
 
 In a game: Menu > Options > **Cheats** lists the cheats for that game, each Off/On (left/right or A). They're read from a RetroArch-style `.cht` file:

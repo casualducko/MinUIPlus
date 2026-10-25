@@ -53,9 +53,9 @@ x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
 
 failed=0
-for t in rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb titleart recents httpdate random playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
+for t in rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb titleart recents httpdate random info playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
 	echo "== $t"
-	$CC $FLAGS -I"$out" -I"$all/titleart" -I"$all/clock" -I"$all/common" -o "$out/test_$t" "$here/test_$t.c" -lm
+	$CC $FLAGS -I"$out" -I"$all/titleart" -I"$all/clock" -I"$all/info" -I"$all/common" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi
 done
 # the Clock tool's network part against a mock time server
