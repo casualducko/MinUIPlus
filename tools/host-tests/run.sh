@@ -50,9 +50,9 @@ x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
 
 failed=0
-for t in rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
+for t in rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb titleart playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
 	echo "== $t"
-	$CC $FLAGS -I"$out" -o "$out/test_$t" "$here/test_$t.c" -lm
+	$CC $FLAGS -I"$out" -I"$all/titleart" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi
 done
 # the Romulus tool: JSON, zip, config, naming, and the curl job against a mock server

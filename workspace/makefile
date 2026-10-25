@@ -26,6 +26,7 @@ all:
 	cd ./all/power/ && make
 	cd ./all/stats/ && make
 	cd ./all/theme/ && make
+	cd ./all/titleart/ && make
 	cd ./all/wifi/ && make
 	cd ./all/syncsettings/ && make
 	cd ./all/say/ && make
@@ -43,6 +44,7 @@ clean:
 	cd ./all/power/ && make clean
 	cd ./all/stats/ && make clean
 	cd ./all/theme/ && make clean
+	cd ./all/titleart/ && make clean
 	cd ./all/wifi/ && make clean
 	cd ./all/syncsettings/ && make clean
 	cd ./all/say/ && make clean

@@ -443,7 +443,7 @@ def wrap_plain(text, width, lines):
         if len(cur) + (1 if cur else 0) + len(w) <= width:
             cur = (cur + ' ' + w) if cur else w
         else:
-            out.append(cur)
+            if cur: out.append(cur)
             cur = w
     if cur: out.append(cur)
     if len(out) > lines:

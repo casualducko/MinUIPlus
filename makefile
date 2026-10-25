@@ -59,6 +59,7 @@ system:
 	cp ./workspace/all/wifi/build/$(PLATFORM)/wifi.elf ./build/EXTRAS/Tools/$(PLATFORM)/Wi-Fi.pak/
 	cp ./workspace/all/stats/build/$(PLATFORM)/stats.elf ./build/EXTRAS/Tools/$(PLATFORM)/Stats.pak/
 	cp ./workspace/all/theme/build/$(PLATFORM)/theme.elf ./build/EXTRAS/Tools/$(PLATFORM)/Theme.pak/
+	cp ./workspace/all/titleart/build/$(PLATFORM)/titleart.elf ./build/EXTRAS/Tools/$(PLATFORM)/TitleArt.pak/
 
 cores: # TODO: can't assume every platform will have the same stock cores (platform should be responsible for copy too)
 	# stock cores

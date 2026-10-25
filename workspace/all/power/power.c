@@ -17,6 +17,7 @@
 #define AUDIO_PATH USERDATA_PATH "/audio-buffer"
 #define BATTERY_PATH USERDATA_PATH "/low-battery-shutdown"
 #define RUMBLE_PATH USERDATA_PATH "/rumble"
+#define ART_PATH SHOW_ART_PATH
 #define DEFAULT_SECONDS 120 // what the system uses when there is no file
 
 typedef struct { int seconds; const char* label; } Choice;
@@ -37,6 +38,10 @@ static const Choice battery_choices[] = {
 	{0,"Off"}, {3,"3%"}, {5,"5%"}, {8,"8%"}, {10,"10%"}, {-1,NULL}
 };
 
+static const Choice art_choices[] = {
+	{1,"On"}, {0,"Off"}, {-1,NULL}
+};
+
 static const Choice rumble_choices[] = {
 	{0,"Off"}, {25,"25%"}, {50,"50%"}, {75,"75%"}, {100,"Full"}, {-1,NULL}
 };
@@ -54,6 +59,7 @@ static Row rows[] = {
 	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
 	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
+	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1},
 	{"Rumble", RUMBLE_PATH, rumble_choices, 100, 1, 100, 100},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))

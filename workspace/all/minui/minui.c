@@ -1507,6 +1507,9 @@ int main (int argc, char *argv[]) {
 			// simple thumbnail support a thumbnail for a file or folder named NAME.EXT needs a corresponding /.res/NAME.EXT.png 
 			// that is no bigger than platform FIXED_HEIGHT x FIXED_HEIGHT
 			int had_thumb = 0;
+			char art_flag[8] = "";
+			getFile(SHOW_ART_PATH, art_flag, sizeof(art_flag));
+			int art_on = art_flag[0]!='0'; // Tools > Settings and Tools > Title Art switch it
 			if (!show_version && total>0) {
 				Entry* entry = top->entries->items[top->selected];
 				char res_path[MAX_PATH];
@@ -1523,7 +1526,7 @@ int main (int argc, char *argv[]) {
 				
 				sprintf(res_path, "%s/.res/%s.png", res_root, res_name);
 				LOG_info("res_path: %s\n", res_path);
-				if (exists(res_path)) {
+				if (art_on && exists(res_path)) {
 					had_thumb = 1;
 					SDL_Surface* thumb = IMG_Load(res_path);
 					ox = MAX(FIXED_WIDTH - FIXED_HEIGHT, (FIXED_WIDTH - thumb->w));
