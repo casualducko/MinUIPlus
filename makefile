@@ -55,7 +55,7 @@ system:
 	cp ./workspace/all/clock/build/$(PLATFORM)/clock.elf ./build/EXTRAS/Tools/$(PLATFORM)/Clock.pak/
 	cp ./workspace/all/minput/build/$(PLATFORM)/minput.elf ./build/EXTRAS/Tools/$(PLATFORM)/Input.pak/
 	cp ./workspace/all/romulus/build/$(PLATFORM)/romulus.elf ./build/EXTRAS/Tools/$(PLATFORM)/Romulus.pak/
-	cp ./workspace/all/power/build/$(PLATFORM)/power.elf ./build/EXTRAS/Tools/$(PLATFORM)/Power.pak/
+	cp ./workspace/all/power/build/$(PLATFORM)/power.elf ./build/EXTRAS/Tools/$(PLATFORM)/Settings.pak/settings.elf
 	cp ./workspace/all/wifi/build/$(PLATFORM)/wifi.elf ./build/EXTRAS/Tools/$(PLATFORM)/Wi-Fi.pak/
 	cp ./workspace/all/stats/build/$(PLATFORM)/stats.elf ./build/EXTRAS/Tools/$(PLATFORM)/Stats.pak/
 	cp ./workspace/all/theme/build/$(PLATFORM)/theme.elf ./build/EXTRAS/Tools/$(PLATFORM)/Theme.pak/

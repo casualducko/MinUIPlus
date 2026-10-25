@@ -58,14 +58,14 @@ typedef struct {
 	int min, max;	// accepted values besides 0 (and, for the timings, "10 seconds or more")
 	int seconds;	// what is set now (milliseconds for the audio row)
 } Row;
-static Row rows[] = {
-	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
-	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
-	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
-	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
-	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1},
+static Row rows[] = { // alphabetical
 	{"Art for new games", TITLEART_AUTO_PATH, auto_art_choices, 0, 1, 1, 0},
+	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
+	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1},
+	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
+	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 	{"Rumble", RUMBLE_PATH, rumble_choices, 100, 1, 100, 100},
+	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))
 
@@ -103,6 +103,17 @@ static void step(Row* row, int dir) {
 		PLAT_setRumble(65535 * row->seconds / 100);
 		rumble_off_at = SDL_GetTicks() + 300;
 	}
+}
+
+static const char* noteFor(const Row* row) { // what a setting does, in one short line
+	if (!strcmp(row->name, "Art for new games")) return "Automatic: new games get a title picture at boot.";
+	if (!strcmp(row->name, "Audio buffer")) return "Bigger is safer against crackle, with a little more delay.";
+	if (!strcmp(row->name, "Game art")) return "Off: only text in the launcher.";
+	if (!strcmp(row->name, "Low battery shutdown")) return "At this level the game is saved and the device powers off.";
+	if (!strcmp(row->name, "Power off after sleep")) return "How long it sleeps before it powers off.";
+	if (!strcmp(row->name, "Rumble")) return "The RGB20SX has no rumble motor (kept for units that have one).";
+	if (!strcmp(row->name, "Sleep after")) return "Games don't sleep by themselves; power still does.";
+	return "";
 }
 
 static void drawRow(SDL_Surface* screen, int j, int selected, const Row* row) {
@@ -165,28 +176,17 @@ int main(int argc, char* argv[]) {
 				SDL_FreeSurface(t);
 			}
 			for (int i=0; i<ROW_COUNT; i++) drawRow(screen, i, i==sel, &rows[i]);
+			// small text under the rows: what the selected setting does, then what applies to all of them
 			{
-				// the RGB20SX has no rumble motor (checked on the device); the setting is kept for units that have one
-				SDL_Surface* m = TTF_RenderUTF8_Blended(font.small, "The RGB20SX has no rumble motor.", COLOR_GRAY);
-				if (m) {
-					SDL_BlitSurface(m, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE)});
-					SDL_FreeSurface(m);
+				const char* notes[3] = { noteFor(&rows[sel]), "Changes apply when a game or the launcher starts.", NULL };
+				int y = SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE) + SCALE1(8);
+				for (int i=0; notes[i]; i++) {
+					SDL_Surface* n = TTF_RenderUTF8_Blended(font.small, notes[i], i==0 ? COLOR_LIGHT_TEXT : COLOR_GRAY);
+					if (!n) continue;
+					SDL_BlitSurface(n, &(SDL_Rect){0,0,MIN(n->w, screen->w-SCALE1(PADDING*2)),n->h}, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), y});
+					y += n->h + SCALE1(4);
+					SDL_FreeSurface(n);
 				}
-			}
-
-			// what the settings mean, in small text under the rows
-			static const char* notes[] = {
-				"Games don't sleep by themselves; power still does.",
-				"Changes apply when a game or the launcher starts.",
-				NULL
-			};
-			int y = SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE) + SCALE1(36);
-			for (int i=0; notes[i]; i++) {
-				SDL_Surface* n = TTF_RenderUTF8_Blended(font.small, notes[i], COLOR_GRAY);
-				if (!n) continue;
-				SDL_BlitSurface(n, &(SDL_Rect){0,0,MIN(n->w, screen->w-SCALE1(PADDING*2)),n->h}, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), y});
-				y += n->h + SCALE1(4);
-				SDL_FreeSurface(n);
 			}
 			GFX_blitButtonGroup((char*[]){"B","BACK","A","CHANGE",NULL}, 1, screen, 1);
 			GFX_flip(screen);
