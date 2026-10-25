@@ -1609,8 +1609,9 @@ int main (int argc, char *argv[]) {
 						Entry* entry = top->entries->items[i];
 						char* entry_name = entry->name;
 						char* entry_unique = entry->unique;
-						int available_width = (had_thumb && j!=selected_row ? ox : screen->w) - SCALE1(PADDING * 2);
-						if (i==top->start && !(had_thumb && j!=selected_row)) available_width -= ow; // 
+						// with a picture showing, every row (the selected one too) stops short of it
+						int available_width = (had_thumb ? ox : screen->w) - SCALE1(PADDING * 2);
+						if (i==top->start && !had_thumb) available_width -= ow; // 
 					
 						SDL_Color text_color = COLOR_WHITE;
 					
