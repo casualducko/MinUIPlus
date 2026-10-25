@@ -1,0 +1,76 @@
+From 8155a64076df9be9bb1de773d6e16046e615e11a Mon Sep 17 00:00:00 2001
+From: casualducko <180575600+casualducko@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 16:54:57 -0400
+Subject: [PATCH 1/2] RGB30: restart logind when the sleep config changes
+
+The quirk disables sleep (AllowSuspend=no) and tells logind to ignore the
+power key, but it runs after logind has started and logind only reads its
+config at startup. On the first boot after installing Moss the files did
+not exist yet, so the power button still suspended the device until the
+next reboot. (MinUI's todo.txt: "figure out why power suspends the device
+after MOSS install ... it only stops suspending after a manual reboot".)
+
+Write each file only if its contents changed and restart systemd-logind
+when either did, so normal boots are unaffected. The same idea as the
+upstream JELOS change (suspendmode, PR 2195), applied to the one quirk
+this fork customizes.
+
+Host-tested with a stub systemctl: first boot restarts, unchanged files
+don't, an edited file does. Not tested on hardware.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ .../devices/Powkiddy RGB30/030-suspend_mode   | 35 ++++++++++++++-----
+ 1 file changed, 27 insertions(+), 8 deletions(-)
+
+diff --git a/packages/hardware/quirks/devices/Powkiddy RGB30/030-suspend_mode b/packages/hardware/quirks/devices/Powkiddy RGB30/030-suspend_mode
+index c2f757c..4d2ec54 100755
+--- a/packages/hardware/quirks/devices/Powkiddy RGB30/030-suspend_mode	
++++ b/packages/hardware/quirks/devices/Powkiddy RGB30/030-suspend_mode	
+@@ -3,16 +3,35 @@
+ # Copyright (C) 2022-present Fewtarius
+ 
+ ### Sleep is currently broken, so we'll disable it.
++###
++### logind only reads these files when it starts and this runs after it has,
++### so on the first boot, when they don't exist yet, the power button would
++### still suspend the device until the next reboot. Only restart logind when
++### something actually changed.
+ 
+-cat <<EOF >/storage/.config/sleep.conf.d/sleep.conf
+-[Sleep]
++SLEEP_CONF=/storage/.config/sleep.conf.d/sleep.conf
++LOGIN_CONF=/storage/.config/logind.conf.d/login.conf
++CHANGED=0
++
++write_if_changed() { # path, contents
++  mkdir -p "$(dirname "$1")"
++  if [ "$(cat "$1" 2>/dev/null)" != "$2" ]
++  then
++    printf '%s\n' "$2" >"$1"
++    CHANGED=1
++  fi
++}
++
++write_if_changed "${SLEEP_CONF}" "[Sleep]
+ AllowSuspend=no
+-SuspendState=freeze
+-EOF
++SuspendState=freeze"
+ 
+ ### Ignore power button presses for now, until we can finish up fixing sleep.
+-cat <<EOF >~/.config/logind.conf.d/login.conf
+-[Login]
++write_if_changed "${LOGIN_CONF}" "[Login]
+ HandlePowerKey=ignore
+-HandleSuspendKey=ignore
+-EOF
++HandleSuspendKey=ignore"
++
++if [ "${CHANGED}" = "1" ]
++then
++  systemctl restart systemd-logind
++fi
+-- 
+2.52.0
+

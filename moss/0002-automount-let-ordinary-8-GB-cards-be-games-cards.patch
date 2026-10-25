@@ -1,0 +1,47 @@
+From efd8aa8556798371a7499fce017d5faa978ecae7 Mon Sep 17 00:00:00 2001
+From: casualducko <180575600+casualducko@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 16:55:03 -0400
+Subject: [PATCH 2/2] automount: let ordinary 8 GB cards be games cards
+
+find_games() ignored any disk of 8 GiB or less, so a normal "8GB" card
+(about 7.5 GiB) was never mounted on /storage/roms and MinUI showed its
+"no MinUI files detected" screen and powered the device off. Lower the
+floor to 2 GiB and give it a name.
+
+Not tested on hardware (needs a Moss build).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ packages/jelos/sources/scripts/automount | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/packages/jelos/sources/scripts/automount b/packages/jelos/sources/scripts/automount
+index 2bfffec..9a5ea4c 100755
+--- a/packages/jelos/sources/scripts/automount
++++ b/packages/jelos/sources/scripts/automount
+@@ -6,6 +6,9 @@
+ . /etc/os-release
+ 
+ UPDATE_ROOT="/storage/.update"
++# smallest disk, in KiB, that can be a games card (this used to be 8 GiB, which
++# meant an ordinary "8GB" card, about 7.5 GiB, was never mounted)
++MIN_DEVICE_SIZE=2097152
+ MOUNT_GAMES=$(get_setting system.automount)
+ GAMES_DEVICE=$(get_setting system.gamesdevice)
+ 
+@@ -55,10 +58,10 @@ find_games() {
+     do
+       ROOTDEV=$(echo ${DEV} | sed -e "s#^/.*/##g" -e "s#p[0-9].*\$##g")
+       SIZE=$(awk '/'${ROOTDEV}'$/ {print $3}' /proc/partitions)
+-      if (( ${SIZE} <= 8388608 ))
++      if (( ${SIZE} <= ${MIN_DEVICE_SIZE} ))
+       then
+         log $0 "Device ${ROOTDEV} is too small, ignoring."
+-        # We don't want to mount partitions smaller than ~8GB.
++        # We don't want to mount partitions on tiny devices.
+         continue
+       fi
+       if [ -L "/sys/class/block/${ROOTDEV}boot0" ]
+-- 
+2.52.0
+

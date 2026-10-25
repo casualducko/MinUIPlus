@@ -1,0 +1,24 @@
+--- rk3566-rgb30-original.dts (decompiled)
++++ rk3566-rgb30-rgb20sx.dts (decompiled)
+@@ -942,9 +942,9 @@
+ 			reg = <0x62>;
+ 		};
+ 
+-		vdd_cpu: tcs4525@1c {
+-			compatible = "tcs,tcs452x";
+-			reg = <0x1c>;
++		vdd_cpu: syr827@40 {
++			compatible = "silergy,syr827";
++			reg = <0x40>;
+ 			vin-supply = <0x33>;
+ 			regulator-compatible = "fan53555-reg";
+ 			regulator-name = "vdd_cpu";
+@@ -5241,7 +5241,7 @@
+ 		pmucru = "/clock-controller@fdd00000";
+ 		cru = "/clock-controller@fdd20000";
+ 		i2c0 = "/i2c@fdd40000";
+-		vdd_cpu = "/i2c@fdd40000/tcs4525@1c";
++		vdd_cpu = "/i2c@fdd40000/syr827@40";
+ 		rk817 = "/i2c@fdd40000/pmic@20";
+ 		pinctrl_rk8xx = "/i2c@fdd40000/pmic@20/pinctrl_rk8xx";
+ 		rk817_slppin_null = "/i2c@fdd40000/pmic@20/pinctrl_rk8xx/rk817_slppin_null";

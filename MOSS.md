@@ -13,7 +13,7 @@ Last updated 2026-10-25.
 ## 1. CPU stuck at 1.416 GHz (biggest payoff)
 - The CPU voltage regulator (TCS4525, I2C address 0x1c) never binds to a driver, so `cpufreq` never starts. MinUI's CPU setting does nothing and the battery pays for it.
 - Fix: a device tree change (and maybe a kernel config check) so the regulator binds. Needs a custom image, tested on a spare card.
-- **Cause found 2026-10-25:** Moss's tree declares a TCS4525 at I2C 0x1c, but the unit has a SYR827-class regulator at **0x40**. The fix is a two-line device tree change; details and the test plan are in `MOSS-CPU.md`. Patched dtb is in `../tf1/rgb20sx-syr827.dtb`. Not applied to the device yet (needs the user's OK to write `/flash`).
+- **Cause found 2026-10-25:** Moss's tree declares a TCS4525 at I2C 0x1c, but the unit has a SYR827-class regulator at **0x40**. The fix is a two-line device tree change; details and the test plan are in `MOSS-CPU.md`. **Applied to the device 2026-10-25 and tested (boots, scales 600 to 1992 MHz, sleep/wake fine).** Files and the install script are in `moss/`. Still open: a Moss build patch so updates keep it, and a battery comparison.
 
 ## 2. Two untested patches (`../moss-patches/`)
 - `0001` restart logind when the sleep config changes (makes the sleep timeout reliable).
