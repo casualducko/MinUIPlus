@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <math.h>
@@ -398,3 +399,162 @@ void Playtime_save(const char* file, const char* path, long seconds, int launche
 	free(text);
 }
 // end of the play time code
+
+// Cheat database (see utils.h)
+static const struct { const char* tag; const char* folder; } cheatdb_folders[] = {
+	{"FC", "Nintendo - Nintendo Entertainment System"}, {"NES", "Nintendo - Nintendo Entertainment System"},
+	{"FDS", "Nintendo - Family Computer Disk System"},
+	{"GB", "Nintendo - Game Boy"}, {"SGB", "Nintendo - Game Boy"},
+	{"GBC", "Nintendo - Game Boy Color"}, {"GBA", "Nintendo - Game Boy Advance"},
+	{"SFC", "Nintendo - Super Nintendo Entertainment System"}, {"SNES", "Nintendo - Super Nintendo Entertainment System"},
+	{"SUPER", "Nintendo - Super Nintendo Entertainment System"}, {"SUPA", "Nintendo - Super Nintendo Entertainment System"},
+	{"SNX", "Nintendo - Super Nintendo Entertainment System"},
+	{"VB", "Nintendo - Virtual Boy"}, {"N64", "Nintendo - Nintendo 64"}, {"NDS", "Nintendo - Nintendo DS"},
+	{"MD", "Sega - Mega Drive - Genesis"}, {"GEN", "Sega - Mega Drive - Genesis"}, {"GENESIS", "Sega - Mega Drive - Genesis"},
+	{"SMS", "Sega - Master System - Mark III"}, {"GG", "Sega - Game Gear"}, {"SG1000", "Sega - SG-1000"},
+	{"32X", "Sega - 32X"}, {"SEGACD", "Sega - Mega-CD - Sega CD"}, {"SCD", "Sega - Mega-CD - Sega CD"},
+	{"PS", "Sony - PlayStation"}, {"PSX", "Sony - PlayStation"},
+	{"PCE", "NEC - PC Engine - TurboGrafx 16"}, {"TG16", "NEC - PC Engine - TurboGrafx 16"},
+	{"NGP", "SNK - Neo Geo Pocket"}, {"NGPC", "SNK - Neo Geo Pocket Color"},
+	{"WS", "Bandai - WonderSwan"}, {"WSC", "Bandai - WonderSwan Color"},
+	{"LYNX", "Atari - Lynx"}, {"A2600", "Atari - 2600"}, {"A7800", "Atari - 7800"},
+	{NULL, NULL}
+};
+const char* Cheatdb_folder(const char* tag) {
+	for (int i=0; cheatdb_folders[i].tag; i++) {
+		if (!strcasecmp(cheatdb_folders[i].tag, tag)) return cheatdb_folders[i].folder;
+	}
+	return NULL;
+}
+void Cheatdb_encode(const char* in, char* out, int size) {
+	int n = 0;
+	for (const unsigned char* p = (const unsigned char*)in; *p && n+4<size; p++) {
+		if (isalnum(*p) || *p=='-' || *p=='_' || *p=='.' || *p=='~') out[n++] = *p;
+		else n += sprintf(out+n, "%%%02X", *p);
+	}
+	out[n] = '\0';
+}
+static int Cheatdb_hex(char c) { return isdigit((unsigned char)c) ? c-'0' : (c>='a' && c<='f') ? c-'a'+10 : (c>='A' && c<='F') ? c-'A'+10 : -1; }
+int Cheatdb_names(const char* json, char* out, int size) {
+	int n = 0, count = 0;
+	const char* p = json;
+	out[0] = '\0';
+	while ((p = strstr(p, "\"path\""))) {
+		p += 6;
+		while (*p==' ' || *p==':' || *p=='\t' || *p=='\n') p++;
+		if (*p!='"') continue;
+		p++;
+		char name[512];
+		int len = 0;
+		while (*p && *p!='"' && len<(int)sizeof(name)-5) {
+			if (*p=='\\' && p[1]) {
+				p++;
+				if (*p=='u' && Cheatdb_hex(p[1])>=0 && Cheatdb_hex(p[2])>=0 && Cheatdb_hex(p[3])>=0 && Cheatdb_hex(p[4])>=0) {
+					int u = (Cheatdb_hex(p[1])<<12) | (Cheatdb_hex(p[2])<<8) | (Cheatdb_hex(p[3])<<4) | Cheatdb_hex(p[4]);
+					p += 4;
+					if (u<0x80) name[len++] = u;
+					else if (u<0x800) { name[len++] = 0xC0 | (u>>6); name[len++] = 0x80 | (u&0x3F); }
+					else { name[len++] = 0xE0 | (u>>12); name[len++] = 0x80 | ((u>>6)&0x3F); name[len++] = 0x80 | (u&0x3F); }
+				}
+				else if (*p=='n' || *p=='t') name[len++] = ' ';
+				else name[len++] = *p; // \" \\ \/
+				p++;
+			}
+			else name[len++] = *p++;
+		}
+		name[len] = '\0';
+		if (*p=='"') p++;
+		if (len<5 || strcasecmp(name+len-4, ".cht") || strchr(name, '/')) continue; // files in this folder only
+		if (n + len + 2 >= size) break;
+		memcpy(out+n, name, len);
+		n += len;
+		out[n++] = '\n';
+		out[n] = '\0';
+		count++;
+	}
+	return count;
+}
+// "Legend of Zelda, The (USA) (Rev 1).nes" -> "thelegendofzelda": the title only, lowercase letters and digits
+static void Cheatdb_key(const char* name, char* out, int size) {
+	char title[512];
+	snprintf(title, sizeof(title), "%s", name);
+	char* cut = strstr(title, " (");
+	char* cut2 = strstr(title, " [");
+	if (!cut || (cut2 && cut2<cut)) cut = cut2;
+	if (cut) *cut = '\0';
+	else { // no tags: drop the extension (a dot and 1 to 4 letters or digits at the end)
+		char* dot = strrchr(title, '.');
+		if (dot && strlen(dot+1)>=1 && strlen(dot+1)<=4) {
+			int ok = 1;
+			for (char* q = dot+1; *q; q++) if (!isalnum((unsigned char)*q)) ok = 0;
+			if (ok) *dot = '\0';
+		}
+	}
+	int len = strlen(title);
+	int the = 0;
+	if (len>5 && !strcasecmp(title+len-5, ", The")) { title[len-5] = '\0'; the = 1; }
+	int n = 0;
+	if (the) n += snprintf(out, size, "the");
+	for (const char* p = title; *p && n<size-1; p++) {
+		if (isalnum((unsigned char)*p)) out[n++] = tolower((unsigned char)*p);
+	}
+	out[n] = '\0';
+}
+static int Cheatdb_has(const char* name, const char* tag) { // is "(...tag...)" among the name's parenthesized parts?
+	for (const char* p = strchr(name, '('); p; p = strchr(p+1, '(')) {
+		const char* end = strchr(p, ')');
+		if (!end) break;
+		for (const char* q = p+1; q+strlen(tag)<=end; q++) {
+			if (!strncmp(q, tag, strlen(tag))) return 1;
+		}
+	}
+	return 0;
+}
+int Cheatdb_pick(const char* names, const char* game, char* out, int size) {
+	char gamekey[256], key[256];
+	Cheatdb_key(game, gamekey, sizeof(gamekey));
+	if (!gamekey[0]) return 0;
+	char want[512];
+	snprintf(want, sizeof(want), "%s", game);
+	char* dot = strrchr(want, '.');
+	if (dot && strlen(dot+1)>=1 && strlen(dot+1)<=4) *dot = '\0';
+	int best = -1;
+	char best_name[512] = "";
+	const char* p = names;
+	while (*p) {
+		const char* eol = strchr(p, '\n');
+		int len = eol ? (int)(eol-p) : (int)strlen(p);
+		char name[512];
+		if (len>0 && len<(int)sizeof(name)) {
+			memcpy(name, p, len);
+			name[len] = '\0';
+			char base[512];
+			snprintf(base, sizeof(base), "%s", name);
+			if (len>4) base[len-4] = '\0'; // the .cht
+			Cheatdb_key(base, key, sizeof(key));
+			if (!strcmp(key, gamekey)) {
+				int score = 100;
+				if (!strcmp(base, want)) score += 1000;
+				static const char* regions[] = {"USA", "Europe", "Japan", "World", NULL};
+				for (int i=0; regions[i]; i++) {
+					if (Cheatdb_has(base, regions[i]) && Cheatdb_has(want, regions[i])) score += 20;
+				}
+				if (Cheatdb_has(base, "World")) score += 10;
+				else if (Cheatdb_has(base, "USA")) score += 8;
+				else if (Cheatdb_has(base, "Europe")) score += 6;
+				static const char* odd[] = {"Beta", "Proto", "Demo", "Sample", "Unl", "Pirate", "Hack", "Kiosk", NULL};
+				for (int i=0; odd[i]; i++) {
+					if (Cheatdb_has(base, odd[i]) && !Cheatdb_has(want, odd[i])) score -= 30;
+				}
+				for (const char* q = strchr(base, '('); q; q = strchr(q+1, '(')) score -= 2; // fewer extra tags first (Rev, Game Genie, Action Replay...)
+				if (score>best) { best = score; snprintf(best_name, sizeof(best_name), "%s", name); }
+			}
+		}
+		if (!eol) break;
+		p = eol + 1;
+	}
+	if (best<0) return 0;
+	snprintf(out, size, "%s", best_name);
+	return 1;
+}
+// end of the cheat database code

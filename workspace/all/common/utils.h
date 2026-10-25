@@ -35,6 +35,11 @@ int Playtime_format(const PlayRecord* records, int count, char* out, int size); 
 void Playtime_name(const char* path, char* out, int size); // a title for the list: no folders, no extension, no (tags)
 void Playtime_duration(long seconds, char* out, int size); // "<1 min", "42 min", "3h 05m"
 void Playtime_save(const char* file, const char* path, long seconds, int launches, long now); // read, add, write
+// Cheat database: the libretro-database "cht" folders on GitHub (what RetroArch downloads from)
+const char* Cheatdb_folder(const char* tag); // the folder for a system tag, or NULL if the database has none
+void Cheatdb_encode(const char* in, char* out, int size); // percent-encodes for a URL
+int Cheatdb_names(const char* json, char* out, int size); // the "x.cht" names in a GitHub tree listing, one per line; returns how many
+int Cheatdb_pick(const char* names, const char* game, char* out, int size); // best file for a ROM name; 1 if found
 int backupRotate(const char* file, const char* dir, const char* base, int keep); // file -> dir/base.1, .1 -> .2 ... (keeps the file's mtime); 0 or -1
 void touch(char* path);
 void putFile(char* path, char* contents);

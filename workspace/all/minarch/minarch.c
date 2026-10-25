@@ -18,6 +18,7 @@
 #include <zlib.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/wait.h>
 #include <execinfo.h>
 #include <ucontext.h>
 
@@ -4052,12 +4053,181 @@ static MenuList OptionCheats_menu = {
 	.on_change = OptionCheats_toggled,
 	.items = NULL,
 };
+// Downloading cheats: the libretro-database on GitHub, the files RetroArch downloads. Tries the file
+// named like the ROM first, then the folder's listing for the closest name (Cheatdb_pick).
+#define CHEATDB_RAW "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/"
+#define CHEATDB_TREE "https://api.github.com/repos/libretro/libretro-database/git/trees/master:cht%2F"
+static int Net_hasRoute(void) { // /proc/net/route: a line whose destination is 00000000
+	FILE* f = fopen("/proc/net/route", "r");
+	if (!f) return 0;
+	char line[256];
+	int found = 0;
+	while (fgets(line, sizeof(line), f)) {
+		char iface[32], dest[16];
+		if (sscanf(line, "%31s %15s", iface, dest)==2 && !strcmp(dest, "00000000")) { found = 1; break; }
+	}
+	fclose(f);
+	return found;
+}
+static pid_t Net_spawn(char* const argv[]) {
+	pid_t pid = fork();
+	if (pid==0) {
+		int nul = open("/dev/null", O_RDWR);
+		if (nul>=0) { dup2(nul, 0); dup2(nul, 1); dup2(nul, 2); }
+		for (int fd=3; fd<256; fd++) close(fd);
+		execvp(argv[0], argv);
+		_exit(127);
+	}
+	return pid;
+}
+// Shows the message with B to cancel until the process exits (returns its exit code) or, with
+// wait_route, until there is a network route. -2 cancelled, -3 timed out.
+static int Net_wait(const char* message, pid_t pid, int wait_route, int timeout_s) {
+	GFX_setMode(MODE_MAIN);
+	int dirty = 1, status = -1, exited = 0;
+	uint32_t start = SDL_GetTicks(), drawn = 0;
+	int result = -3;
+	while (1) {
+		GFX_startFrame();
+		PAD_poll();
+		if (PAD_justPressed(BTN_B)) { result = -2; break; }
+		if (pid>0 && !exited && waitpid(pid, &status, WNOHANG)==pid) {
+			exited = 1;
+			if (!wait_route) { result = WIFEXITED(status) ? WEXITSTATUS(status) : 128+WTERMSIG(status); break; }
+		}
+		if (wait_route && Net_hasRoute()) { result = 0; break; }
+		if (SDL_GetTicks()-start > (uint32_t)timeout_s*1000) { result = -3; break; }
+		PWR_update(&dirty, NULL, Menu_beforeSleep, Menu_afterSleep);
+		if (SDL_GetTicks()-drawn > 500) dirty = 1; // the dots show it is alive
+		if (dirty) {
+			char text[256];
+			snprintf(text, sizeof(text), "%s%.*s", message, (int)((SDL_GetTicks()-start)/500 % 4), "...");
+			GFX_clear(screen);
+			GFX_blitMessage(font.medium, text, screen, &(SDL_Rect){0,SCALE1(PADDING),screen->w,screen->h-SCALE1(PILL_SIZE+PADDING)});
+			GFX_blitButtonGroup((char*[]){ "B","CANCEL", NULL }, 0, screen, 1);
+			GFX_flip(screen);
+			drawn = SDL_GetTicks();
+			dirty = 0;
+		}
+		else GFX_sync();
+	}
+	if (pid>0 && !exited) { kill(pid, SIGKILL); waitpid(pid, NULL, 0); }
+	GFX_setMode(MODE_MENU);
+	return result;
+}
+static int Net_curl(const char* message, const char* url, const char* dest) { // curl's exit code (22: not found)
+	char* argv[] = { "curl", "-fsSL", "--compressed", "--proto", "=https", "--proto-redir", "=https",
+		"--connect-timeout", "10", "--max-time", "60", "-A", "MinUI-RGB20SX",
+		"-H", "Accept: application/vnd.github+json", "-o", (char*)dest, (char*)url, NULL };
+	pid_t pid = Net_spawn(argv);
+	if (pid<0) return 127;
+	int r = Net_wait(message, pid, 0, 70);
+	if (r!=0) unlink(dest);
+	return r;
+}
+static int Cheats_download(void) { // 1 if a cheat file was saved and loaded; says what went wrong itself
+	char** okay = (char*[]){ "A","OKAY", NULL };
+	char base[MAX_PATH], message[MAX_PATH + 128];
+	snprintf(base, sizeof(base), "%s", game.name);
+	char* dot = strrchr(base, '.');
+	if (dot) *dot = '\0';
+	const char* folder = Cheatdb_folder(core.tag);
+	if (!folder) return 0;
+	
+	if (!Net_hasRoute()) {
+		pid_t pid = Net_spawn((char*[]){ "wifictl", "enable", NULL });
+		int r = Net_wait("Connecting to Wi-Fi", pid, 1, 40);
+		if (r==-2) return 0;
+		if (!Net_hasRoute()) {
+			Menu_message("Couldn't connect to Wi-Fi.\n\nSet it up in Tools > Wi-Fi\nand try again.", okay);
+			return 0;
+		}
+	}
+	
+	char dir[MAX_PATH], dest[MAX_PATH], tmp[MAX_PATH], url[1024], enc[768], enc_folder[256];
+	snprintf(dir, sizeof(dir), SDCARD_PATH "/Cheats/%s", core.tag);
+	snprintf(dest, sizeof(dest), "%s/%s.cht", dir, base);
+	snprintf(tmp, sizeof(tmp), "%s/.download.tmp", dir);
+	if (mkdirs(dir)) { Menu_message("Can't write to the Cheats folder.", okay); return 0; }
+	Cheatdb_encode(folder, enc_folder, sizeof(enc_folder));
+	
+	char file[512];
+	snprintf(file, sizeof(file), "%s.cht", base);
+	Cheatdb_encode(file, enc, sizeof(enc));
+	snprintf(url, sizeof(url), CHEATDB_RAW "%s/%s", enc_folder, enc);
+	int r = Net_curl("Looking for cheats", url, tmp);
+	if (r==-2) return 0;
+	if (r==22) { // no file by that name: the closest one in the folder
+		char tree[MAX_PATH];
+		snprintf(tree, sizeof(tree), "%s/.listing.tmp", dir);
+		snprintf(url, sizeof(url), CHEATDB_TREE "%s", enc_folder);
+		r = Net_curl("Looking for cheats", url, tree);
+		if (r==-2) return 0;
+		char* json = r==0 ? allocFile(tree) : NULL;
+		unlink(tree);
+		int found = 0;
+		if (json) {
+			int cap = 1024*1024;
+			char* names = malloc(cap);
+			if (names) {
+				Cheatdb_names(json, names, cap);
+				found = Cheatdb_pick(names, game.name, file, sizeof(file));
+				free(names);
+			}
+			free(json);
+		}
+		else if (r!=22) goto failed;
+		if (!found) {
+			snprintf(message, sizeof(message), "No cheats found for\n%s\n\nin the libretro database.", base);
+			Menu_message(message, okay);
+			return 0;
+		}
+		LOG_info("cheats: %s -> %s\n", game.name, file);
+		Cheatdb_encode(file, enc, sizeof(enc));
+		snprintf(url, sizeof(url), CHEATDB_RAW "%s/%s", enc_folder, enc);
+		r = Net_curl("Downloading cheats", url, tmp);
+		if (r==-2) return 0;
+	}
+	if (r!=0) goto failed;
+	
+	if (rename(tmp, dest)) { unlink(tmp); Menu_message("Can't write to the Cheats folder.", okay); return 0; }
+	free(cheats);
+	cheats = NULL;
+	cheat_count = 0;
+	free(OptionCheats_menu.items);
+	OptionCheats_menu.items = NULL;
+	Cheats_load();
+	if (!cheat_count) {
+		unlink(dest);
+		Menu_message("That file has no cheats in it.", okay);
+		return 0;
+	}
+	return 1;
+	
+failed:
+	if (r==-3 || r==28) Menu_message("That took too long.\nTry again in a moment.", okay);
+	else if (r==127) Menu_message("curl isn't available on this device.", okay);
+	else if (r==6 || r==7) Menu_message("Couldn't reach GitHub.\nCheck the Wi-Fi connection.", okay);
+	else {
+		snprintf(message, sizeof(message), "Download failed (error %i).", r);
+		Menu_message(message, okay);
+	}
+	return 0;
+}
+
 static int OptionCheats_openMenu(MenuList* list, int i) {
 	if (!cheat_count) {
-		char message[MAX_PATH + 128];
-		snprintf(message, sizeof(message), "No cheats for this game.\n\nPut a .cht file at\nCheats/%s/%s.cht", core.tag, game.name);
-		Menu_message(message, (char*[]){ "B","BACK", NULL });
-		return MENU_CALLBACK_NOP;
+		char message[MAX_PATH + 256];
+		if (Cheatdb_folder(core.tag)) {
+			snprintf(message, sizeof(message), "No cheats for this game yet.\n\nDownload them from the\nlibretro cheat database?\n(needs Wi-Fi)\n\nOr put a .cht file at\nCheats/%s/%s.cht", core.tag, game.name);
+			if (!Menu_confirm(message, (char*[]){ "B","BACK","A","DOWNLOAD", NULL })) return MENU_CALLBACK_NOP;
+			if (!Cheats_download()) return MENU_CALLBACK_NOP;
+		}
+		else {
+			snprintf(message, sizeof(message), "No cheats for this game.\n\nPut a .cht file at\nCheats/%s/%s.cht", core.tag, game.name);
+			Menu_message(message, (char*[]){ "B","BACK", NULL });
+			return MENU_CALLBACK_NOP;
+		}
 	}
 	if (!OptionCheats_menu.items) {
 		OptionCheats_menu.items = calloc(cheat_count+1, sizeof(MenuItem));

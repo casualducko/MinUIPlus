@@ -37,6 +37,7 @@ x "$all/common/api.c" '// The theme file,' '// end of the theme file code' > "$o
 x "$all/common/utils.h" '// play time, kept' 'int Playtime_parse' > "$out/gen/playtime_types.inc"
 x "$all/common/utils.c" '// Play time (see utils.h)' '// end of the play time code' > "$out/gen/playtime.inc"
 x "$all/minarch/minarch.c" '// Cheats: RetroArch-style' '// end of the cheat file code' > "$out/gen/cheats.inc"
+x "$all/common/utils.c" '// Cheat database (see utils.h)' '// end of the cheat database code' > "$out/gen/cheatdb.inc"
 x "$all/common/api.c" 'static int PAD_parseDeadzone' 'static int PAD_deadzone' > "$out/gen/PAD_deadzone.inc"
 x "$all/../rgb30/libmsettings/msettings.c" '#define SETTINGS_VERSION 2' '#define SHM_KEY' > "$out/gen/msettings_types.inc"
 x "$all/minarch/minarch.c" 'void Core_getName' '// Cheats: RetroArch-style' > "$out/gen/Core_getName.inc"
@@ -49,7 +50,7 @@ x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
 
 failed=0
-for t in rumble sram lowbattery backup bufferms deadzone theme cheats playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
+for t in rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
 	echo "== $t"
 	$CC $FLAGS -I"$out" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi
