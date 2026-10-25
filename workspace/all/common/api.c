@@ -1038,6 +1038,33 @@ void GFX_blitSlotPicker(SDL_Surface* dst, int x, int y, int w, int slot, int cou
 	}
 }
 
+// SSH icon (see api.h): is something listening on a TCP port, from /proc/net/tcp (or tcp6)
+int Net_listening(const char* text, int port) {
+	for (const char* p = text; p && *p; ) {
+		unsigned local_port = 0, state = 0;
+		if (sscanf(p, " %*d: %*[0-9A-Fa-f]:%x %*[0-9A-Fa-f]:%*x %x", &local_port, &state)==2 && state==0x0A && (int)local_port==port) return 1; // 0A: LISTEN
+		p = strchr(p, '\n');
+		if (p) p++;
+	}
+	return 0;
+}
+// end of the SSH icon code
+// 1 while SSH is on (Tools > SSH starts the service until the next reboot); looked at every few seconds, not every frame
+static int sshOn(void) {
+	static uint32_t checked_at = 0;
+	static int on = 0;
+	uint32_t now = SDL_GetTicks();
+	if (checked_at && now - checked_at < 3000) return on;
+	checked_at = now ? now : 1;
+	if (getenv("MINUI_FAKE_SSH")) return on = 1; // for the Mac checks
+	on = 0;
+	static const char* files[] = { "/proc/net/tcp", "/proc/net/tcp6" };
+	for (int i=0; i<2 && !on; i++) {
+		char* text = allocFile((char*)files[i]);
+		if (text) { on = Net_listening(text, 22); free(text); }
+	}
+	return on;
+}
 // the clock next to the Wi-Fi and battery icons: 0 off, 12 or 24 hour. Read once per run (the Settings tool sets it).
 static int clockMode(void) {
 	static int mode = -1;
@@ -1171,6 +1198,10 @@ int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting) {
 			y += (SCALE1(PILL_SIZE) - rect.h) / 2;
 			
 			GFX_blitAsset(ASSET_WIFI, NULL, dst, &(SDL_Rect){x,y});
+			if (sshOn()) { // a green dot on the icon: SSH is on
+				int d = SCALE1(5);
+				GFX_fillCapsule(dst, (SDL_Rect){x + rect.w - d + SCALE1(2), y - SCALE1(1), d, d}, SDL_MapRGB(dst->format, 0x4C, 0xD9, 0x64));
+			}
 			ox += ww;
 		}
 		GFX_blitBattery(dst, &(SDL_Rect){ox,oy});

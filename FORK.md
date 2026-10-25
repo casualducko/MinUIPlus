@@ -278,3 +278,6 @@ Test: `tools/package/release.sh ../test-package v2099.01.01.0000`, then `node do
 
 ## Cartridge-style title tiles
 The dashed rule is gone. Each generated tile is now framed like a cartridge front: a 4 px outline with the top corners cut, a label outline inside it, and grip ridges in the base beside the system name (`drawCart` in `titleart_gen.c`). The big letters get a little less width (`TA_COLS-6`) to stay inside the label. Existing tiles change when you press X (RECREATE ALL) in Tools > TitleArt.
+
+## SSH dot on the Wi-Fi icon
+A small green dot on the corner Wi-Fi icon while SSH is on: `sshOn()` in `api.c` looks for a socket listening on port 22 in `/proc/net/tcp` and `tcp6` (at most every 3 seconds; `Net_listening` is host-tested). Tools > SSH starts the service until the next reboot, so the dot goes away after a reboot. `MINUI_FAKE_SSH=1` forces it on for the Mac harness.
