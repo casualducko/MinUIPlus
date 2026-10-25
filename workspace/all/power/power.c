@@ -143,7 +143,7 @@ int main(int argc, char* argv[]) {
 		else if (PAD_justPressed(BTN_RIGHT) || PAD_justPressed(BTN_A)) { step(&rows[sel], 1); dirty = 1; }
 
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			char title[64] = "Settings";
 			char out[64];

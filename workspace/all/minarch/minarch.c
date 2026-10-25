@@ -3522,7 +3522,7 @@ static int Menu_message(char* message, char** pairs) {
 		PWR_update(&dirty, NULL, Menu_beforeSleep, Menu_afterSleep);
 		
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			GFX_blitMessage(font.medium, message, screen, &(SDL_Rect){0,SCALE1(PADDING),screen->w,screen->h-SCALE1(PILL_SIZE+PADDING)});
 			GFX_blitButtonGroup(pairs, 0, screen, 1);
 			GFX_flip(screen);
@@ -3551,7 +3551,7 @@ static int Menu_confirm(char* message, char** pairs) {
 		PWR_update(&dirty, NULL, Menu_beforeSleep, Menu_afterSleep);
 		
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			GFX_blitMessage(font.medium, message, screen, &(SDL_Rect){0,SCALE1(PADDING),screen->w,screen->h-SCALE1(PILL_SIZE+PADDING)});
 			GFX_blitButtonGroup(pairs, 1, screen, 1);
 			GFX_flip(screen);
@@ -4102,7 +4102,7 @@ static int Net_wait(const char* message, pid_t pid, int wait_route, int timeout_
 		if (dirty) {
 			char text[256];
 			snprintf(text, sizeof(text), "%s%.*s", message, (int)((SDL_GetTicks()-start)/500 % 4), "...");
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			GFX_blitMessage(font.medium, text, screen, &(SDL_Rect){0,SCALE1(PADDING),screen->w,screen->h-SCALE1(PILL_SIZE+PADDING)});
 			GFX_blitButtonGroup((char*[]){ "B","CANCEL", NULL }, 0, screen, 1);
 			GFX_flip(screen);
@@ -4434,7 +4434,7 @@ static int Menu_options(MenuList* list) {
 		if (defer_menu && PAD_justReleased(BTN_MENU)) defer_menu = false;
 		
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			GFX_blitHardwareGroup(screen, show_settings);
 			
 			char* desc = NULL;

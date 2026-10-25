@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
 		if (sel>=first+visible) first = sel-visible+1;
 
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			char title[96];
 			char dur[32];

@@ -241,7 +241,7 @@ int main(int argc , char* argv[]) {
 		if (dirty) {
 			validate();
 
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			
 			GFX_blitHardwareGroup(screen, show_setting);
 			

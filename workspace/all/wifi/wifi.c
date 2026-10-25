@@ -693,7 +693,7 @@ int main(int argc, char* argv[]) {
 		if (modal==MODAL_MESSAGE && modal_until && now>=modal_until) { modal = MODAL_NONE; dirty = 1; }
 		
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			if (modal!=MODAL_NONE) draw_modal();
 			else if (op!=OP_NONE) draw_busy();

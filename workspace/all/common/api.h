@@ -57,10 +57,12 @@ void LOG_note(int level, const char* fmt, ...);
 typedef struct {
 	SDL_Color white, black, light_gray, gray, dark_gray;
 	SDL_Color light_text, dark_text, button_text;
+	SDL_Color background; // behind everything in the launcher, the menus and the tools
 } ThemeColors;
 extern ThemeColors theme;
 
 extern uint32_t RGB_WHITE;
+extern uint32_t RGB_BACKGROUND;
 extern uint32_t RGB_BLACK;
 extern uint32_t RGB_LIGHT_GRAY;
 extern uint32_t RGB_GRAY;
@@ -159,10 +161,15 @@ SDL_Surface* GFX_init(int mode);
 #define GFX_setSharpness PLAT_setSharpness // (int sharpness)
 #define GFX_setEffectColor PLAT_setEffectColor // (int color)
 #define GFX_setEffect PLAT_setEffect // (int effect)
+int THEME_parseColor(const char* s, SDL_Color* out); // "RRGGBB", with an optional # or 0x; 1 if it is a color
+int THEME_parse(char* text, ThemeColors* t, char* font, int font_size); // theme.cfg text (edited); returns the lines used
+int THEME_format(const ThemeColors* t, const char* font, char* out, int size); // theme.cfg text for t; returns its length
 void GFX_setMode(int mode);
 int GFX_hdmiChanged(void);
 
-#define GFX_clear PLAT_clearVideo // (SDL_Surface* screen)
+#define GFX_clear PLAT_clearVideo // (SDL_Surface* screen) black, for video
+void GFX_applyTheme(void); // after changing `theme`: recolor everything drawn from now on
+void GFX_clearUI(SDL_Surface* screen); // the theme's background, for the launcher, menus and tools
 #define GFX_clearAll PLAT_clearAll // (void)
 
 void GFX_startFrame(void);

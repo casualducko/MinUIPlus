@@ -30,7 +30,7 @@ int main(int argc , char* argv[]) {
 		// PWR_update(&dirty, NULL, NULL,NULL);
 		
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			
 			GFX_blitMessage(font.large, msg, screen,&(SDL_Rect){0,0,screen->w,screen->h-SCALE1(PADDING + PILL_SIZE + PADDING)});
 			GFX_blitButtonGroup((char*[]){ "A","OKAY", NULL }, 1, screen, 1);

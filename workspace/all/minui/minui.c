@@ -1499,7 +1499,7 @@ int main (int argc, char *argv[]) {
 		}
 		
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			
 			int ox = 0;
 			int oy = 0;

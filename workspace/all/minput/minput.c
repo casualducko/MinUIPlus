@@ -81,7 +81,7 @@ int main(int argc , char* argv[]) {
 		// was_online = is_online;
 		
 		if (dirty) {
-			GFX_clear(screen);
+			GFX_clearUI(screen);
 			
 			// GFX_blitHardwareGroup(screen, show_setting);
 			

@@ -46,5 +46,31 @@ int main(void) {
 	CHECK(parse(big, &t, font)==0 && !font[0], "font name too long for the buffer is ignored");
 	CHECK(parse("font=/abs/x.otf\n", &t, font)==1 && !strcmp(font, "/abs/x.otf"), "absolute font path");
 	CHECK(parse("white=ffffff\n", &t, NULL)==1, "no font buffer is fine");
+	// the background, and writing the file the Theme tool saves
+	t = theme; font[0] = 0;
+	CHECK(t.background.r==0 && t.background.g==0 && t.background.b==0, "the background defaults to black");
+	CHECK(parse("background=102030\n", &t, font)==1 && t.background.r==0x10 && t.background.b==0x30, "background is read");
+	ThemeColors w = theme;
+	w.background = (SDL_Color){0x12,0x34,0x56,0};
+	w.white = (SDL_Color){0xff,0xd9,0x8c,0};
+	w.button_text = (SDL_Color){0x0a,0x0b,0x0c,0};
+	char out[1024];
+	int len = THEME_format(&w, "My Font.ttf", out, sizeof(out));
+	CHECK(len==(int)strlen(out) && len>100, "format returns the length");
+	CHECK(strstr(out, "background=123456\n") && strstr(out, "white=ffd98c\n") && strstr(out, "button_text=0a0b0c\n"), "format writes lowercase hex lines");
+	CHECK(strstr(out, "font=My Font.ttf\n")!=NULL, "format writes the font");
+	ThemeColors back = theme; font[0] = 0;
+	char copy[1024]; snprintf(copy, sizeof(copy), "%s", out);
+	CHECK(THEME_parse(copy, &back, font, 64)==10, "all nine colors and the font are read back");
+	CHECK(!memcmp(&back, &w, sizeof(ThemeColors)) && !strcmp(font, "My Font.ttf"), "format then parse gives the same theme");
+	len = THEME_format(&w, "", out, sizeof(out));
+	CHECK(!strstr(out, "font=") && len==(int)strlen(out), "no font line without a font");
+	len = THEME_format(&w, NULL, out, sizeof(out));
+	CHECK(!strstr(out, "font="), "NULL font");
+	char small[40]; memset(small, 'x', sizeof(small));
+	len = THEME_format(&w, "f.ttf", small, sizeof(small));
+	CHECK(len<(int)sizeof(small) && small[len]=='\0' && strlen(small)==(size_t)len, "a small buffer is cut and terminated");
+	len = THEME_format(&w, NULL, small, 1);
+	CHECK(len==0 && small[0]=='\0', "a one byte buffer");
 	return fails ? 1 : 0;
 }

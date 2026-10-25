@@ -50,6 +50,7 @@ void LOG_note(int level, const char* fmt, ...) {
 ///////////////////////////////
 
 uint32_t RGB_WHITE;
+uint32_t RGB_BACKGROUND;
 uint32_t RGB_BLACK;
 uint32_t RGB_LIGHT_GRAY;
 uint32_t RGB_GRAY;
@@ -95,8 +96,9 @@ static struct PWR_Context {
 ThemeColors theme = {
 	{TRIAD_WHITE}, {TRIAD_BLACK}, {TRIAD_LIGHT_GRAY}, {TRIAD_GRAY}, {TRIAD_DARK_GRAY},
 	{TRIAD_LIGHT_TEXT}, {TRIAD_DARK_TEXT}, {TRIAD_GRAY},
+	{TRIAD_BLACK},
 };
-static int THEME_parseColor(const char* s, SDL_Color* out) { // 1 if s is a color
+int THEME_parseColor(const char* s, SDL_Color* out) { // 1 if s is a color
 	if (!s) return 0;
 	if (*s=='#') s++;
 	else if (s[0]=='0' && (s[1]=='x' || s[1]=='X')) s += 2;
@@ -116,11 +118,11 @@ static int THEME_parseColor(const char* s, SDL_Color* out) { // 1 if s is a colo
 	return 1;
 }
 // applies the file's text (which it edits) to t; font gets the font= value; returns how many lines were used
-static int THEME_parse(char* text, ThemeColors* t, char* font, int font_size) {
+int THEME_parse(char* text, ThemeColors* t, char* font, int font_size) {
 	struct { const char* name; SDL_Color* color; } names[] = {
 		{"white", &t->white}, {"black", &t->black}, {"light_gray", &t->light_gray},
 		{"gray", &t->gray}, {"dark_gray", &t->dark_gray}, {"light_text", &t->light_text},
-		{"dark_text", &t->dark_text}, {"button_text", &t->button_text},
+		{"dark_text", &t->dark_text}, {"button_text", &t->button_text}, {"background", &t->background},
 	};
 	int used = 0;
 	char* save = NULL;
@@ -146,6 +148,21 @@ static int THEME_parse(char* text, ThemeColors* t, char* font, int font_size) {
 		}
 	}
 	return used;
+}
+// the file Tools > Theme writes: every color, and the font if there is one
+int THEME_format(const ThemeColors* t, const char* font, char* out, int size) {
+	const struct { const char* name; const SDL_Color* color; } names[] = {
+		{"background", &t->background}, {"white", &t->white}, {"black", &t->black}, {"light_gray", &t->light_gray},
+		{"gray", &t->gray}, {"dark_gray", &t->dark_gray}, {"light_text", &t->light_text},
+		{"dark_text", &t->dark_text}, {"button_text", &t->button_text},
+	};
+	int n = snprintf(out, size, "# Written by Tools > Theme. Colors are RRGGBB. Delete this file for the stock look.\n");
+	for (int i=0; i<(int)(sizeof(names)/sizeof(names[0])) && n>=0 && n<size; i++) {
+		n += snprintf(out+n, size-n, "%s=%02x%02x%02x\n", names[i].name, names[i].color->r, names[i].color->g, names[i].color->b);
+	}
+	if (font && *font && n>=0 && n<size) n += snprintf(out+n, size-n, "font=%s\n", font);
+	if (n>=size) { out[size-1] = '\0'; return size-1; }
+	return n;
 }
 // end of the theme file code
 
@@ -180,26 +197,8 @@ static void GFX_tintAssets(void) {
 
 static int _;
 
-SDL_Surface* GFX_init(int mode) {
-	// TODO: this doesn't really belong here...
-	// tried adding to PWR_init() but that was no good (not sure why)
-	PLAT_initLid();
-	
-	gfx.screen = PLAT_initVideo();
-	gfx.vsync = VSYNC_STRICT;
-	gfx.mode = mode;
-	
-	char theme_font[MAX_PATH] = "";
-	{
-		char text[2048] = "";
-		FILE* f = fopen(USERDATA_PATH "/theme.cfg", "r");
-		if (f) {
-			size_t n = fread(text, 1, sizeof(text)-1, f);
-			text[n] = '\0';
-			fclose(f);
-			LOG_info("theme.cfg: %i settings used\n", THEME_parse(text, &theme, theme_font, sizeof(theme_font)));
-		}
-	}
+static void GFX_mapTheme(void) { // theme -> the colors in use, and the ones each asset gets
+	RGB_BACKGROUND	= SDL_MapRGB(gfx.screen->format, theme.background.r, theme.background.g, theme.background.b);
 	RGB_WHITE		= SDL_MapRGB(gfx.screen->format, theme.white.r, theme.white.g, theme.white.b);
 	RGB_BLACK		= SDL_MapRGB(gfx.screen->format, theme.black.r, theme.black.g, theme.black.b);
 	RGB_LIGHT_GRAY	= SDL_MapRGB(gfx.screen->format, theme.light_gray.r, theme.light_gray.g, theme.light_gray.b);
@@ -220,6 +219,39 @@ SDL_Surface* GFX_init(int mode) {
 	asset_rgbs[ASSET_UNDERLINE]		= RGB_GRAY;
 	asset_rgbs[ASSET_DOT]			= RGB_LIGHT_GRAY;
 	asset_rgbs[ASSET_HOLE]			= RGB_BLACK;
+}
+// after `theme` has been changed (the Theme tool does): the colors again and a freshly recolored sheet
+void GFX_applyTheme(void) {
+	GFX_mapTheme();
+	char asset_path[MAX_PATH];
+	sprintf(asset_path, RES_PATH "/assets@%ix.png", FIXED_SCALE);
+	SDL_Surface* fresh = IMG_Load(asset_path);
+	if (!fresh) return;
+	SDL_FreeSurface(gfx.assets);
+	gfx.assets = fresh;
+	GFX_tintAssets();
+}
+SDL_Surface* GFX_init(int mode) {
+	// TODO: this doesn't really belong here...
+	// tried adding to PWR_init() but that was no good (not sure why)
+	PLAT_initLid();
+	
+	gfx.screen = PLAT_initVideo();
+	gfx.vsync = VSYNC_STRICT;
+	gfx.mode = mode;
+	
+	char theme_font[MAX_PATH] = "";
+	{
+		char text[2048] = "";
+		FILE* f = fopen(USERDATA_PATH "/theme.cfg", "r");
+		if (f) {
+			size_t n = fread(text, 1, sizeof(text)-1, f);
+			text[n] = '\0';
+			fclose(f);
+			LOG_info("theme.cfg: %i settings used\n", THEME_parse(text, &theme, theme_font, sizeof(theme_font)));
+		}
+	}
+	GFX_mapTheme();
 	
 	asset_rects[ASSET_WHITE_PILL]		= (SDL_Rect){SCALE4( 1, 1,30,30)};
 	asset_rects[ASSET_BLACK_PILL]		= (SDL_Rect){SCALE4(33, 1,30,30)};
@@ -290,6 +322,9 @@ void GFX_quit(void) {
 	PLAT_quitVideo();
 }
 
+void GFX_clearUI(SDL_Surface* screen) {
+	SDL_FillRect(screen, NULL, RGB_BACKGROUND);
+}
 void GFX_setMode(int mode) {
 	gfx.mode = mode;
 }
