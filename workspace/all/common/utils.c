@@ -558,3 +558,57 @@ int Cheatdb_pick(const char* names, const char* game, char* out, int size) {
 	return 1;
 }
 // end of the cheat database code
+
+// Recently played (see utils.h)
+size_t Recents_bump(const char* text, const char* rel_path, int max, char* out, size_t size) {
+	if (size==0) return 0;
+	out[0] = '\0';
+	size_t n = 0;
+	size_t path_len = strlen(rel_path);
+	const char* mine = NULL;      // the existing line for this game, kept with its alias
+	size_t mine_len = 0;
+	for (const char* p = text ? text : ""; *p; ) {
+		const char* eol = strchr(p, '\n');
+		size_t len = eol ? (size_t)(eol - p) : strlen(p);
+		size_t trimmed = len;
+		while (trimmed>0 && (p[trimmed-1]=='\r')) trimmed--;
+		if (trimmed>0 && !mine && trimmed>=path_len && !strncmp(p, rel_path, path_len) && (trimmed==path_len || p[path_len]=='\t')) { mine = p; mine_len = trimmed; }
+		p += len + (eol ? 1 : 0);
+	}
+	int lines = 0;
+	if (max>0) { // the game first
+		n += snprintf(out+n, size-n, "%.*s\n", (int)(mine ? mine_len : path_len), mine ? mine : rel_path);
+		lines = 1;
+	}
+	for (const char* p = text ? text : ""; *p && lines<max && n<size; ) {
+		const char* eol = strchr(p, '\n');
+		size_t len = eol ? (size_t)(eol - p) : strlen(p);
+		size_t trimmed = len;
+		while (trimmed>0 && p[trimmed-1]=='\r') trimmed--;
+		if (trimmed>0 && p!=mine) {
+			int same = trimmed>=path_len && !strncmp(p, rel_path, path_len) && (trimmed==path_len || p[path_len]=='\t');
+			if (!same) {
+				n += snprintf(out+n, size-n, "%.*s\n", (int)trimmed, p);
+				lines++;
+			}
+		}
+		p += len + (eol ? 1 : 0);
+	}
+	if (n>=size) { n = size-1; out[n] = '\0'; }
+	return n;
+}
+void Recents_add(const char* sd_path) {
+	size_t prefix = strlen(SDCARD_PATH);
+	if (strncmp(sd_path, SDCARD_PATH, prefix)) return; // the list is platform agnostic: paths from the card's root
+	char* old = allocFile(RECENT_PATH); // NULL if there is none yet
+	size_t cap = (old ? strlen(old) : 0) + strlen(sd_path) + 16;
+	char* out = malloc(cap);
+	if (out) {
+		size_t n = Recents_bump(old, sd_path + prefix, 24, out, cap);
+		mkdirs(SHARED_USERDATA_PATH "/.minui");
+		writeFileAtomic(RECENT_PATH, out, n);
+		free(out);
+	}
+	free(old);
+}
+// end of the recently played code

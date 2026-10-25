@@ -18,6 +18,9 @@ void trimTrailingNewlines(char* line);
 void trimSortingMeta(char** str);
 
 int exists(char* path);
+// The recently played list (recent.txt: paths relative to the card, newest first, an optional \talias after each)
+size_t Recents_bump(const char* text, const char* rel_path, int max, char* out, size_t size); // the list with rel_path at the top (its alias kept), at most max lines; returns the length
+void Recents_add(const char* sd_path); // puts a game on top of the launcher's list (RECENT_PATH)
 int writeFileAtomic(const char* path, const void* data, size_t size); // writes path.tmp, syncs, renames over path: the old file survives any failure; 0 or -1
 int mkdirs(const char* path); // mkdir -p without a shell (a folder name is never a command); 0 if it exists afterwards, -1 if not
 int fileEquals(const char* path, const void* data, size_t size); // 1 if the file holds exactly these bytes

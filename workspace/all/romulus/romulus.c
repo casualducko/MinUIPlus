@@ -126,6 +126,7 @@ static int is_saved(const RRom* rom) {
 // A game just downloaded can be played from the confirmation: the same command the launcher
 // would run ('emulator launch.sh' 'rom'), written for Romulus's launch.sh to run after we quit.
 static char play_cmd[MAX_PATH*2+64];
+static char play_rom[MAX_PATH]; // the ROM that PLAY starts
 static void shell_quote(const char* in, char* out, size_t size) { // 'it'\''s'
 	size_t n = 0;
 	out[n++] = '\'';
@@ -145,10 +146,13 @@ static int make_play_cmd(const char* rom_path) { // 1 if this system has an emul
 	shell_quote(emu_path, a, sizeof(a));
 	shell_quote(rom_path, b, sizeof(b));
 	snprintf(play_cmd, sizeof(play_cmd), "%s %s\n", a, b);
+	snprintf(play_rom, sizeof(play_rom), "%s", rom_path);
 	return 1;
 }
 static void start_play(void) {
 	putFile(PLAY_NEXT_PATH, play_cmd);
+	Recents_add(play_rom); // the launcher lists it under Recently Played, like any game it starts
+	putFile(LAST_PATH, play_rom); // and comes back with it selected
 	putInt(RESUME_SLOT_PATH, 8); // a new game: no auto-resume of an old state
 	quit = 1;
 }
