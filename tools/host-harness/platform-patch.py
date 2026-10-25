@@ -75,6 +75,7 @@ void PLAT_pollInput(void) {
 	else if (!strcmp(tok,"R1")) { btn = BTN_R1; id = BTN_ID_R1; }
 	else if (!strcmp(tok,"M")) { btn = BTN_MENU; id = BTN_ID_MENU; }
 	else if (!strcmp(tok,"S")) { btn = BTN_START; id = BTN_ID_START; }
+	else if (!strcmp(tok,"SEL")) { btn = BTN_SELECT; id = BTN_ID_SELECT; }
 	else if (!strcmp(tok,"wait")) return;
 	if (btn) { hp_press(btn, id, 1); release_btn = btn; release_id = id; }
 }

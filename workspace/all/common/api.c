@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
@@ -1037,6 +1038,37 @@ void GFX_blitSlotPicker(SDL_Surface* dst, int x, int y, int w, int slot, int cou
 	}
 }
 
+// the clock next to the Wi-Fi and battery icons: 0 off, 12 or 24 hour. Read once per run (the Settings tool sets it).
+static int clockMode(void) {
+	static int mode = -1;
+	if (mode<0) {
+		char text[16] = "";
+		getFile(SHOW_CLOCK_PATH, text, sizeof(text));
+		mode = atoi(text);
+		if (mode!=12 && mode!=24) mode = 0;
+	}
+	return mode;
+}
+static void clockText(char* out, size_t size) {
+	time_t t = time(NULL);
+	struct tm tmv;
+	out[0] = '\0';
+	if (!localtime_r(&t, &tmv)) return;
+	if (clockMode()==12) {
+		int h = tmv.tm_hour % 12;
+		snprintf(out, size, "%i:%02i %s", h ? h : 12, tmv.tm_min, tmv.tm_hour<12 ? "AM" : "PM");
+	}
+	else snprintf(out, size, "%02i:%02i", tmv.tm_hour, tmv.tm_min);
+}
+int GFX_clockChanged(void) { // 1 when the clock is on and its minute has changed since the last call
+	static int last = -1;
+	if (!clockMode()) return 0;
+	time_t t = time(NULL);
+	struct tm tmv;
+	if (!localtime_r(&t, &tmv) || tmv.tm_min==last) return 0;
+	last = tmv.tm_min;
+	return 1;
+}
 int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting) {
 	int ox;
 	int oy;
@@ -1110,6 +1142,13 @@ int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting) {
 		int ww = SCALE1(PILL_SIZE-3);
 		ow = SCALE1(PILL_SIZE);
 		if (show_wifi) ow += ww;
+		char clock_text[24];
+		SDL_Surface* clock_surface = NULL;
+		if (clockMode()) {
+			clockText(clock_text, sizeof(clock_text));
+			clock_surface = TTF_RenderUTF8_Blended(font.medium, clock_text, COLOR_WHITE);
+			if (clock_surface) ow += clock_surface->w + SCALE1(12);
+		}
 
 		ox = dst->w - SCALE1(PADDING) - ow;
 		oy = SCALE1(PADDING);
@@ -1119,6 +1158,11 @@ int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting) {
 			ow,
 			SCALE1(PILL_SIZE)
 		});
+		if (clock_surface) {
+			SDL_BlitSurface(clock_surface, NULL, dst, &(SDL_Rect){ox + SCALE1(10), oy + (SCALE1(PILL_SIZE) - clock_surface->h)/2});
+			ox += clock_surface->w + SCALE1(12);
+			SDL_FreeSurface(clock_surface);
+		}
 		if (show_wifi) {
 			SDL_Rect rect = asset_rects[ASSET_WIFI];
 			int x = ox;

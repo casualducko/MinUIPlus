@@ -213,6 +213,7 @@ void GFX_blitButton(char* hint, char*button, SDL_Surface* dst, SDL_Rect* dst_rec
 void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_rect);
 
 #define HUD_TOAST 3 // show_setting value: a short text in the pill
+int GFX_clockChanged(void); // the corner clock is on and the minute changed: draw again
 int GFX_blitHardwareGroup(SDL_Surface* dst, int show_setting);
 #define SLOT_PICKER_HEIGHT 18 // one row, in unscaled units
 void GFX_fillCapsule(SDL_Surface* dst, SDL_Rect r, Uint32 color); // a filled block with round ends, any height (the pill assets only draw well at their own)

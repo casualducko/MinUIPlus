@@ -18,6 +18,7 @@
 #define BATTERY_PATH USERDATA_PATH "/low-battery-shutdown"
 #define RUMBLE_PATH USERDATA_PATH "/rumble"
 #define ART_PATH SHOW_ART_PATH
+#define CLOCK_PATH SHOW_CLOCK_PATH
 #define DEFAULT_SECONDS 120 // what the system uses when there is no file
 
 typedef struct { int seconds; const char* label; } Choice;
@@ -46,6 +47,10 @@ static const Choice auto_art_choices[] = {
 	{0,"Manual"}, {1,"Automatic"}, {-1,NULL}
 };
 
+static const Choice clock_choices[] = {
+	{0,"Off"}, {12,"12-hour"}, {24,"24-hour"}, {-1,NULL}
+};
+
 static const Choice rumble_choices[] = {
 	{0,"Off"}, {25,"25%"}, {50,"50%"}, {75,"75%"}, {100,"Full"}, {-1,NULL}
 };
@@ -61,6 +66,7 @@ typedef struct {
 static Row rows[] = { // alphabetical
 	{"Art for new games", TITLEART_AUTO_PATH, auto_art_choices, 0, 1, 1, 0},
 	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
+	{"Clock in corner", CLOCK_PATH, clock_choices, 0, 12, 24, 0},
 	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1},
 	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
 	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
@@ -68,6 +74,7 @@ static Row rows[] = { // alphabetical
 	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))
+#define VISIBLE_ROWS 5 // more rows than that scroll, so the notes and buttons keep their room
 
 static int readValue(const Row* row) { // same rules as the system: a bad file means the default
 	char text[32] = "";
@@ -109,6 +116,7 @@ static void step(Row* row, int dir) {
 static const char* noteFor(const Row* row) { // what a setting does, in one short line
 	if (!strcmp(row->name, "Art for new games")) return "Automatic: new games get a title picture at boot.";
 	if (!strcmp(row->name, "Audio buffer")) return "Bigger is safer against crackle, with a little more delay.";
+	if (!strcmp(row->name, "Clock in corner")) return "Shows the time beside the Wi-Fi and battery icons.";
 	if (!strcmp(row->name, "Game art")) return "Off: only text in the launcher.";
 	if (!strcmp(row->name, "Low battery shutdown")) return "At this level the game is saved and the device powers off.";
 	if (!strcmp(row->name, "Power off after sleep")) return "How long it sleeps before it powers off.";
@@ -152,7 +160,8 @@ int main(int argc, char* argv[]) {
 	for (int i=0; i<ROW_COUNT; i++) rows[i].seconds = readValue(&rows[i]);
 	SetRawRumble(0); // only to find out whether there is a motor to drive (it does not move it)
 
-	int quit = 0, dirty = 1, show_setting = 0, sel = 0;
+	int quit = 0, dirty = 1, show_setting = 0, sel = 0, first = 0;
+	int visible = MIN(ROW_COUNT, VISIBLE_ROWS);
 	while (!quit) {
 		GFX_startFrame();
 		PAD_poll();
@@ -165,6 +174,9 @@ int main(int argc, char* argv[]) {
 		else if (PAD_justPressed(BTN_LEFT)) { step(&rows[sel], -1); dirty = 1; }
 		else if (PAD_justPressed(BTN_RIGHT) || PAD_justPressed(BTN_A)) { step(&rows[sel], 1); dirty = 1; }
 
+		if (sel<first) first = sel;
+		if (sel>=first+visible) first = sel-visible+1;
+
 		if (dirty) {
 			GFX_clearUI(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
@@ -176,11 +188,17 @@ int main(int argc, char* argv[]) {
 				SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), SCALE1(PADDING)+4});
 				SDL_FreeSurface(t);
 			}
-			for (int i=0; i<ROW_COUNT; i++) drawRow(screen, i, i==sel, &rows[i]);
+			for (int i=0; i<visible; i++) drawRow(screen, i, first+i==sel, &rows[first+i]);
+			if (ROW_COUNT>visible) {
+				int sx = (screen->w - SCALE1(24))/2;
+				int soy = SCALE1((PILL_SIZE - 4) / 2);
+				if (first>0) GFX_blitAsset(ASSET_SCROLL_UP, NULL, screen, &(SDL_Rect){sx, SCALE1(PADDING) + soy});
+				if (first+visible<ROW_COUNT) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){sx, SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + soy - SCALE1(PILL_SIZE)/2});
+			}
 			// small text under the rows: what the selected setting does, then what applies to all of them
 			{
 				const char* notes[3] = { noteFor(&rows[sel]), "Changes apply when a game or the launcher starts.", NULL };
-				int y = SCALE1(PADDING) + (ROW_COUNT+1)*SCALE1(PILL_SIZE) + SCALE1(8);
+				int y = SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + SCALE1(8);
 				for (int i=0; notes[i]; i++) {
 					SDL_Surface* n = TTF_RenderUTF8_Blended(font.small, notes[i], i==0 ? COLOR_LIGHT_TEXT : COLOR_GRAY);
 					if (!n) continue;

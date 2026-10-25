@@ -1340,6 +1340,21 @@ static int visibleCount(char* path) { // roughly how many games a folder holds: 
 }
 // Looks for a random game here, or (at the root, or in a folder of folders) in a random folder. 1 if it
 // found one: the selection, and maybe the open folder, changed. 0 leaves everything as it was.
+static int jumpToTools(void) { // SELECT: the Tools folder from anywhere
+	while (stack->count>1) closeDirectory();
+	for (int i=0; i<top->entries->count; i++) {
+		Entry* entry = top->entries->items[i];
+		if (strcmp(entry->path, SDCARD_PATH "/Tools/" PLATFORM)) continue;
+		top->selected = i;
+		if (i<top->start || i>=top->end) {
+			top->start = MAX(0, MIN(i, top->entries->count - MAIN_ROW_COUNT));
+			top->end = MIN(top->entries->count, top->start + MAIN_ROW_COUNT);
+		}
+		openDirectory(entry->path, 0);
+		return 1;
+	}
+	return 0;
+}
 static int jumpToRandomGame(void) {
 	while (stack->count>1) closeDirectory(); // from the top, wherever the cursor was: it picks from the whole library
 	int depth = stack->count;
@@ -1429,6 +1444,7 @@ int main (int argc, char *argv[]) {
 		int is_online = PLAT_isOnline();
 		if (was_online!=is_online) dirty = 1;
 		was_online = is_online;
+		if (GFX_clockChanged()) dirty = 1;
 		
 		if (show_version) {
 			int about_visible = InfoView_visibleRows(screen), about_rows = InfoView_rowCount();
@@ -1545,6 +1561,14 @@ int main (int argc, char *argv[]) {
 						if (top->end>total) top->end = total;
 						top->start = top->end - MAIN_ROW_COUNT;
 					}
+				}
+			}
+	
+			if (PAD_justPressed(BTN_SELECT)) { // Tools
+				if (jumpToTools()) {
+					total = top->entries->count;
+					selected = top->selected;
+					dirty = 1;
 				}
 			}
 	

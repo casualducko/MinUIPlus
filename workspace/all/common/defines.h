@@ -20,6 +20,7 @@
 #define SHARED_USERDATA_PATH SDCARD_PATH "/.userdata/shared"
 #define PAKS_PATH SYSTEM_PATH "/paks"
 #define RECENT_PATH SHARED_USERDATA_PATH "/.minui/recent.txt"
+#define SHOW_CLOCK_PATH USERDATA_PATH "/show-clock" // "12" or "24": the time next to the Wi-Fi and battery icons (anything else, or no file: no clock)
 #define SHOW_ART_PATH USERDATA_PATH "/show-art" // "0" hides the launcher's game art (anything else, or no file: shown)
 #define TITLEART_AUTO_PATH USERDATA_PATH "/titleart-auto" // "1": a boot pass makes the pictures that new games are missing
 #define PLAYTIME_PATH SHARED_USERDATA_PATH "/.minui/playtime.txt"

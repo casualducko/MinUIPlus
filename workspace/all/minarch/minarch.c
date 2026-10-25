@@ -4187,10 +4187,23 @@ static int OptionRestoreSave_openMenu(MenuList* list, int i) {
 	return MENU_CALLBACK_NOP;
 }
 
+// the page's first row is "Turn All Cheats Off", so cheat n is row n+1
 static int OptionCheats_toggled(MenuList* list, int i) {
 	MenuItem* item = &list->items[i];
-	cheats[i].enabled = item->value;
-	LOG_info("cheat %i (%s) %s\n", i, cheats[i].desc, item->value ? "on" : "off");
+	int c = i - 1;
+	cheats[c].enabled = item->value;
+	LOG_info("cheat %i (%s) %s\n", c, cheats[c].desc, item->value ? "on" : "off");
+	Cheats_apply();
+	Cheats_saveState();
+	return MENU_CALLBACK_NOP;
+}
+static int OptionCheats_allOff(MenuList* list, int i) {
+	(void)i;
+	for (int j=0; j<cheat_count; j++) {
+		cheats[j].enabled = 0;
+		list->items[j+1].value = 0;
+	}
+	LOG_info("cheats: all off\n");
 	Cheats_apply();
 	Cheats_saveState();
 	return MENU_CALLBACK_NOP;
@@ -4411,15 +4424,16 @@ static int OptionCheats_openMenu(MenuList* list, int i) {
 		}
 	}
 	if (!OptionCheats_menu.items) {
-		OptionCheats_menu.items = calloc(cheat_count+1, sizeof(MenuItem));
+		OptionCheats_menu.items = calloc(cheat_count+2, sizeof(MenuItem));
+		OptionCheats_menu.items[0] = (MenuItem){ .name="Turn All Cheats Off", .desc="Switches every cheat off for this game", .value=-1, .on_confirm=OptionCheats_allOff };
 		for (int j=0; j<cheat_count; j++) {
-			MenuItem* item = &OptionCheats_menu.items[j];
+			MenuItem* item = &OptionCheats_menu.items[j+1];
 			item->name = cheats[j].desc;
 			item->desc = cheats[j].code;
 			item->values = onoff_labels;
 		}
 	}
-	for (int j=0; j<cheat_count; j++) OptionCheats_menu.items[j].value = cheats[j].enabled;
+	for (int j=0; j<cheat_count; j++) OptionCheats_menu.items[j+1].value = cheats[j].enabled;
 	Menu_options(&OptionCheats_menu);
 	return MENU_CALLBACK_NOP;
 }

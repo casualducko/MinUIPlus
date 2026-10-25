@@ -253,3 +253,10 @@ Checks the project's GitHub releases for a newer build and installs it, with the
 
 ## About page (MENU / Fn tap in the launcher)
 The same screen as Tools > Info, so nobody has to know the Fn tap exists: fork build (first row), battery, Wi-Fi, IP, card, memory, play time, CPU, uptime, clock, MinUI release and commit, build, kernel, platform, model. Up/Down scroll, L/R page, X turns Wi-Fi on or off, A refreshes, B or MENU closes; the numbers refresh every 3 seconds. The rows and drawing live in `workspace/all/info/info_view.c`, linked into both `minui` and `info`.
+
+## Corner clock, Turn All Cheats Off, SELECT for Tools, bigger tile subtitle
+- **Clock in corner** (Tools > Settings: Off, 12-hour, 24-hour; file `.userdata/rgb30/show-clock` holds 12 or 24). Drawn by `GFX_blitHardwareGroup` next to the Wi-Fi and battery icons in the launcher, the tools and the in-game menu. The launcher redraws when the minute changes (`GFX_clockChanged`).
+- **Turn All Cheats Off**: first row of Options > Cheats; switches every cheat off for the game and saves.
+- **SELECT** in the launcher opens Tools from anywhere (`jumpToTools`).
+- **Title art**: the subtitle and the system tag are drawn at double size (2x2 cells).
+- Settings scrolls (5 rows at a time) now that it has more rows.
