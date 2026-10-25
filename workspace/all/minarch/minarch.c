@@ -4438,6 +4438,53 @@ static int OptionCheats_openMenu(MenuList* list, int i) {
 	return MENU_CALLBACK_NOP;
 }
 
+// Options > Collections: the collections page of this game (the same lists as START in the launcher)
+static char coll_names[COLLECTION_MAX][COLLECTION_NAME_MAX];
+static char coll_files[COLLECTION_MAX][MAX_PATH];
+static char coll_rel[MAX_PATH];
+static int OptionCollections_toggled(MenuList* list, int i) {
+	MenuItem* item = &list->items[i];
+	if (Collection_set(coll_files[i], coll_rel, item->value)!=0) {
+		item->value = !item->value; // it was not saved
+		Menu_message("Could not save the collection.", (char*[]){ "B","BACK", NULL });
+	}
+	return MENU_CALLBACK_NOP;
+}
+static int OptionCollections_flip(MenuList* list, int i) { // A turns it on or off too
+	list->items[i].value = !list->items[i].value;
+	return OptionCollections_toggled(list, i);
+}
+static MenuList OptionCollections_menu = {
+	.type = MENU_VAR,
+	.on_confirm = OptionCollections_flip,
+	.on_change = OptionCollections_toggled,
+	.items = NULL,
+};
+static int OptionCollections_openMenu(MenuList* list, int i) {
+	const char* rel = Collection_rel(game.m3u_path[0] ? game.m3u_path : game.path, SDCARD_PATH);
+	if (!rel) {
+		Menu_message("This game is not on the card,\nso it can't go in a collection.", (char*[]){ "B","BACK", NULL });
+		return MENU_CALLBACK_NOP;
+	}
+	snprintf(coll_rel, sizeof(coll_rel), "%s", rel);
+	int count = Collection_choices(COLLECTIONS_PATH, coll_names, COLLECTION_MAX);
+	free(OptionCollections_menu.items);
+	OptionCollections_menu.items = calloc(count+1, sizeof(MenuItem));
+	if (!OptionCollections_menu.items) return MENU_CALLBACK_NOP;
+	for (int j=0; j<count; j++) {
+		snprintf(coll_files[j], sizeof(coll_files[j]), "%s/%s.txt", COLLECTIONS_PATH, coll_names[j]);
+		MenuItem* item = &OptionCollections_menu.items[j];
+		item->name = coll_names[j];
+		item->desc = "Collections are lists of games in the launcher.";
+		item->values = onoff_labels;
+		item->value = Collection_contains(coll_files[j], coll_rel);
+	}
+	Menu_options(&OptionCollections_menu);
+	free(OptionCollections_menu.items);
+	OptionCollections_menu.items = NULL;
+	return MENU_CALLBACK_NOP;
+}
+
 static MenuList options_menu = {
 	.type = MENU_LIST,
 	.items = (MenuItem[]) {
@@ -4446,6 +4493,7 @@ static MenuList options_menu = {
 		{"Controls",.on_confirm=OptionControls_openMenu},
 		{"Shortcuts",.on_confirm=OptionShortcuts_openMenu}, 
 		{"Cheats",.on_confirm=OptionCheats_openMenu},
+		{"Collections","Add this game to a collection",.on_confirm=OptionCollections_openMenu},
 		{"Save Changes",.on_confirm=OptionSaveChanges_openMenu},
 		{"Restore Save","Go back to an earlier save",.on_confirm=OptionRestoreSave_openMenu},
 		{NULL},
@@ -4454,7 +4502,7 @@ static MenuList options_menu = {
 };
 
 static void OptionSaveChanges_updateDesc(void) {
-	options_menu.items[5].desc = getSaveDesc();
+	options_menu.items[6].desc = getSaveDesc();
 }
 
 #define OPTION_PADDING 8

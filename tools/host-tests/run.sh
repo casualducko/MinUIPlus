@@ -42,6 +42,9 @@ x "$all/minarch/minarch.c" '// Turbo (see turbo_mask)' '// end of the turbo code
 x "$all/common/utils.c" '// Cheat database (see utils.h)' '// end of the cheat database code' > "$out/gen/cheatdb.inc"
 x "$all/romulus/romulus.c" '// a server (or a Wi-Fi login page' 'static void finish_download' > "$out/gen/romulus_html.inc"
 x "$all/common/utils.c" '// UTF-8 (see utils.h)' '// end of the UTF-8 code' > "$out/gen/utf8.inc"
+x "$all/common/utils.h" '// collections: ' 'int Collection_textHas' > "$out/gen/collections_types.inc"
+x "$all/common/utils.c" 'char* allocFile' 'int getInt' > "$out/gen/allocFile.inc"
+x "$all/common/utils.c" '// Collections (see utils.h)' '// end of the collections code' > "$out/gen/collections.inc"
 x "$all/common/utils.c" '// Random game (see utils.h)' '// end of the random game code' > "$out/gen/random.inc"
 x "$all/common/utils.c" '// HTTP date (see utils.h)' '// end of the HTTP date code' > "$out/gen/httpdate.inc"
 x "$all/common/utils.c" '// Recently played (see utils.h)' 'void Recents_add(const char* sd_path) {' > "$out/gen/recents.inc"
@@ -57,7 +60,7 @@ x "$all/minarch/minarch.c" '	buttons = 0;
 	for (int i=0; config.controls[i].name; i++) {' '	// if (buttons) LOG_info' > "$out/gen/inputclaim_controls.inc"
 
 failed=0
-for t in rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb titleart recents httpdate random info update gallery utf8 turbo romulushtml playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
+for t in collections rumble sram lowbattery backup bufferms deadzone theme cheats cheatdb titleart recents httpdate random info update gallery utf8 turbo romulushtml playtime emuname corename msettings underrun fadein sleeptimeout firstdisc mkdirs version getfile atomicwrite audio_sim truncate wraptext blitmessage inputclaim; do
 	echo "== $t"
 	$CC $FLAGS -I"$out" -I"$all/titleart" -I"$all/clock" -I"$all/info" -I"$all/update" -I"$all/gallery" -I"$all/common" -o "$out/test_$t" "$here/test_$t.c" -lm
 	if ! "$out/test_$t" "$here"; then failed=1; echo "   ^ FAILED: $t"; fi

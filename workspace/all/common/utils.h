@@ -56,6 +56,17 @@ int backupRotate(const char* file, const char* dir, const char* base, int keep);
 void touch(char* path);
 void putFile(char* path, char* contents);
 char* allocFile(char* path); // caller must free
+// collections: /Collections/<name>.txt, one game per line, as a path below the card ("/Roms/GBC (GBC)/Game.gbc"), the way MinUI reads them
+#define COLLECTION_NAME_MAX 64
+#define COLLECTION_MAX 64
+int Collection_textHas(const char* text, const char* rel); // 1 if a line is exactly rel (a trailing \r doesn't count)
+int Collection_textAdd(const char* text, const char* rel, char* out, size_t cap); // the text with rel added at the end (as is if it was there); its length, -1 if it doesn't fit
+int Collection_textRemove(const char* text, const char* rel, char* out, size_t cap); // the text without the lines that are rel; its length, -1 if it doesn't fit
+const char* Collection_rel(const char* sd_path, const char* sd_root); // sd_path below sd_root as "/Roms/..", NULL if it is not
+int Collection_contains(const char* file, const char* rel); // 1 if the collection file has the game
+int Collection_set(const char* file, const char* rel, int on); // adds or removes the game (the file and its folder are made as needed); 0 if saved
+int Collection_choices(const char* dir, char names[][COLLECTION_NAME_MAX], int max); // Collection_list plus "Favorites" when there is none, so a first game has somewhere to go
+int Collection_list(const char* dir, char names[][COLLECTION_NAME_MAX], int max); // the .txt files in dir, sorted, without the extension (not hidden ones, not map.txt)
 void getFile(char* path, char* buffer, size_t buffer_size);
 void putInt(char* path, int value);
 int getInt(char* path);

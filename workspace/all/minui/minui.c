@@ -1367,6 +1367,105 @@ static int isNew(const Entry* entry) { // nothing recorded yet: nothing to compa
 	for (int i=0; i<played_count; i++) if (!strcmp(played[i], name)) return 0;
 	return 1;
 }
+// (MIN and MAX in defines.h have no outer parentheses, so they must not be nested or used inside an expression)
+static int clampTop(int start, int count) { // the first row of a window of MAIN_ROW_COUNT rows that doesn't run past the end
+	int last = count - MAIN_ROW_COUNT;
+	if (last<0) last = 0;
+	return start<last ? start : last;
+}
+// after something changed on disk (a collection): every folder on the way is read again, the cursor where it was
+static void refreshStack(void) {
+	restore_depth = -1; // the folder you came back from may not be what is listed there now
+	for (int i=0; i<stack->count; i++) {
+		Directory* old = stack->items[i];
+		int old_count = old->entries->count;
+		char* keep = (old_count>0 && old->selected<old_count) ? strdup(((Entry*)old->entries->items[old->selected])->path) : NULL;
+		Directory* fresh = Directory_new(old->path, old->selected);
+		int count = fresh->entries->count;
+		if (keep) { // the same entry, wherever it is in the new list (a folder can appear above it)
+			for (int j=0; j<count; j++) if (!strcmp(((Entry*)fresh->entries->items[j])->path, keep)) { fresh->selected = j; break; }
+			free(keep);
+		}
+		if (fresh->selected>=count) fresh->selected = count>0 ? count-1 : 0;
+		fresh->start = clampTop(old->start, count);
+		if (fresh->selected<fresh->start) fresh->start = fresh->selected;
+		fresh->end = MIN(count, fresh->start + MAIN_ROW_COUNT);
+		if (fresh->selected>=fresh->end) { fresh->end = fresh->selected + 1; fresh->start = fresh->end - MAIN_ROW_COUNT; if (fresh->start<0) fresh->start = 0; }
+		stack->items[i] = fresh;
+		Directory_free(old);
+	}
+	top = stack->items[stack->count-1];
+}
+
+// START on a game: the collections, A puts the game in one or takes it out. 1 if anything changed.
+static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) {
+	const char* rel = Collection_rel(entry->path, SDCARD_PATH);
+	if (!rel) return 0;
+	char names[COLLECTION_MAX][COLLECTION_NAME_MAX];
+	char files[COLLECTION_MAX][MAX_PATH];
+	int in[COLLECTION_MAX];
+	int count = Collection_choices(COLLECTIONS_PATH, names, COLLECTION_MAX);
+	for (int i=0; i<count; i++) {
+		snprintf(files[i], MAX_PATH, "%s/%s.txt", COLLECTIONS_PATH, names[i]);
+		in[i] = Collection_contains(files[i], rel);
+	}
+	int row_h = SCALE1(PILL_SIZE);
+	int top_y = SCALE1(PADDING) + row_h;
+	int visible = (screen->h - SCALE1(PADDING+PILL_SIZE) - SCALE1(8) - top_y) / row_h;
+	if (visible<1) visible = 1;
+	int sel = 0, first = 0, changed = 0, dirty = 1, quit = 0;
+	char message[64] = "";
+	while (!quit) {
+		GFX_startFrame();
+		PAD_poll();
+		PWR_update(&dirty, show_setting, NULL, NULL);
+		if (PAD_justPressed(BTN_B) || PAD_justPressed(BTN_START)) quit = 1;
+		else if (PAD_justRepeated(BTN_UP) && count) { sel = (sel + count - 1) % count; dirty = 1; message[0] = '\0'; }
+		else if (PAD_justRepeated(BTN_DOWN) && count) { sel = (sel + 1) % count; dirty = 1; message[0] = '\0'; }
+		else if (PAD_justPressed(BTN_A) && count) {
+			int want = !in[sel];
+			if (Collection_set(files[sel], rel, want)==0) {
+				in[sel] = want;
+				changed = 1;
+				snprintf(message, sizeof(message), "%s %s", want ? "Added to" : "Removed from", names[sel]);
+			}
+			else snprintf(message, sizeof(message), "Could not save %s", names[sel]);
+			dirty = 1;
+		}
+		if (sel<first) first = sel;
+		if (sel>=first+visible) first = sel - visible + 1;
+		if (dirty) {
+			GFX_clearUI(screen);
+			int ow = GFX_blitHardwareGroup(screen, *show_setting);
+			char title[MAX_PATH], out[MAX_PATH];
+			snprintf(title, sizeof(title), "Collections: %s", entry->name);
+			GFX_truncateText(font.large, title, out, screen->w - SCALE1(PADDING*2) - ow, SCALE1(BUTTON_PADDING*2));
+			SDL_Surface* t = GFX_renderText(font.large, out, COLOR_LIGHT_TEXT);
+			if (t) { SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), SCALE1(PADDING)+4}); SDL_FreeSurface(t); }
+			int w = screen->w - SCALE1(PADDING*2);
+			for (int i=0; i<visible && first+i<count; i++) {
+				int y = top_y + i*row_h;
+				int selected = first+i==sel;
+				if (selected) GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){SCALE1(PADDING), y, w, row_h});
+				char name[COLLECTION_NAME_MAX*2];
+				GFX_truncateText(font.large, names[first+i], name, w * 6 / 10, SCALE1(BUTTON_PADDING*2));
+				SDL_Surface* n = GFX_renderText(font.large, name, selected ? COLOR_BLACK : COLOR_WHITE);
+				if (n) { SDL_BlitSurface(n, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), y+(row_h-n->h)/2}); SDL_FreeSurface(n); }
+				SDL_Surface* v = GFX_renderText(font.medium, in[first+i] ? "In" : "-", selected ? COLOR_BLACK : COLOR_LIGHT_TEXT);
+				if (v) { SDL_BlitSurface(v, NULL, screen, &(SDL_Rect){SCALE1(PADDING)+w-v->w-SCALE1(BUTTON_PADDING), y+(row_h-v->h)/2}); SDL_FreeSurface(v); }
+			}
+			if (message[0]) {
+				SDL_Surface* m = GFX_renderText(font.small, message, COLOR_LIGHT_TEXT);
+				if (m) { SDL_BlitSurface(m, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), top_y + (visible<count ? visible : count)*row_h + SCALE1(4)}); SDL_FreeSurface(m); }
+			}
+			GFX_blitButtonGroup((char*[]){"B","BACK","A", count && in[sel] ? "REMOVE" : "ADD", NULL}, 1, screen, 1);
+			GFX_flip(screen);
+			dirty = 0;
+		}
+		else GFX_sync();
+	}
+	return changed;
+}
 static int jumpToTools(void) { // SELECT: the Tools folder from anywhere
 	while (stack->count>1) closeDirectory();
 	for (int i=0; i<top->entries->count; i++) {
@@ -1374,7 +1473,7 @@ static int jumpToTools(void) { // SELECT: the Tools folder from anywhere
 		if (strcmp(entry->path, SDCARD_PATH "/Tools/" PLATFORM)) continue;
 		top->selected = i;
 		if (i<top->start || i>=top->end) {
-			top->start = MAX(0, MIN(i, top->entries->count - MAIN_ROW_COUNT));
+			top->start = clampTop(i, top->entries->count);
 			top->end = MIN(top->entries->count, top->start + MAIN_ROW_COUNT);
 		}
 		openDirectory(entry->path, 0);
@@ -1590,6 +1689,16 @@ int main (int argc, char *argv[]) {
 						top->start = top->end - MAIN_ROW_COUNT;
 					}
 				}
+			}
+	
+			if (PAD_justPressed(BTN_START) && total>0) { // put the game in a collection
+				Entry* entry = top->entries->items[top->selected];
+				if (entry->type==ENTRY_ROM && collectionPage(entry, screen, &show_setting)) {
+					refreshStack();
+					total = top->entries->count;
+					selected = top->selected;
+				}
+				dirty = 1;
 			}
 	
 			if (PAD_justPressed(BTN_SELECT)) { // Tools

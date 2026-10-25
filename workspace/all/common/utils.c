@@ -9,6 +9,7 @@
 #include <math.h>
 #include <ctype.h>
 #include <sys/time.h>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <errno.h>
 #include "defines.h"
@@ -699,3 +700,113 @@ int UTF8_next(const char* s, uint32_t* cp) {
 	return n;
 }
 // end of the UTF-8 code
+
+// Collections (see utils.h)
+static int collLineIs(const char* line, size_t len, const char* rel) {
+	while (len>0 && (line[len-1]=='\r' || line[len-1]==' ')) len--;
+	return len==strlen(rel) && !strncmp(line, rel, len);
+}
+int Collection_textHas(const char* text, const char* rel) {
+	for (const char* p = text; *p; ) {
+		const char* eol = strchr(p, '\n');
+		size_t len = eol ? (size_t)(eol - p) : strlen(p);
+		if (collLineIs(p, len, rel)) return 1;
+		if (!eol) break;
+		p = eol + 1;
+	}
+	return 0;
+}
+int Collection_textAdd(const char* text, const char* rel, char* out, size_t cap) {
+	size_t n = strlen(text);
+	if (Collection_textHas(text, rel)) {
+		if (n+1>cap) return -1;
+		memcpy(out, text, n+1);
+		return (int)n;
+	}
+	int nl = n>0 && text[n-1]!='\n'; // a file that doesn't end in a newline gets one first
+	size_t r = strlen(rel);
+	if (n + nl + r + 2 > cap) return -1;
+	memcpy(out, text, n);
+	if (nl) out[n++] = '\n';
+	memcpy(out+n, rel, r);
+	n += r;
+	out[n++] = '\n';
+	out[n] = '\0';
+	return (int)n;
+}
+int Collection_textRemove(const char* text, const char* rel, char* out, size_t cap) {
+	size_t o = 0;
+	for (const char* p = text; *p; ) {
+		const char* eol = strchr(p, '\n');
+		size_t len = eol ? (size_t)(eol - p) : strlen(p);
+		size_t take = eol ? len + 1 : len; // the line with its newline
+		if (!collLineIs(p, len, rel)) {
+			if (o + take + 1 > cap) return -1;
+			memcpy(out + o, p, take);
+			o += take;
+		}
+		if (!eol) break;
+		p = eol + 1;
+	}
+	if (o + 1 > cap) return -1;
+	out[o] = '\0';
+	return (int)o;
+}
+const char* Collection_rel(const char* sd_path, const char* sd_root) {
+	size_t n = strlen(sd_root);
+	if (strncmp(sd_path, sd_root, n) || sd_path[n]!='/') return NULL;
+	return sd_path + n;
+}
+int Collection_contains(const char* file, const char* rel) {
+	char* text = allocFile((char*)file);
+	if (!text) return 0;
+	int has = Collection_textHas(text, rel);
+	free(text);
+	return has;
+}
+int Collection_set(const char* file, const char* rel, int on) {
+	char* text = allocFile((char*)file);
+	const char* old = text ? text : "";
+	size_t cap = strlen(old) + strlen(rel) + 8;
+	char* out = malloc(cap);
+	int n = -1;
+	if (out) n = on ? Collection_textAdd(old, rel, out, cap) : Collection_textRemove(old, rel, out, cap);
+	int rc = -1;
+	if (n>=0) {
+		char dir[MAX_PATH];
+		snprintf(dir, sizeof(dir), "%s", file);
+		char* slash = strrchr(dir, '/');
+		if (slash) { *slash = '\0'; mkdirs(dir); }
+		rc = writeFileAtomic(file, out, (size_t)n);
+	}
+	free(out);
+	free(text);
+	return rc;
+}
+static int collCompare(const void* a, const void* b) { return strcasecmp((const char*)a, (const char*)b); }
+int Collection_list(const char* dir, char names[][COLLECTION_NAME_MAX], int max) {
+	DIR* dh = opendir(dir);
+	if (!dh) return 0;
+	int n = 0;
+	struct dirent* dp;
+	while ((dp = readdir(dh)) && n<max) {
+		const char* name = dp->d_name;
+		size_t len = strlen(name);
+		if (name[0]=='.' || len<5 || strcmp(name+len-4, ".txt") || !strcmp(name, "map.txt")) continue;
+		if (len-4 >= COLLECTION_NAME_MAX) continue; // a name that long is not listed
+		snprintf(names[n], COLLECTION_NAME_MAX, "%.*s", (int)(len-4), name);
+		n++;
+	}
+	closedir(dh);
+	qsort(names, n, COLLECTION_NAME_MAX, collCompare);
+	return n;
+}
+int Collection_choices(const char* dir, char names[][COLLECTION_NAME_MAX], int max) {
+	int n = Collection_list(dir, names, max);
+	for (int i=0; i<n; i++) if (!strcasecmp(names[i], "Favorites")) return n;
+	if (n>=max) return n;
+	snprintf(names[n++], COLLECTION_NAME_MAX, "Favorites");
+	qsort(names, n, COLLECTION_NAME_MAX, collCompare);
+	return n;
+}
+// end of the collections code

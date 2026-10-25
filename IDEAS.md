@@ -58,7 +58,7 @@ The ones I would do first are at the top of each size.
 
 ### Medium (M)
 8. **Self-update tool (built, Tools > Update).** Waiting for a first real release: `tools/package/release.sh <package> --publish`, and either a public repo or a token in `update.cfg`.
-9. **Add to collection from a game.** MinUI collections are text files; a menu item in Options (and in the launcher) adds or removes the current game. Today it takes a computer.
+9. ~~Add to collection from a game~~ done: START in the launcher, Options > Collections in a game.
 10. **Rewind.** A ring of state snapshots in RAM for NES/GB/GBA/SNES, per-system on/off.
 11. **Save backup and sync.** Copy saves to a zip on the card on a schedule, or sync to a server (Romulus server write path, or WebDAV/Syncthing which Moss already ships). The only protection against a lost card today is Restore Save on the same card.
 12. **ROM drop over Wi-Fi.** A tool that serves a small upload page so a phone or laptop can send ROMs and covers without taking the card out.

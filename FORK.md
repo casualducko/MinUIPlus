@@ -269,3 +269,9 @@ Test: `tools/package/release.sh ../test-package v2099.01.01.0000`, then `node do
 - **New game dot**: a small dot in the launcher's left margin beside games that are not in `playtime.txt` (matched by title, so another region of a played game counts as played; with no play history at all there are no dots). Tools > Settings > "New game dot" (file `.userdata/rgb30/show-new`, `0` hides it). Code: `loadPlayed` / `isNew` in `minui.c`.
 - **Title art**: a title drawn in plain characters (Japanese, or too long for the big letters) is drawn at double size when the whole title fits that way in at most 4 lines, otherwise at the old size.
 - **Key logging**: the rgb30 platform logs every key press only when `.userdata/rgb30/debug-log` exists (it used to always do it).
+
+## Add to collection
+- **Launcher:** START on a game opens a page of the collections (the `.txt` lists in `/Collections`, plus "Favorites" when there is none so a first game has somewhere to go). A puts the game in or takes it out; B or START closes. The folders on screen are read again afterwards, keeping the cursor on the same entry (the Collections folder appears at the root after the first game goes in). Code: `collectionPage`, `refreshStack` in `minui.c`.
+- **In a game:** Options > Collections lists the same collections with On/Off for this game (A or left/right). Code: `OptionCollections_*` in `minarch.c`.
+- **Files:** `Collection_*` in `utils.c` (tested by `test_collections.c`); a line is the game's path below the card, as MinUI reads them. Saved atomically; Windows line endings are understood.
+- **Note:** `MIN` and `MAX` in `defines.h` have no outer parentheses: never nest them or use them inside a larger expression (`clampTop` in `minui.c` exists for that reason).
