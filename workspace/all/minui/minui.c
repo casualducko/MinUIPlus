@@ -6,6 +6,10 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 #include "defines.h"
 #include "api.h"
@@ -1382,6 +1386,36 @@ static int jumpToRandomGame(void) {
 	return 0;
 }
 
+typedef struct { char key[16]; char val[96]; } AboutRow;
+static AboutRow about[5];
+static void aboutRow(int i, const char* key, const char* val) {
+	snprintf(about[i].key, sizeof(about[i].key), "%s", key);
+	snprintf(about[i].val, sizeof(about[i].val), "%s", (val && val[0]) ? val : "unknown");
+}
+static void fillAbout(void) {
+	char fork[64] = "", release[MAX_PATH], ip[64] = "none";
+	getFile(SYSTEM_PATH "/fork-version.txt", fork, sizeof(fork));
+	for (char* p=fork; *p; p++) if (*p=='\n' || *p=='\r') { *p = '\0'; break; }
+	getFile(ROOT_SYSTEM_PATH "/version.txt", release, MAX_PATH);
+	char* commit;
+	splitVersion(release, &commit); // a missing or short version.txt doesn't crash
+	struct ifaddrs* list = NULL;
+	if (!getifaddrs(&list)) {
+		for (struct ifaddrs* a=list; a; a=a->ifa_next) {
+			if (!a->ifa_addr || a->ifa_addr->sa_family!=AF_INET || !strcmp(a->ifa_name, "lo")) continue;
+			inet_ntop(AF_INET, &((struct sockaddr_in*)a->ifa_addr)->sin_addr, ip, sizeof(ip));
+			if (!strncmp(a->ifa_name, "wlan", 4)) break; // the Wi-Fi address if there is one
+		}
+		freeifaddrs(list);
+	}
+	memset(about, 0, sizeof(about));
+	aboutRow(0, "MinUIPlus", fork[0] ? fork : "not recorded");
+	aboutRow(1, "Release", release);
+	aboutRow(2, "Commit", commit);
+	aboutRow(3, "IP", ip);
+	aboutRow(4, "Model", PLAT_getModel());
+}
+
 int main (int argc, char *argv[]) {
 	// LOG_info("time from launch to:\n");
 	// unsigned long main_begin = SDL_GetTicks();
@@ -1404,7 +1438,6 @@ int main (int argc, char *argv[]) {
 	if (!HAS_POWER_BUTTON && !simple_mode) PWR_disableSleep();
 	// LOG_info("- power init: %lu\n", SDL_GetTicks() - main_begin);
 	
-	SDL_Surface* version = NULL;
 	
 	Menu_init();
 	// LOG_info("- menu init: %lu\n", SDL_GetTicks() - main_begin);
@@ -1450,6 +1483,7 @@ int main (int argc, char *argv[]) {
 		else {
 			if (PAD_tappedMenu(now)) {
 				show_version = 1;
+				fillAbout();
 				dirty = 1;
 				if (!HAS_POWER_BUTTON && !simple_mode) PWR_enableSleep();
 			}
@@ -1630,61 +1664,35 @@ int main (int argc, char *argv[]) {
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			
 			if (show_version) {
-				if (!version) {
-					char release[MAX_PATH];
-					getFile(ROOT_SYSTEM_PATH "/version.txt", release, MAX_PATH);
-					
-					char* commit;
-					splitVersion(release, &commit); // a missing or short version.txt doesn't crash...
-					if (!release[0]) strcpy(release, "unknown"); // ...and nothing empty goes to TTF_Render (it returns NULL for "")
-					if (!commit[0]) commit = "unknown";
-					
-					// TODO: not sure if I want bare PLAT_* calls here
-					char* extra_key = "Model";
-					char* extra_val = PLAT_getModel();
-					if (!extra_val || !extra_val[0]) extra_val = "unknown";
-					
-					SDL_Surface* release_txt = GFX_renderText(font.large, "Release", COLOR_DARK_TEXT);
-					SDL_Surface* version_txt = GFX_renderText(font.large, release, COLOR_WHITE);
-					SDL_Surface* commit_txt = GFX_renderText(font.large, "Commit", COLOR_DARK_TEXT);
-					SDL_Surface* hash_txt = GFX_renderText(font.large, commit, COLOR_WHITE);
-					
-					SDL_Surface* key_txt = GFX_renderText(font.large, extra_key, COLOR_DARK_TEXT);
-					SDL_Surface* val_txt = GFX_renderText(font.large, extra_val, COLOR_WHITE);
-					
-					int l_width = 0;
-					int r_width = 0;
-					
-					if (release_txt->w>l_width) l_width = release_txt->w;
-					if (commit_txt->w>l_width) l_width = commit_txt->w;
-					if (key_txt->w>l_width) l_width = commit_txt->w;
-
-					if (version_txt->w>r_width) r_width = version_txt->w;
-					if (hash_txt->w>r_width) r_width = hash_txt->w;
-					if (val_txt->w>r_width) r_width = val_txt->w;
-					
-					#define VERSION_LINE_HEIGHT 24
-					int x = l_width + SCALE1(8);
-					int w = x + r_width;
-					int h = SCALE1(VERSION_LINE_HEIGHT*4);
-					version = SDL_CreateRGBSurface(0,w,h,16,0,0,0,0);
-					
-					SDL_BlitSurface(release_txt, NULL, version, &(SDL_Rect){0, 0});
-					SDL_BlitSurface(version_txt, NULL, version, &(SDL_Rect){x,0});
-					SDL_BlitSurface(commit_txt, NULL, version, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT)});
-					SDL_BlitSurface(hash_txt, NULL, version, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT)});
-					
-					SDL_BlitSurface(key_txt, NULL, version, &(SDL_Rect){0,SCALE1(VERSION_LINE_HEIGHT*3)});
-					SDL_BlitSurface(val_txt, NULL, version, &(SDL_Rect){x,SCALE1(VERSION_LINE_HEIGHT*3)});
-					
-					SDL_FreeSurface(release_txt);
-					SDL_FreeSurface(version_txt);
-					SDL_FreeSurface(commit_txt);
-					SDL_FreeSurface(hash_txt);
-					SDL_FreeSurface(key_txt);
-					SDL_FreeSurface(val_txt);
+				// the About page: this fork's build, MinUI's release and commit, the address, the model
+				#define ABOUT_ROWS 5
+				#define VERSION_LINE_HEIGHT 24
+				SDL_Surface* key_txt[ABOUT_ROWS] = {NULL};
+				SDL_Surface* val_txt[ABOUT_ROWS] = {NULL};
+				int l_width = 0, r_width = 0, count = 0;
+				for (int i=0; i<ABOUT_ROWS; i++) {
+					if (!about[i].key[0]) continue;
+					key_txt[i] = GFX_renderText(font.large, about[i].key, COLOR_DARK_TEXT);
+					val_txt[i] = GFX_renderText(font.large, about[i].val, COLOR_WHITE);
+					if (!key_txt[i] || !val_txt[i]) continue;
+					if (key_txt[i]->w>l_width) l_width = key_txt[i]->w;
+					if (val_txt[i]->w>r_width) r_width = val_txt[i]->w;
+					count++;
 				}
-				SDL_BlitSurface(version, NULL, screen, &(SDL_Rect){(screen->w-version->w)/2,(screen->h-version->h)/2});
+				int x = l_width + SCALE1(8);
+				int left = (screen->w - (x + r_width))/2;
+				if (left<SCALE1(PADDING)) left = SCALE1(PADDING);
+				int top_y = (screen->h - SCALE1(VERSION_LINE_HEIGHT)*count)/2;
+				int line = 0;
+				for (int i=0; i<ABOUT_ROWS; i++) {
+					if (key_txt[i] && val_txt[i]) {
+						int y = top_y + SCALE1(VERSION_LINE_HEIGHT)*line++;
+						SDL_BlitSurface(key_txt[i], NULL, screen, &(SDL_Rect){left, y});
+						SDL_BlitSurface(val_txt[i], NULL, screen, &(SDL_Rect){left + x, y});
+					}
+					if (key_txt[i]) SDL_FreeSurface(key_txt[i]);
+					if (val_txt[i]) SDL_FreeSurface(val_txt[i]);
+				}
 				
 				// buttons (duped and trimmed from below)
 				if (show_setting && !GetHDMI()) GFX_blitHardwareHints(screen, show_setting);
@@ -1825,7 +1833,6 @@ int main (int argc, char *argv[]) {
 		}
 	}
 	
-	if (version) SDL_FreeSurface(version);
 	if (thumb_cache) SDL_FreeSurface(thumb_cache);
 
 	Menu_quit();
