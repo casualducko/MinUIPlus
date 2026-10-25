@@ -1354,6 +1354,15 @@ static int isPlainFolder(Entry* entry) { // not Recently Played, not a folder of
 	char cue[MAX_PATH];
 	return entry->type==ENTRY_DIR && !exactMatch(entry->path, FAUX_RECENT_PATH) && !hasCue(entry->path, cue);
 }
+static int visibleCount(char* path) { // roughly how many games a folder holds: its entries that are not hidden
+	int n = 0;
+	DIR* dh = opendir(path);
+	if (!dh) return 0;
+	struct dirent* e;
+	while ((e = readdir(dh))) if (e->d_name[0]!='.' && !suffixMatch(".txt", e->d_name)) n++;
+	closedir(dh);
+	return n;
+}
 // Looks for a random game here, or (at the root, or in a folder of folders) in a random folder. 1 if it
 // found one: the selection, and maybe the open folder, changed. 0 leaves everything as it was.
 static int jumpToRandomGame(void) {
@@ -1361,13 +1370,17 @@ static int jumpToRandomGame(void) {
 	int depth = stack->count;
 	for (int attempt=0; attempt<8; attempt++) {
 		Directory* d = top;
-		int dirs = 0;
-		for (int i=0; i<d->entries->count; i++) if (isPlainFolder(d->entries->items[i])) dirs++;
-		if (!dirs) break;
+		// a folder is picked in proportion to its games, so one lonely PlayStation game isn't as likely as a whole library
+		int* weight = calloc(d->entries->count>0 ? d->entries->count : 1, sizeof(int));
+		if (!weight) break;
+		long total = 0;
+		for (int i=0; i<d->entries->count; i++) if (isPlainFolder(d->entries->items[i])) { weight[i] = visibleCount(((Entry*)d->entries->items[i])->path); total += weight[i]; }
+		if (!total) { free(weight); break; }
 		seedRandom();
-		int pick = Random_pick(NULL, dirs, &random_state);
+		long pick = Random_pick(NULL, (int)total, &random_state);
 		int at = -1;
-		for (int i=0; i<d->entries->count && at<0; i++) if (isPlainFolder(d->entries->items[i]) && pick--==0) at = i;
+		for (int i=0; i<d->entries->count && at<0; i++) { if (pick<weight[i]) at = i; else pick -= weight[i]; }
+		free(weight);
 		if (at<0) break;
 		Entry* folder = d->entries->items[at];
 		showSelected(d, at); // so Back returns to the folder it came from, in view
