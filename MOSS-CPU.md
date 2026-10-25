@@ -45,3 +45,8 @@ Change the `vdd_cpu` node in the device tree (everything else stays, including t
 3. Reboot. Check: `dmesg | grep fan53555` (should say `FAN53555 Option[8] Rev[...] Detected!`), `ls /sys/devices/system/cpu/cpu0/cpufreq`, `cat .../scaling_available_frequencies`, `cat .../scaling_cur_freq` idle and in a game, `cat /sys/class/regulator/*/name` includes `vdd_cpu` with a changing `microvolts`.
 4. Run a heavy game for 10 minutes; watch `thermal_zone0/temp` and the battery; confirm no crashes, audio underruns or sleep/wake problems (the regulator also has a suspend setting).
 5. If good: make it permanent in a Moss build (a patch under `moss-src/projects/Rockchip/packages/linux/...`) so it survives image updates.
+
+## Log
+- 2026-10-25 19:39: full copy of `/flash` saved to `~/powkiddy-rgb20sx/backups/tf1-flash-20261025/` (11 files, 220 MB, md5 list beside it, all verified).
+- 2026-10-25 ~19:45: `rgb20sx-syr827.dtb` written over `/flash/rk3566-rgb30-linux.dtb` over SSH (remount rw, copy, sync, remount ro; md5 `a9fc83cf...` matches). The device was not rebooted by me; the result is unknown.
+- Roll back over SSH: `~/powkiddy-rgb20sx/tf1/revert-dtb.sh <device ip>` (md5 of the original: `5afafbc4c9980778b9735a38f62685fb`). If the unit will not boot: TF1 in a card reader, copy `orig-rgb30.dtb` (or the backup's `rk3566-rgb30-linux.dtb`) over that file on the first partition.
