@@ -206,7 +206,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 	snprintf(up, sizeof(up), "%s", sub);
 	for (char* p = up; *p; p++) *p = toupper((unsigned char)*p);
 	char sub_lines[2][TA_LINE_MAX];
-	int sub_count = up[0] ? TA_wrapPlain(up, (TA_COLS-6)/2, 2, sub_lines) : 0; // double size: half as many characters fit
+	int sub_count = up[0] ? TA_wrapPlain(up, (TA_COLS-8)/2, 2, sub_lines) : 0; // double size: half as many characters fit
 	int sub_rows = sub_count*2;
 	TA_Layout lay;
 	int max_rows = TA_ROWS - 8 - (sub_count ? sub_rows + 1 : 0);
@@ -218,7 +218,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		if (TA_cellWidth(cp)==2) wide = 1;
 		p += n;
 	}
-	if (wide || !TA_layout(main, TA_COLS-4, max_rows, lineAspect, NULL, &lay)) {
+	if (wide || !TA_layout(main, TA_COLS-6, max_rows, lineAspect, NULL, &lay)) {
 		// too long for letters this big: the whole title in plain characters instead, never a cut one
 		char upper[256];
 		snprintf(upper, sizeof(upper), "%s", main);
@@ -238,7 +238,6 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		}
 		if (big) n *= 2; // rows used, for the subtitle below
 		for (int i=0; i<sub_count; i++) gridCenterBig(g, top + n + 1 + i*2, sub_lines[i], 70);
-		for (int x=2; x<TA_COLS-2; x++) gridPut(g, x, TA_ROWS-4, '-', 40);
 		char tag[96];
 		snprintf(tag, sizeof(tag), "[ %s ]", badge);
 		gridCenterBig(g, TA_ROWS-3, tag, 60);
@@ -268,16 +267,45 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		free(chars);
 	}
 	for (int i=0; i<sub_count; i++) gridCenterBig(g, top + total + 1 + i*2, sub_lines[i], 70);
-	for (int x=2; x<TA_COLS-2; x++) gridPut(g, x, TA_ROWS-4, '-', 40);
 	char tag[96];
 	snprintf(tag, sizeof(tag), "[ %s ]", badge);
 	gridCenterBig(g, TA_ROWS-3, tag, 60);
 }
 
 static uint32_t tile_pixels[TILE*TILE];
+// The tile is drawn as the front of a cartridge: a thick outline with the top corners cut, a label outline inside it
+// and grip ridges in the base beside the system name.
+static void cartRect(uint32_t color, int x, int y, int w, int h) {
+	for (int yy=y; yy<y+h; yy++) for (int xx=x; xx<x+w; xx++) if (xx>=0 && xx<TILE && yy>=0 && yy<TILE) tile_pixels[yy*TILE + xx] = color;
+}
+static void drawCart(uint32_t outer, uint32_t inner) {
+	const int t = 4, cut = 16;
+	cartRect(outer, cut, 0, TILE-2*cut, t);                  // top edge
+	for (int i=0; i<cut; i++) {                              // the two cut corners
+		cartRect(outer, cut-1-i, i, t, 1);
+		cartRect(outer, TILE-cut-t+1+i, i, t, 1);
+	}
+	cartRect(outer, 0, cut-1, t, TILE-cut+1);                // sides
+	cartRect(outer, TILE-t, cut-1, t, TILE-cut+1);
+	cartRect(outer, 0, TILE-t, TILE, t);                     // bottom
+	const int lx = 16, ly = 16, lw = TILE-2*16, lh = 300;    // the label
+	cartRect(inner, lx+3, ly, lw-6, 2);
+	cartRect(inner, lx+3, ly+lh-2, lw-6, 2);
+	cartRect(inner, lx, ly+3, 2, lh-6);
+	cartRect(inner, lx+lw-2, ly+3, 2, lh-6);
+	for (int i=0; i<3; i++) {                                // grip ridges
+		cartRect(inner, 26 + i*9, 328, 3, 20);
+		cartRect(inner, TILE-29 - i*9, 328, 3, 20);
+	}
+}
 static int writeTile(const Grid* g, const char* path) { // 0 if the PNG is on disk
 	memset(tile_pixels, 0, sizeof(tile_pixels));
 	SDL_Color bright = theme.white, dim = theme.dark_text;
+	{
+		uint32_t o = 0xFF000000u | ((dim.r + (bright.r - dim.r) * 75 / 100) << 16) | ((dim.g + (bright.g - dim.g) * 75 / 100) << 8) | (dim.b + (bright.b - dim.b) * 75 / 100);
+		uint32_t n = 0xFF000000u | ((dim.r + (bright.r - dim.r) * 45 / 100) << 16) | ((dim.g + (bright.g - dim.g) * 45 / 100) << 8) | (dim.b + (bright.b - dim.b) * 45 / 100);
+		drawCart(o, n);
+	}
 	for (int cy=0; cy<TA_ROWS; cy++) for (int cx=0; cx<TA_COLS; cx++) {
 		uint32_t cp = g->ch[cy][cx];
 		if (cp==' ' || cp==CONT) continue;

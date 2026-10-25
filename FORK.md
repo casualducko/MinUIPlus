@@ -275,3 +275,6 @@ Test: `tools/package/release.sh ../test-package v2099.01.01.0000`, then `node do
 - **In a game:** Options > Collections lists the same collections with On/Off for this game (A or left/right). Code: `OptionCollections_*` in `minarch.c`.
 - **Files:** `Collection_*` in `utils.c` (tested by `test_collections.c`); a line is the game's path below the card, as MinUI reads them. Saved atomically; Windows line endings are understood.
 - **Note:** `MIN` and `MAX` in `defines.h` have no outer parentheses: never nest them or use them inside a larger expression (`clampTop` in `minui.c` exists for that reason).
+
+## Cartridge-style title tiles
+The dashed rule is gone. Each generated tile is now framed like a cartridge front: a 4 px outline with the top corners cut, a label outline inside it, and grip ridges in the base beside the system name (`drawCart` in `titleart_gen.c`). The big letters get a little less width (`TA_COLS-6`) to stay inside the label. Existing tiles change when you press X (RECREATE ALL) in Tools > TitleArt.
