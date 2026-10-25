@@ -1,6 +1,6 @@
 # Ideas for the RGB20SX fork
 
-Last refreshed 2026-10-24 (late night). `FORK.md` lists what has been done in detail; this is the state of the fork and what could come next. Sizes are rough: **S** is an evening, **M** a few evenings, **L** a project. "Device" means it needs the unit in hand to finish.
+Last refreshed 2026-10-25 (early morning). `FORK.md` lists what has been done in detail; this is the state of the fork and what could come next. Sizes are rough: **S** is an evening, **M** a few evenings, **L** a project. "Device" means it needs the unit in hand to finish.
 
 ## Where things stand
 
@@ -14,6 +14,10 @@ Last refreshed 2026-10-24 (late night). `FORK.md` lists what has been done in de
 | Cheats | Options > Cheats from `.cht` files, **download per game** from the libretro database (exact name, then the closest title), remembered per game |
 | Stats | Play time counted in minarch, Tools > Stats (most played / recent) |
 | Look | `theme.cfg` (colors, background, font), **Tools > Theme** (presets, palette, live preview, save), long names readable (wider selected row, Y shows the whole line) |
+| Launcher | **Y: random game** (never-played first; at the root, in a random folder), selected name **scrolls** when it doesn't fit, duplicate-title tags readable, game art on/off, title art (Tools > TitleArt, Romulus makes one per download, optional boot pass) |
+| Text | **Japanese titles** (fallback font, Noto Sans JP subset) everywhere names are shown |
+| Tools | **Info** (battery, Wi-Fi, IP, card, memory, CPU, uptime, build), **Screenshots** gallery, **Clock** sets itself from the network (Y), **Settings** (was Power; rows alphabetical) |
+| In a game | **Turbo A/B/X/Y/L/R** with a speed, in Options > Frontend |
 | Network | Tools > Wi-Fi v2 (scan, password, several saved networks), Tools > SSH, Tools > Romulus (browse, download, **play straight from the "Downloaded" screen**) |
 | Safety nets | Atomic saves, crash reporter, frame-timing and audio diagnostics, installer with backups, host tests (about 25 suites) and Mac harnesses |
 
@@ -44,13 +48,13 @@ Last refreshed 2026-10-24 (late night). `FORK.md` lists what has been done in de
 The ones I would do first are at the top of each size.
 
 ### Small (S)
-1. **Turbo buttons.** Rapid-fire A/B/X/Y per game, toggled in Options > Controls or by a hotkey. Standard on handhelds; MinUI has nothing. Small change in the input path.
-2. **Set the clock from the network.** The Clock tool fetches the time from the HTTP `Date:` header of any HTTPS site and sets it (zone already handled). The battery-less clock drifts and a wrong clock breaks TLS.
-3. **Random game ("Surprise me").** One launcher entry that picks an unplayed game from the current folder or collection (play time now tells us which are unplayed).
-4. **System info tool.** Battery %, storage free, Wi-Fi name and IP, build hash, uptime, in one screen. Answers "is it on Wi-Fi?" and "which build is this?" at a glance.
-5. **Screenshot gallery.** Browse `Screenshots/` on the device, delete, and show one as the launcher background or a game's cover.
-6. **Quiet logging.** Every key press is logged; a `debug-log` flag file turns it on, off by default (less I/O during play).
-7. **Cheat page polish.** Re-download, delete a cheat file, and "enable all" from the cheat list.
+1. **Quiet logging.** Every key press is logged; a `debug-log` flag file turns it on, off by default (less I/O during play).
+2. **Cheat page polish.** Re-download, delete a cheat file, and "enable all" from the cheat list.
+
+3. **A "new" mark.** A dot or tag on games you have not played yet (play time already knows), so new downloads stand out in a long list.
+4. **Bigger plain-text title tiles.** Titles in kana/kanji (and a few very long Latin ones) are drawn as small plain text in the picture; drawing them at double size would fill the tile like the ASCII letters do.
+5. **Chinese and Korean in the fallback font.** The subset is JIS (Japanese) only; a bigger subset built the same way (a few MB more) covers hanzi and hangul.
+6. **Per-game turbo / a hotkey.** Turbo is a frontend option now (saved per game with Save Changes); a shortcut to toggle it without opening the menu.
 
 ### Medium (M)
 8. **Self-update tool.** Tools > Update checks your GitHub repo's latest release, downloads the build, verifies SHA-256, installs it with the same backups as `install.sh`. Ends card swapping and the Mac-to-device pushes for anyone using the fork. Needs a public release (or a token in a config file) for the repo; it is private now.
@@ -59,7 +63,6 @@ The ones I would do first are at the top of each size.
 11. **Save backup and sync.** Copy saves to a zip on the card on a schedule, or sync to a server (Romulus server write path, or WebDAV/Syncthing which Moss already ships). The only protection against a lost card today is Restore Save on the same card.
 12. **ROM drop over Wi-Fi.** A tool that serves a small upload page so a phone or laptop can send ROMs and covers without taking the card out.
 13. **Bluetooth tool.** Pair headphones or a controller (BlueZ and PipeWire are in Moss; untested on this image). Needs the device.
-14. **CJK fallback font.** A second font used for glyphs the first lacks, so Japanese titles are readable.
 15. **Per-system power profile.** NES/GB don't need the clocks SNES/PSX do, but the CPU can't change speed on this unit (see above), so this waits for the regulator fix.
 16. **Romulus v2.** Resume interrupted downloads, a queue, "get everything I'm missing", filters, sizes. Now that PLAY exists, "download and play" is already there for single games.
 17. **In-game extras menu.** Fast-forward speed, sound mute, brightness shortcuts already exist; a single page for them would be quicker than digging through Options.

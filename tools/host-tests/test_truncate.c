@@ -18,6 +18,7 @@ static int valid_utf8(const char* s) {
 	return 1;
 }
 static int GFX_textWidth(TTF_Font* f, const char* t) { int w = 0; TTF_SizeUTF8(f, t, &w, NULL); return w; } // no fallback font in the tests
+#include "gen/GFX_utf8Trim.inc"
 #include "gen/GFX_truncate.inc"
 
 static int fails = 0;
@@ -65,6 +66,21 @@ int main(void) {
 	CHECK(w<=280 && strlen(name_out)>=8 && strstr(unique_out,"(A V"), "a long tag is cut so the name keeps some room");
 	GFX_truncateUniqueText(NULL,"BurgerTime Deluxe EX","BurgerTime Deluxe EX (TechDweeb).gb",name_out,unique_out,280,20);
 	CHECK(strstr(unique_out,"(TechDweeb)") && !strstr(unique_out,".gb") && strlen(name_out)>=8, "a short tag stays whole");
+
+	// a byte limit never leaves half a character (Japanese is three bytes each)
+	char jp[300]; jp[0] = 0;
+	for (int i=0; i<90; i++) strcat(jp, "\xE3\x83\x9D"); // 270 bytes
+	GFX_truncateText(NULL, jp, name_out, 100000, 0);
+	CHECK(valid_utf8(name_out) && strlen(name_out)==255, "a 270 byte Japanese name is cut to 255 bytes at a character boundary");
+	char tail[16] = "ab\xE3\x83";
+	GFX_utf8Trim(tail);
+	CHECK(!strcmp(tail, "ab"), "a cut-off character at the end is dropped");
+	char whole[16] = "ab\xE3\x83\x9D";
+	GFX_utf8Trim(whole);
+	CHECK(!strcmp(whole, "ab\xE3\x83\x9D"), "a whole one stays");
+	char ascii[8] = "plain"; GFX_utf8Trim(ascii); CHECK(!strcmp(ascii, "plain"), "ASCII stays");
+	char empty[4] = ""; GFX_utf8Trim(empty); CHECK(empty[0]==0, "empty stays");
+	char lone[4] = "\xE3"; GFX_utf8Trim(lone); CHECK(lone[0]==0, "a lone lead byte is dropped");
 
 	char big[1200]; memset(big,'x',1199); big[1199]=0;
 	GFX_truncateText(NULL,big,name_out,100000,0);

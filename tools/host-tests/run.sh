@@ -20,6 +20,7 @@ x() { python3 "$here/extract.py" "$@"; } # FILE START END
 x "$all/common/utils.c" 'void getEmuName' 'void getEmuPath' > "$out/gen/getEmuName.inc"
 x "$all/common/api.c" '#define MAX_SAMPLE_RATE' 'void SND_init' > "$out/gen/SND_core.inc"
 x "$all/common/api.c" 'static void SND_audioFill' 'static void SND_resizeBuffer' > "$out/gen/SND_audioCallback.inc"
+x "$all/common/api.c" 'static void GFX_utf8Trim' 'int GFX_truncateText' > "$out/gen/GFX_utf8Trim.inc"
 x "$all/common/api.c" 'int GFX_truncateText' 'int GFX_wrapText' > "$out/gen/GFX_truncate.inc"
 x "$all/common/utils.c" 'void getFile' 'char* allocFile' > "$out/gen/getFile.inc"
 x "$all/common/utils.c" '// Saves must never be destroyed' '// Keeping older versions' > "$out/gen/writeFileAtomic.inc"

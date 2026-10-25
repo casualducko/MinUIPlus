@@ -287,8 +287,8 @@ int getInt(char* path) {
 	return i;
 }
 void putInt(char* path, int value) {
-	char buffer[8];
-	sprintf(buffer, "%d", value);
+	char buffer[16];
+	snprintf(buffer, sizeof(buffer), "%d", value);
 	putFile(path, buffer);
 }
 
@@ -453,6 +453,7 @@ int Cheatdb_names(const char* json, char* out, int size) {
 				if (*p=='u' && Cheatdb_hex(p[1])>=0 && Cheatdb_hex(p[2])>=0 && Cheatdb_hex(p[3])>=0 && Cheatdb_hex(p[4])>=0) {
 					int u = (Cheatdb_hex(p[1])<<12) | (Cheatdb_hex(p[2])<<8) | (Cheatdb_hex(p[3])<<4) | Cheatdb_hex(p[4]);
 					p += 4;
+					if (u==0 || u=='\n' || (u>=0xD800 && u<=0xDFFF)) u = '?'; // no NULs or line breaks in a name, and a surrogate half is no character
 					if (u<0x80) name[len++] = u;
 					else if (u<0x800) { name[len++] = 0xC0 | (u>>6); name[len++] = 0x80 | (u&0x3F); }
 					else { name[len++] = 0xE0 | (u>>12); name[len++] = 0x80 | ((u>>6)&0x3F); name[len++] = 0x80 | (u&0x3F); }
@@ -518,7 +519,11 @@ int Cheatdb_pick(const char* names, const char* game, char* out, int size) {
 	char want[512];
 	snprintf(want, sizeof(want), "%s", game);
 	char* dot = strrchr(want, '.');
-	if (dot && strlen(dot+1)>=1 && strlen(dot+1)<=4) *dot = '\0';
+	if (dot && strlen(dot+1)>=1 && strlen(dot+1)<=4) { // a real extension: letters and digits only ("Mr. Do" has none)
+		int alnum = 1;
+		for (char* q = dot+1; *q; q++) if (!isalnum((unsigned char)*q)) alnum = 0;
+		if (alnum) *dot = '\0';
+	}
 	int best = -1;
 	char best_name[512] = "";
 	const char* p = names;

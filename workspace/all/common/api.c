@@ -196,8 +196,6 @@ static void GFX_tintAssets(void) {
 	}
 }
 
-static int _;
-
 static void GFX_mapTheme(void) { // theme -> the colors in use, and the ones each asset gets
 	RGB_BACKGROUND	= SDL_MapRGB(gfx.screen->format, theme.background.r, theme.background.g, theme.background.b);
 	RGB_WHITE		= SDL_MapRGB(gfx.screen->format, theme.white.r, theme.white.g, theme.white.b);
@@ -478,9 +476,20 @@ SDL_Surface* GFX_renderTextWith(TTF_Font* primary, TTF_Font* fb, const char* tex
 }
 SDL_Surface* GFX_renderText(TTF_Font* font_, const char* text, SDL_Color color) { return GFX_renderTextWith(font_, GFX_fallbackFont(font_), text, color); }
 
+static void GFX_utf8Trim(char* s) { // drops a multi-byte character that a byte limit cut in half at the end
+	size_t len = strlen(s);
+	if (len==0) return;
+	size_t j = len - 1;
+	while (j>0 && ((unsigned char)s[j]&0xC0)==0x80) j--; // back to the lead byte
+	unsigned char lead = (unsigned char)s[j];
+	if (lead<0xC0) return; // ASCII (or a stray byte): nothing to complete
+	size_t need = lead>=0xF0 ? 4 : lead>=0xE0 ? 3 : 2;
+	if (len - j < need) s[j] = '\0';
+}
 int GFX_truncateText(TTF_Font* font, const char* in_name, char* out_name, int max_width, int padding) {
 	int text_width;
 	snprintf(out_name, 256, "%s", in_name); // NOTE: out_name needs to be at least 256 bytes
+	GFX_utf8Trim(out_name);
 	text_width = GFX_textWidth(font, out_name);
 	text_width += padding;
 	
@@ -513,6 +522,7 @@ int GFX_truncateUniqueText(TTF_Font* font, const char* name, const char* unique,
 	// that leaves nothing, and never more than about half the room, so the name keeps the rest
 	char tag[256];
 	snprintf(tag, sizeof(tag), "%s", alt);
+	GFX_utf8Trim(tag);
 	char* dot = strrchr(tag, '.');
 	if (dot && dot>tag && dot[1] && strlen(dot+1)<=4) {
 		int alnum = 1;
@@ -530,6 +540,7 @@ int GFX_truncateUniqueText(TTF_Font* font, const char* name, const char* unique,
 	}
 	GFX_truncateText(font, name, out_name, max_width-alt_width, padding);
 	snprintf(out_unique, 256, "%s%s", out_name, tag);
+	GFX_utf8Trim(out_unique);
 	
 	int text_width;
 	text_width = GFX_textWidth(font, out_unique);
@@ -553,7 +564,6 @@ int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines) {
 	char* prev = NULL;
 	char* tmp = line;
 	int lines = 1;
-	int i = 0;
 	while (!max_lines || lines<max_lines) {
 		tmp = strchr(tmp, ' ');
 		if (!tmp) {
@@ -585,7 +595,6 @@ int GFX_wrapText(TTF_Font* font, char* str, int max_width, int max_lines) {
 			prev = tmp;
 			tmp += 1;
 		}
-		i += 1;
 	}
 	
 	line_width = GFX_truncateText(font,line,buffer,max_width,0);
@@ -968,6 +977,8 @@ void GFX_blitMessage(TTF_Font* font, char* msg, SDL_Surface* dst, SDL_Rect* dst_
 		if (len>=sizeof(line)) len = sizeof(line)-1;
 		if (len) memcpy(line, rows[i], len);
 		line[len] = '\0';
+		GFX_utf8Trim(line);
+		len = strlen(line);
 		
 		if (len) {
 			text = GFX_renderText(font, line, COLOR_WHITE);
@@ -1254,15 +1265,14 @@ void GFX_sizeText(TTF_Font* font, char* str, int leading, int* w, int* h) {
 	char line[256];
 	for (int i=0; i<count; i++) {
 		int len;
-		if (i+1<count) {
-			len = lines[i+1]-lines[i]-1;
-			if (len) strncpy(line, lines[i], len);
-			line[len] = '\0';
-		}
-		else {
-			len = strlen(lines[i]);
-			strcpy(line, lines[i]);
-		}
+		if (i+1<count) len = lines[i+1]-lines[i]-1;
+		else len = strlen(lines[i]);
+		if (len>(int)sizeof(line)-1) len = sizeof(line)-1; // a long line (a cheat code, a core's text) is cut, not run off the buffer
+		if (len>0) memcpy(line, lines[i], len);
+		else len = 0;
+		line[len] = '\0';
+		GFX_utf8Trim(line);
+		len = strlen(line);
 		
 		if (len) {
 			int lw;
@@ -1291,15 +1301,14 @@ void GFX_blitText(TTF_Font* font, char* str, int leading, SDL_Color color, SDL_S
 	char line[256];
 	for (int i=0; i<count; i++) {
 		int len;
-		if (i+1<count) {
-			len = lines[i+1]-lines[i]-1;
-			if (len) strncpy(line, lines[i], len);
-			line[len] = '\0';
-		}
-		else {
-			len = strlen(lines[i]);
-			strcpy(line, lines[i]);
-		}
+		if (i+1<count) len = lines[i+1]-lines[i]-1;
+		else len = strlen(lines[i]);
+		if (len>(int)sizeof(line)-1) len = sizeof(line)-1; // a long line (a cheat code, a core's text) is cut, not run off the buffer
+		if (len>0) memcpy(line, lines[i], len);
+		else len = 0;
+		line[len] = '\0';
+		GFX_utf8Trim(line);
+		len = strlen(line);
 		
 		if (len) {
 			text = GFX_renderText(font, line, color);
@@ -1327,6 +1336,7 @@ void GFX_blitText(TTF_Font* font, char* str, int leading, SDL_Color color, SDL_S
 typedef int (*SND_Resampler)(const SND_Frame frame);
 static struct SND_Context {
 	int initialized;
+	int disabled;			// the audio device did not open: samples are thrown away (waiting for a buffer that never drains would freeze the game)
 	double frame_rate;
 	
 	int sample_rate_in;
@@ -1526,6 +1536,7 @@ size_t SND_batchSamples(const SND_Frame* frames, size_t frame_count) { // plat_s
 	// return frame_count; // TODO: tmp, silent
 	
 	if (snd.frame_count==0) return 0;
+	if (snd.disabled) return frame_count;
 	
 	// LOG_info("%8i batching samples (%i frames)\n", ms(), frame_count);
 	
@@ -1619,6 +1630,8 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 
 	SDL_AudioSpec spec_in;
 	SDL_AudioSpec spec_out;
+	memset(&spec_in, 0, sizeof(spec_in));
+	memset(&spec_out, 0, sizeof(spec_out));
 
 	spec_in.freq = PLAT_pickSampleRate(sample_rate, MAX_SAMPLE_RATE);
 	spec_in.format = AUDIO_S16;
@@ -1626,7 +1639,11 @@ void SND_init(double sample_rate, double frame_rate) { // plat_sound_init
 	spec_in.samples = SAMPLES;
 	spec_in.callback = SND_audioCallback;
 	
-	if (SDL_OpenAudio(&spec_in, &spec_out)<0) LOG_info("SDL_OpenAudio error: %s\n", SDL_GetError());
+	if (SDL_OpenAudio(&spec_in, &spec_out)<0) {
+		LOG_info("SDL_OpenAudio error: %s\n", SDL_GetError());
+		spec_out = spec_in; // nothing was opened: the rates still have to be something
+		snd.disabled = 1;
+	}
 	
 	snd.buffer_seconds = 5;
 	{
@@ -2232,7 +2249,7 @@ void PWR_update(int* _dirty, int* _show_setting, PWR_callback_t before_sleep, PW
 	if (now-battery_checked_at>=5000) {
 		battery_checked_at = now;
 		int percent = PLAT_getBatteryPercent();
-		if (now>=LOW_BATTERY_GRACE_MS && PWR_lowBatteryCheck(percent, pwr.is_charging, PWR_lowBatteryLimit(), &low_strikes, 3)) {
+		if (pwr.can_poweroff && now>=LOW_BATTERY_GRACE_MS && PWR_lowBatteryCheck(percent, pwr.is_charging, PWR_lowBatteryLimit(), &low_strikes, 3)) {
 			LOG_info("battery at %i%%, saving and powering off\n", percent);
 			pwr.low_battery = 1;
 			if (before_sleep) before_sleep();

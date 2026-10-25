@@ -16,6 +16,7 @@ static SDL_Surface* TTF_RenderUTF8_Blended(TTF_Font* f, const char* t, SDL_Color
 static int SDL_BlitSurface(SDL_Surface* a, void* b, SDL_Surface* d, SDL_Rect* r) { blits++; return 0; }
 static void SDL_FreeSurface(SDL_Surface* s) { free(s); }
 static SDL_Surface* GFX_renderText(TTF_Font* f, const char* t, SDL_Color c) { return TTF_RenderUTF8_Blended(f, t, c); }
+#include "gen/GFX_utf8Trim.inc"
 #include "gen/GFX_blitMessage.inc"
 
 static int fails = 0;
