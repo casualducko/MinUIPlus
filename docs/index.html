@@ -67,12 +67,13 @@ summary { cursor:pointer; }
 	<details>
 		<summary>Something went wrong, or I want to go back</summary>
 		<p>Every file it replaced was copied first to <code>.system/rgb30/backup-before-fork-&lt;date&gt;</code> on the card. To undo, copy those files back over the ones in the same place. Nothing on the other (Moss) card is touched.</p>
+		<p><strong>Manual install:</strong> download the package from the <a href="https://github.com/casualducko/MinUIPlus/releases/latest">latest release</a>, unpack it, and run <code>./install.sh /path/to/the/card</code> (Mac or Linux), or copy the files over by hand.</p>
 		<p>The source for this page and the release packages are at <a id="repo" href="https://github.com/casualducko/MinUIPlus">github.com/casualducko/MinUIPlus</a>. Only the RGB20SX has been tested.</p>
 	</details>
 </main>
 
 <script type="module">
-import { downloadLatest, installOnCard, looksLikeMinUICard, DEFAULT_REPO } from './installer.js';
+import { downloadLatest, installOnCard, looksLikeMinUICard } from './installer.js';
 
 const $ = id => document.getElementById(id);
 const enable = (id, on) => $(id).classList.toggle('off', !on);
@@ -83,6 +84,7 @@ if (!window.showDirectoryPicker) {
 	$('pick').disabled = true;
 }
 
+function found(cls, text) { const f = $('found'); f.textContent = text; f.className = 'muted ' + cls; }
 function say(text, cls) { const s = $('status'); s.textContent = text; s.className = cls || ''; }
 function log(text) { const l = $('log'); l.hidden = false; l.textContent += text + '\n'; l.scrollTop = l.scrollHeight; }
 
@@ -93,15 +95,20 @@ $('pick').addEventListener('click', async () => {
 			card = null;
 			$('go').disabled = true;
 			enable('s3', false);
-			$('found').innerHTML = '<span class="bad">That folder is not the MinUI card</span> (it has no <code>.system/rgb30/bin</code>). Pick the top folder of the card that holds <code>.system</code>.';
+			found('bad', 'That folder is not the MinUI card (it has no .system/rgb30/bin). Pick the top folder of the card that holds .system.');
 			return;
 		}
 		card = handle;
-		$('found').innerHTML = '<span class="ok">Found a MinUI card:</span> ' + handle.name;
+		found('ok', 'Found a MinUI card: ' + handle.name);
 		$('go').disabled = false;
 		enable('s3', true);
 	}
-	catch (e) { if (e.name !== 'AbortError') $('found').innerHTML = '<span class="bad">' + e.message + '</span>'; }
+	catch (e) {
+		if (e.name === 'AbortError') return;
+		found('bad', e.name === 'SecurityError'
+			? "The browser won't let a page open that folder (Chrome blocks the top folder of some drives on Windows). Use the manual install in the notes below."
+			: e.message);
+	}
 });
 
 $('go').addEventListener('click', async () => {
@@ -110,7 +117,7 @@ $('go').addEventListener('click', async () => {
 	$('pick').disabled = true;
 	$('log').textContent = '';
 	try {
-		const pkg = await downloadLatest(DEFAULT_REPO, t => { say(t); log(t); });
+		const pkg = await downloadLatest(undefined, t => { say(t); log(t); });
 		say('Copying to the card… do not unplug it.');
 		const r = await installOnCard(card, pkg, log);
 		say('Installed ' + pkg.tag + ': ' + r.replaced + ' files replaced, ' + r.added + ' added.', 'ok');
@@ -118,7 +125,7 @@ $('go').addEventListener('click', async () => {
 		enable('s4', true);
 	}
 	catch (e) {
-		say('Stopped: ' + e.message, 'bad');
+		say('Stopped: ' + e.message + ' Nothing is lost: run it again, the files it replaced are backed up on the card.', 'bad');
 		log('ERROR: ' + e.message);
 		$('go').disabled = false;
 	}

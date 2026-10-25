@@ -88,22 +88,20 @@ await installOnCard(card, pkg, () => {}, new Date(2026, 9, 25, 12, 31, 0));
 assert.equal(await get(card, '.userdata/rgb30/update.cfg'), 'repo=mine/fork\n');
 console.log('ok   a second install keeps update.cfg');
 
-// the download, against a pretend GitHub
+// the download, from the page's own latest/ folder
 const sha = createHash('sha256').update(tgz).digest('hex');
-const fake = async (url, opt) => {
-	const ok = (body, json) => ({ ok: true, status: 200, json: async () => json, arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) });
-	if (url.endsWith('/releases/latest')) return ok(new Uint8Array(), { tag_name: 'v9', assets: [
-		{ name: 'MinUIPlus-v9.tar.gz', url: 'A', size: tgz.length }, { name: 'MinUIPlus-v9.tar.gz.sha256', url: 'B', size: 80 }] });
-	if (url === 'A') return ok(new Uint8Array(tgz));
-	if (url === 'B') return ok(new TextEncoder().encode(sha + '  MinUIPlus-v9.tar.gz\n'));
+const meta = { tag: 'v9', file: 'MinUIPlus-v9.tar.gz', sha256: sha, size: tgz.length };
+const fake = (m) => async (url) => {
+	const ok = (body) => ({ ok: true, status: 200, json: async () => JSON.parse(new TextDecoder().decode(body)), arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) });
+	if (url === 'http://x/latest/version.json') return ok(new TextEncoder().encode(JSON.stringify(m)));
+	if (url === 'http://x/latest/MinUIPlus-v9.tar.gz') return ok(new Uint8Array(tgz));
 	return { ok: false, status: 404 };
 };
-const dl = await downloadLatest('x/y', () => {}, fake);
+const dl = await downloadLatest('http://x/latest/', () => {}, fake(meta));
 assert.equal(dl.tag, 'v9');
 assert.equal(dl.files.length, files.length);
-const fakeBad = async (url, opt) => url === 'B' ? { ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode('0'.repeat(64)).buffer } : fake(url, opt);
-await assert.rejects(downloadLatest('x/y', () => {}, fakeBad), /checksum/);
-const none = async () => ({ ok: false, status: 404 });
-await assert.rejects(downloadLatest('x/y', () => {}, none), /No release/);
-console.log('ok   download: checked against its .sha256, bad checksum and missing release refused');
+await assert.rejects(downloadLatest('http://x/latest/', () => {}, fake({ ...meta, sha256: '0'.repeat(64) })), /checksum/);
+await assert.rejects(downloadLatest('http://x/latest/', () => {}, fake({ ...meta, file: '../../evil.tar.gz' })), /not valid/);
+await assert.rejects(downloadLatest('http://y/latest/', () => {}, fake(meta)), /No release/);
+console.log('ok   download: checked against its sha256; bad checksum, bad file name and missing release refused');
 console.log('\nall installer tests passed');

@@ -3,7 +3,6 @@
 // (File System Access API: Chrome, Edge and other Chromium browsers), backing up what it replaces.
 // No UI in here, so it can be tested in Node with an in-memory folder.
 
-export const DEFAULT_REPO = 'casualducko/MinUIPlus';
 const TEXT = new TextDecoder();
 const ENC = new TextEncoder();
 
@@ -92,30 +91,25 @@ export async function verifyPackage(files) {
 	return checked;
 }
 
-// the newest release: {tag, files}. onStatus(text) says what it is doing.
-export async function downloadLatest(repo = DEFAULT_REPO, onStatus = () => {}, fetchFn = fetch) {
+// The newest package: {tag, files}. GitHub does not let a web page download release files (no CORS), so
+// tools/package/release.sh also puts the latest package in docs/latest/, next to this page, where it can.
+// onStatus(text) says what it is doing; base is the folder the page is served from.
+export async function downloadLatest(base = new URL('./latest/', import.meta.url).href, onStatus = () => {}, fetchFn = fetch) {
 	onStatus('Looking for the latest release...');
-	const api = 'https://api.github.com/repos/' + repo;
-	const rel = await fetchFn(api + '/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
-	if (!rel.ok) throw new Error(rel.status === 404 ? 'No release found for ' + repo : 'GitHub said ' + rel.status);
-	const info = await rel.json();
-	const pkg = (info.assets || []).find(a => /^MinUIPlus-.*\.tar\.gz$/.test(a.name));
-	const sum = (info.assets || []).find(a => pkg && a.name === pkg.name + '.sha256');
-	if (!pkg || !sum) throw new Error('The latest release (' + info.tag_name + ') has no package to install.');
-	const get = async a => {
-		const r = await fetchFn(a.url, { headers: { Accept: 'application/octet-stream' } }); // the API address allows the browser to follow the download
-		if (!r.ok) throw new Error('Downloading ' + a.name + ' failed (' + r.status + ')');
-		return new Uint8Array(await r.arrayBuffer());
-	};
-	onStatus('Downloading ' + pkg.name + ' (' + (pkg.size / 1048576).toFixed(1) + ' MB)...');
-	const bytes = await get(pkg);
-	const want = TEXT.decode(await get(sum)).trim().split(/\s+/)[0];
+	const info = await fetchFn(base + 'version.json');
+	if (!info.ok) throw new Error(info.status === 404 ? 'No release has been published for this installer yet.' : 'Could not read the release information (' + info.status + ').');
+	const v = await info.json();
+	if (!v || !/^[\w.-]+\.tar\.gz$/.test(v.file || '') || !/^[0-9a-f]{64}$/.test(v.sha256 || '')) throw new Error('The release information is not valid.');
+	onStatus('Downloading ' + v.tag + ' (' + (v.size / 1048576).toFixed(1) + ' MB)...');
+	const r = await fetchFn(base + v.file);
+	if (!r.ok) throw new Error('Downloading the package failed (' + r.status + ').');
+	const bytes = new Uint8Array(await r.arrayBuffer());
 	onStatus('Checking the download...');
-	if (await sha256Hex(bytes) !== want) throw new Error('The download does not match its checksum. Try again.');
+	if (await sha256Hex(bytes) !== v.sha256) throw new Error('The download does not match its checksum. Try again.');
 	const files = parseTar(await gunzip(bytes));
 	const count = await verifyPackage(files);
 	onStatus('Package ok: ' + count + ' files checked.');
-	return { tag: info.tag_name, files };
+	return { tag: v.tag, files };
 }
 
 // --- the card ---------------------------------------------------------------------------------

@@ -21,6 +21,14 @@ name=MinUIPlus-$tag.tar.gz
 COPYFILE_DISABLE=1 tar --format ustar -czf "$out/$name" -C "$stage" .
 (cd "$out" && shasum -a 256 "$name" > "$name.sha256")
 rm -r "$stage"
+# the web installer (docs/index.html) can't download release files from GitHub (CORS), so it reads its own copy
+pages=$(cd "$(dirname "$0")/../.." && pwd)/docs/latest
+if [ -d "$(dirname "$pages")" ]; then
+	rm -rf "$pages"; mkdir -p "$pages"
+	cp "$out/$name" "$pages/$name"
+	printf '{"tag":"%s","file":"%s","sha256":"%s","size":%s}\n' "$tag" "$name" "$(cut -d' ' -f1 < "$out/$name.sha256")" "$(wc -c < "$out/$name" | tr -d ' ')" > "$pages/version.json"
+	echo "web installer copy: $pages (commit and push it so the page offers this build)"
+fi
 echo "made $out/$name ($(wc -c < "$out/$name") bytes)"
 cat "$out/$name.sha256"
 if [ -n "$publish" ]; then
