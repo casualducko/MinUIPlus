@@ -378,11 +378,31 @@ static int copy_file(const char* from, const char* to) {
 	return ok ? 0 : -1;
 }
 
+// a server (or a Wi-Fi login page in front of it) that answers 200 with a web page: not a game
+static int looks_like_html(const char* path) {
+	FILE* f = fopen(path, "rb");
+	if (!f) return 0;
+	char head[256];
+	size_t n = fread(head, 1, sizeof(head)-1, f);
+	fclose(f);
+	head[n] = '\0';
+	const char* p = head;
+	if ((unsigned char)p[0]==0xEF && (unsigned char)p[1]==0xBB && (unsigned char)p[2]==0xBF) p += 3; // a byte order mark
+	while (*p==' ' || *p=='\t' || *p=='\r' || *p=='\n') p++;
+	return !strncasecmp(p, "<!doctype html", 14) || !strncasecmp(p, "<html", 5) || !strncasecmp(p, "<?xml", 5) || !strncasecmp(p, "<head", 5) || !strncasecmp(p, "<body", 5);
+}
+static long file_bytes(const char* path) {
+	struct stat st;
+	return stat(path, &st)==0 ? (long)st.st_size : -1;
+}
+
 static void finish_download(void) {
 	RRom rom = roms.items[dl_index];
 	const char* err = rjob_error(&job);
 	PWR_enableAutosleep();
 	if (err) { unlink(DOWNLOAD_TMP); say(err, 0); return; }
+	if (file_bytes(DOWNLOAD_TMP)<=0) { unlink(DOWNLOAD_TMP); say("The download was empty", 0); return; }
+	if (looks_like_html(DOWNLOAD_TMP)) { unlink(DOWNLOAD_TMP); say("The server sent a web page,\nnot a game.\n(A Wi-Fi login page?)", 0); return; }
 
 	const SysDef* sys = sys_for_slug(rom.platform);
 	char dir[MAX_PATH];
@@ -405,6 +425,7 @@ static void finish_download(void) {
 	char final_path[MAX_PATH+260];
 	char part_path[MAX_PATH+270];
 	int result = 0;
+	int already = 0; // the same game was already there
 	if (is_zip && sys) {
 		ZipEntry entry;
 		int r = zipx_find(DOWNLOAD_TMP, sys->exts, &entry);
@@ -412,21 +433,25 @@ static void finish_download(void) {
 		if (r!=ZIPX_OK) { unlink(DOWNLOAD_TMP); say("Couldn't open that zip", 0); return; }
 		rom_safe_name(entry.name, sys, final_name, sizeof(final_name));
 		snprintf(final_path, sizeof(final_path), "%s/%s", dir, final_name);
-		snprintf(part_path, sizeof(part_path), "%s/.%s.part", dir, final_name);
-		struct statvfs vfs;
-		if (statvfs(dir, &vfs)==0 && (unsigned long long)vfs.f_bavail*vfs.f_frsize < (unsigned long long)entry.usize+1024*1024) { unlink(DOWNLOAD_TMP); say("Not enough room on the card", 0); return; }
-		r = zipx_extract(DOWNLOAD_TMP, &entry, part_path);
-		unlink(DOWNLOAD_TMP);
-		if (r!=ZIPX_OK) { remove(part_path); say(r==ZIPX_E_WRITE ? "Couldn't write to the card (full?)" : "The zip is damaged", 0); return; }
-		result = rename(part_path, final_path);
-		if (result) { remove(part_path); say("Couldn't save the file", 0); return; }
+		snprintf(part_path, sizeof(part_path), "%s/.romulus-download.part", dir); // a short fixed name: a long game name would not fit beside a dot and ".part"
+		if (exists(final_path)) { unlink(DOWNLOAD_TMP); already = 1; } // the game is on the card: never replaced
+		else {
+			struct statvfs vfs;
+			if (statvfs(dir, &vfs)==0 && (unsigned long long)vfs.f_bavail*vfs.f_frsize < (unsigned long long)entry.usize+1024*1024) { unlink(DOWNLOAD_TMP); say("Not enough room on the card", 0); return; }
+			r = zipx_extract(DOWNLOAD_TMP, &entry, part_path);
+			unlink(DOWNLOAD_TMP);
+			if (r!=ZIPX_OK) { remove(part_path); say(r==ZIPX_E_WRITE ? "Couldn't write to the card (full?)" : "The zip is damaged", 0); return; }
+			result = rename(part_path, final_path);
+			if (result) { remove(part_path); say("Couldn't save the file", 0); return; }
+		}
 	}
 	else {
 		snprintf(final_name, sizeof(final_name), "%s", safe);
 		snprintf(final_path, sizeof(final_path), "%s/%s", dir, final_name);
-		if (rename(DOWNLOAD_TMP, final_path)) {
+		if (exists(final_path)) { unlink(DOWNLOAD_TMP); already = 1; } // the game is on the card: never replaced
+		else if (rename(DOWNLOAD_TMP, final_path)) {
 			// not the same card/folder: copy
-			snprintf(part_path, sizeof(part_path), "%s/.%s.part", dir, final_name);
+			snprintf(part_path, sizeof(part_path), "%s/.romulus-download.part", dir);
 			if (copy_file(DOWNLOAD_TMP, part_path) || rename(part_path, final_path)) { remove(part_path); unlink(DOWNLOAD_TMP); say("Couldn't save the file (card full?)", 0); return; }
 			unlink(DOWNLOAD_TMP);
 		}
@@ -445,7 +470,7 @@ static void finish_download(void) {
 	char* tag = strstr(place, " (");
 	if (tag) *tag = '\0'; // "Super Nintendo (SFC)" -> "Super Nintendo"
 	GFX_wrapText(font.large, title, screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2), 2);
-	snprintf(msg, sizeof(msg), "Downloaded\n\n%s\n\nSaved to %s", title, place);
+	snprintf(msg, sizeof(msg), already ? "Already on the card\n\n%s\n\nIn %s" : "Downloaded\n\n%s\n\nSaved to %s", title, place);
 	if (make_play_cmd(final_path)) {
 		snprintf(modal_msg, sizeof(modal_msg), "%s", msg);
 		modal = MODAL_PLAY;
@@ -464,6 +489,7 @@ static void start_download(int index) {
 	// room for the file (twice if it's a zip, it's unpacked next to itself)
 	struct statvfs vfs;
 	const char* where = access(dir, F_OK)==0 ? dir : ROMS_PATH;
+	if (rom->size > (64LL<<30)) { say("That file is too big for this card", 0); return; } // (and keeps the sums below from wrapping)
 	unsigned long long need = (unsigned long long)MAX(rom->size, 0) * 2 + 4*1024*1024;
 	if (statvfs(where, &vfs)==0 && (unsigned long long)vfs.f_bavail*vfs.f_frsize < need) { say("Not enough room on the card", 0); return; }
 	(void)sys;

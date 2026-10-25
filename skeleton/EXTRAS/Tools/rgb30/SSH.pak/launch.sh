@@ -33,11 +33,34 @@ has_route() { ip route 2>/dev/null | grep -q '^default'; } # by whatever interfa
 		mkdir -p /storage/.ssh
 		chmod 700 /storage/.ssh
 		touch /storage/.ssh/authorized_keys
-		KEY=$(cat ./authorized_key.pub)
-		grep -qxF "$KEY" /storage/.ssh/authorized_keys || echo "$KEY" >> /storage/.ssh/authorized_keys
+		# a last line with no newline would have the next key glued to it
+		if [ -s /storage/.ssh/authorized_keys ] && [ "$(tail -c1 /storage/.ssh/authorized_keys | wc -l)" -eq 0 ]; then
+			echo >> /storage/.ssh/authorized_keys
+		fi
+		# every key in the file (one per line), each added once
+		while IFS= read -r KEY; do
+			[ -n "$KEY" ] || continue
+			grep -qxF "$KEY" /storage/.ssh/authorized_keys || echo "$KEY" >> /storage/.ssh/authorized_keys
+		done < ./authorized_key.pub
 		chmod 600 /storage/.ssh/authorized_keys
 	fi
-	systemctl start sshd
+	# Moss lets root log in with a password, and its default is public: with a key in place, switch
+	# password logins off, so nobody else on this Wi-Fi gets in. (With no key at all it is left as the
+	# system has it: turning passwords off would lock everyone out.)
+	RESTART=0
+	if [ -s /storage/.ssh/authorized_keys ]; then
+		CONF=/storage/.cache/services/sshd.conf
+		mkdir -p /storage/.cache/services
+		touch "$CONF"
+		if ! grep -q 'PasswordAuthentication' "$CONF"; then
+			echo 'SSH_ARGS="-o PasswordAuthentication=no -o KbdInteractiveAuthentication=no"' >> "$CONF"
+			RESTART=1
+		fi
+		echo "sshd: passwords off, keys only"
+	else
+		echo "sshd: no key installed, the system's own login settings apply"
+	fi
+	if [ "$RESTART" = 1 ]; then systemctl restart sshd; else systemctl start sshd; fi
 	sleep 1
 	STATE=$(systemctl is-active sshd)
 	IP=$(ip -4 -o addr show wlan0 | awk '{print $4}' | cut -d/ -f1)

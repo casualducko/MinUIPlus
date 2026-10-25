@@ -226,9 +226,11 @@ static void step_connect(uint32_t now) {
 		if (op_pid>0) { wifi_kill(op_pid); op_pid = 0; }
 		char msg[320];
 		snprintf(msg, sizeof(msg), "Couldn't connect to\n%s.\nCheck the password.", op_ssid);
-		if (prev_ssid[0] && strcmp(prev_ssid, op_ssid)) {
-			set_setting_value("wifi.ssid", prev_ssid);
-			set_setting_value("wifi.key", prev_pass);
+		// the settings go back to what they were whatever happened (a wrong password typed for the very network
+		// that was already set up must not leave the wrong one stored), and the old network is switched on again
+		set_setting_value("wifi.ssid", prev_ssid);
+		set_setting_value("wifi.key", prev_pass);
+		if (prev_ssid[0]) {
 			char* back_with[] = { "wifictl", "enable", prev_ssid, prev_pass, NULL };
 			char* back_open[] = { "wifictl", "enable", prev_ssid, NULL };
 			bg_pid = wifi_spawn(prev_pass[0] ? back_with : back_open);

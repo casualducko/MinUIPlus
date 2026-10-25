@@ -2,7 +2,8 @@
 # Runs the real Romulus tool on this computer against tools/host-tests/mock_romulus.py,
 # with scripted buttons and screenshots (see run.sh for the script syntax; S = START, wait).
 #   RES=/path/to/.system/res tools/host-harness/romulus-run.sh "snap:platforms,D,A,wait,wait,snap:games"
-# Environment: RES (first time), WORK, OUT, CFG (a config file to use instead of the mock's)
+# Environment: RES (first time), WORK, OUT, CFG (a config file to use instead of the mock's),
+# KEEP=1 (keep the card's Roms and the download list as the last run left them)
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$here/../..
@@ -22,7 +23,7 @@ for tag in FC MGBA GB GBC; do
 	mkdir -p "$CARD/.system/macos/paks/Emus/$tag.pak"
 	echo '#!/bin/sh' > "$CARD/.system/macos/paks/Emus/$tag.pak/launch.sh"
 done
-rm -rf "$CARD/Roms" "$CARD/.userdata/macos/romulus"* 
+if [ -z "$KEEP" ]; then rm -rf "$CARD/Roms" "$CARD/.userdata/macos/romulus"* ; fi
 mkdir -p "$CARD/Roms/NES (FC)" "$CARD/Roms/GBA (MGBA)" "$CARD/.userdata/macos"
 
 tok="harness-token-$$"

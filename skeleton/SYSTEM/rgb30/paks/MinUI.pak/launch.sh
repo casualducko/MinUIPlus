@@ -61,7 +61,9 @@ cd $(dirname "$0")
 # no screen, a few seconds at most
 TITLEART=$SDCARD_PATH/Tools/$PLATFORM/TitleArt.pak/titleart.elf
 if [ "$(cat $USERDATA_PATH/titleart-auto 2>/dev/null)" = "1" ] && [ -x "$TITLEART" ]; then
-	"$TITLEART" --auto > "$LOGS_PATH/titleart.txt" 2>&1
+	# the tool keeps to a few seconds itself; the limit is for the case where it never comes back (nothing may hold up a boot)
+	if command -v timeout >/dev/null 2>&1; then timeout 15 "$TITLEART" --auto > "$LOGS_PATH/titleart.txt" 2>&1
+	else "$TITLEART" --auto > "$LOGS_PATH/titleart.txt" 2>&1; fi
 fi
 
 EXEC_PATH=/tmp/minui_exec

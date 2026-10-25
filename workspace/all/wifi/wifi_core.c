@@ -251,7 +251,8 @@ int wifi_saved_store(const char* path, const WifiSaved* list, int count) {
 	if (!f) return -1;
 	fputs("# Wi-Fi networks remembered by Tools > Wi-Fi: name, a tab, the password. The newest is first.\n", f);
 	for (int i=0; i<count; i++) {
-		escape_into(f, list[i].ssid);
+		if (list[i].ssid[0]=='#') { fputs("\\#", f); escape_into(f, list[i].ssid+1); } // a line starting with # is a comment when it is read back
+		else escape_into(f, list[i].ssid);
 		fputc('\t', f);
 		escape_into(f, list[i].pass);
 		fputc('\n', f);
@@ -363,10 +364,18 @@ int wifi_reap(pid_t pid, int* status) {
 	if (status) *status = (r==pid && WIFEXITED(st)) ? WEXITSTATUS(st) : -1;
 	return 1;
 }
-void wifi_kill(pid_t pid) {
+void wifi_kill(pid_t pid) { // stops it and collects it, so it never stays as a zombie
 	if (pid<=0) return;
 	kill(-pid, SIGTERM);
 	kill(pid, SIGTERM);
+	for (int i=0; i<20; i++) { // up to 200 ms to stop politely
+		pid_t r = waitpid(pid, NULL, WNOHANG);
+		if (r==pid || (r<0 && errno==ECHILD)) return; // collected (or already was)
+		usleep(10000);
+	}
+	kill(-pid, SIGKILL);
+	kill(pid, SIGKILL);
+	waitpid(pid, NULL, 0);
 }
 
 void wifi_ip_address(char* out, size_t cap) {

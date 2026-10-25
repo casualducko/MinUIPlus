@@ -4455,8 +4455,7 @@ static int Menu_options(MenuList* list) {
 	int await_input = 0;
 	
 	// dependent on option list offset top and bottom, eg. the gray triangles
-	int max_visible_options = (screen->h - ((SCALE1(PADDING + PILL_SIZE) * 2) + SCALE1(BUTTON_SIZE))) / SCALE1(BUTTON_SIZE); // 7 for 480, 10 for 720
-	max_visible_options = (screen->h - SCALE1((PADDING + PILL_SIZE) * 2)) / SCALE1(PILL_SIZE); // every list has the main menu's big rows (8 on this panel)
+	int max_visible_options = (screen->h - SCALE1((PADDING + PILL_SIZE) * 2)) / SCALE1(PILL_SIZE); // every list has the main menu's big rows (8 on this panel)
 	
 	int count;
 	for (count=0; items[count].name; count++);

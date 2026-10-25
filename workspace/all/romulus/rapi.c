@@ -262,7 +262,8 @@ int rjob_start(RJob* job, const RConfig* cfg, const char* api_path, const char* 
 	if (snprintf(url, sizeof(url), "%s%s", cfg->url, api_path)>=(int)sizeof(url)) return -1;
 
 	// the token goes in a private file, not on the command line where ps would show it
-	int fd = open(job->hdr_path, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+	unlink(job->hdr_path); // (a leftover of an earlier run, or something planted there: removed, never followed)
+	int fd = open(job->hdr_path, O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, 0600);
 	if (fd<0) return -1;
 	char hdr[512];
 	int n = snprintf(hdr, sizeof(hdr), "Authorization: Bearer %s\n", cfg->token);

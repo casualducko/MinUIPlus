@@ -128,6 +128,14 @@ int main(void) {
 	char longname[100]; memset(longname, 'x', 60); longname[60] = 0;
 	CHECK(wifi_saved_put(small, sc, 2, longname, "p")==sc && !strcmp(small[0].ssid, "c"), "a name over 32 bytes is refused");
 	CHECK(wifi_saved_store("/no/such/dir/x.txt", list, count)==-1, "storing somewhere impossible fails");
+	// a network whose name starts with # is not a comment when it is read back
+	WifiSaved hash[4]; int hc = 0;
+	hc = wifi_saved_put(hash, hc, 4, "#hotspot", "pw");
+	hc = wifi_saved_put(hash, hc, 4, "#", "");
+	CHECK(wifi_saved_store(path, hash, hc)==0, "stores names that start with #");
+	WifiSaved hback[4];
+	int hb = wifi_saved_load(path, hback, 4);
+	CHECK(hb==2 && wifi_saved_find(hback, hb, "#hotspot")>=0 && wifi_saved_find(hback, hb, "#")>=0 && !strcmp(hback[wifi_saved_find(hback, hb, "#hotspot")].pass, "pw"), "# names survive the round trip");
 	// a hand-edited file: comments, blank lines, CRLF, a name with no password
 	put(path, "# note\n\nLine One\tsecret\r\nOpenNet\nBadTooLong0123456789012345678901234567\tx\n");
 	c2 = wifi_saved_load(path, back, WIFI_MAX_NETS);
