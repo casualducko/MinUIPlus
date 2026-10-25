@@ -323,7 +323,7 @@ int main(int argc, char* argv[]) {
 					: (sel>=ROW_FIRST_SLOT && sel<ROW_FIRST_SLOT+SLOT_COUNT) ? slots[sel-ROW_FIRST_SLOT].hint
 					: sel==ROW_SAVE ? "Writes theme.cfg; the launcher restarts with it"
 					: "Back to the stock look (then Save to keep it)";
-				text(screen, font.small, note, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), bottom + row_h/2, w, 0); // under the scroll arrow
+				text(screen, font.small, note, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), bottom + row_h/2 - SCALE1(6), w, 0); // under the scroll arrow
 				hints[0] = "B"; hints[1] = "BACK";
 				hints[2] = "A"; hints[3] = sel==ROW_SAVE ? "SAVE" : sel==ROW_RESET ? "RESET" : sel==ROW_PRESET ? "APPLY" : "EDIT";
 			}
