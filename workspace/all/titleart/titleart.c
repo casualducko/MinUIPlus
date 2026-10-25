@@ -51,7 +51,7 @@ static long fileMtime(const char* path) {
 	struct stat st;
 	return stat(path, &st)==0 ? (long)st.st_mtime : -1;
 }
-static void scanGames(void) {
+static void scanGames(uint64_t deadline_us) { // deadline_us: stop looking at this time (getMicroseconds), 0 for no limit
 	free(games);
 	games = calloc(MAX_GAMES, sizeof(Game));
 	game_count = 0;
@@ -62,6 +62,8 @@ static void scanGames(void) {
 	struct dirent* fe;
 	while ((fe = readdir(roms)) && folder_count<128) {
 		if (fe->d_name[0]=='.') continue;
+		if (strlen(fe->d_name)>=sizeof(folders[0])) continue; // a name that doesn't fit would be kept cut short, and its pictures put in a folder that is not there
+		if (deadline_us && getMicroseconds()>deadline_us) break;
 		char dir[MAX_PATH];
 		snprintf(dir, sizeof(dir), ROMS_PATH "/%s", fe->d_name);
 		struct stat st;
@@ -72,6 +74,7 @@ static void scanGames(void) {
 		snprintf(folders[fi], sizeof(folders[fi]), "%s", fe->d_name);
 		struct dirent* e;
 		while ((e = readdir(d)) && game_count<MAX_GAMES) {
+			if (deadline_us && (game_count & 63)==0 && getMicroseconds()>deadline_us) break;
 			if (!isGameFile(e->d_name) || strlen(e->d_name)>=sizeof(games[0].file)) continue;
 			char full[MAX_PATH];
 			snprintf(full, sizeof(full), "%s/%s", dir, e->d_name);
@@ -160,8 +163,8 @@ static int autoMain(void) {
 		THEME_parse(text, &theme, font_unused, sizeof(font_unused));
 	}
 	if (TAGen_open()) { LOG_error("titleart: can't open the font\n"); return 1; }
-	scanGames();
-	uint64_t start = getMicroseconds();
+	uint64_t start = getMicroseconds(); // the budget counts from here, looking at the card included
+	scanGames(start + AUTO_MAX_US);
 	int made_now = 0, failed = 0, missing = 0;
 	for (int i=0; i<game_count; i++) if (!games[i].has_art) missing++;
 	for (int i=0; i<game_count && made_now<AUTO_MAX_TILES; i++) {
@@ -188,14 +191,14 @@ int main(int argc, char* argv[]) {
 	InitSettings();
 	if (TAGen_open()) LOG_error("titleart: can't open the font\n");
 	loadMade();
-	scanGames();
+	scanGames(0);
 
 	int row_h = SCALE1(PILL_SIZE);
 	int w = screen->w - SCALE1(PADDING*2);
 	int quit = 0, dirty = 1, show_setting = 0;
 	int state = ST_HOME;
 	Job* jobs = NULL;
-	int job_count = 0, job_done = 0, job_failed = 0;
+	int job_count = 0, job_done = 0, job_failed = 0, job_remake = 0;
 	char note[160] = "";
 
 	while (!quit) {
@@ -219,6 +222,7 @@ int main(int argc, char* argv[]) {
 			}
 			else if ((PAD_justPressed(BTN_A) && missing>0) || (PAD_justPressed(BTN_X) && mine>0)) {
 				int remake = !(PAD_justPressed(BTN_A));
+				job_remake = remake;
 				free(jobs);
 				jobs = calloc(remake ? MAX_MADE : MAX_GAMES, sizeof(Job));
 				job_count = job_done = job_failed = 0;
@@ -260,7 +264,7 @@ int main(int argc, char* argv[]) {
 				snprintf(note, sizeof(note), "%s %i tile%s.", cancelled ? "Stopped after" : "Made", made_ok, made_ok==1 ? "" : "s");
 				if (job_failed) snprintf(note + strlen(note), sizeof(note) - strlen(note), "\n%i failed.", job_failed);
 				state = ST_DONE;
-				scanGames();
+				scanGames(0);
 				dirty = 1;
 			}
 			else {
@@ -271,8 +275,10 @@ int main(int argc, char* argv[]) {
 				if (slash) *slash = '\0';
 				char badge[96];
 				TA_badge(j->folder, badge, sizeof(badge));
-				int ok = TAGen_write(j->file, badge, j->art)==0;
-				if (ok) {
+				int skip = !job_remake && exists(j->art); // a picture that appeared since the scan is somebody's: left alone
+				int ok = skip ? 0 : TAGen_write(j->file, badge, j->art)==0;
+				if (skip) {}
+				else if (ok) {
 					long mt = fileMtime(j->art);
 					int mi = madeIndex(j->art);
 					if (mi<0 && made_count<MAX_MADE) { mi = made_count++; snprintf(made[mi].path, sizeof(made[mi].path), "%s", j->art); }

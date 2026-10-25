@@ -92,6 +92,7 @@ static void describe(const Row* row, char* out, size_t cap) {
 static void step(Row* row, int dir) {
 	int count = 0;
 	while (row->choices[count].label) count++;
+	if (count==0) return; // (every row has choices; this only keeps the arithmetic below honest)
 	int i = choiceIndex(row);
 	if (i<0) i = dir>0 ? -1 : 0; // a custom value: go to the first (or last) choice
 	i = (i + dir + count) % count;

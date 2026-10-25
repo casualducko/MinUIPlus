@@ -45,15 +45,6 @@ static void* Array_pop(Array* self) {
 	if (self->count==0) return NULL;
 	return self->items[--self->count];
 }
-static void Array_reverse(Array* self) {
-	int end = self->count-1;
-	int mid = self->count/2;
-	for (int i=0; i<mid; i++) {
-		void* item = self->items[i];
-		self->items[i] = self->items[end-i];
-		self->items[end-i] = item;
-	}
-}
 static void Array_free(Array* self) {
 	free(self->items); 
 	free(self);
@@ -133,13 +124,6 @@ static void Entry_free(Entry* self) {
 	free(self);
 }
 
-static int EntryArray_indexOf(Array* self, char* path) {
-	for (int i=0; i<self->count; i++) {
-		Entry* entry = self->items[i];
-		if (exactMatch(entry->path, path)) return i;
-	}
-	return -1;
-}
 static int EntryArray_sortEntry(const void* a, const void* b) {
 	Entry* item1 = *(Entry**)a;
 	Entry* item2 = *(Entry**)b;
@@ -1758,10 +1742,14 @@ int main (int argc, char *argv[]) {
 							});
 							SDL_FreeSurface(text);
 						}
-						SDL_Surface* text = GFX_renderText(font.large, selected_full ? (entry_unique ? entry_unique : entry_name) : display_name, text_color);
+						// the selected name is drawn whole only when it really doesn't fit next to the picture (then it
+						// scrolls); otherwise as the pill was sized (a tag without its file extension, for duplicates)
+						const char* full_text = entry_unique ? entry_unique : entry_name;
+						int too_wide = selected_full && GFX_textWidth(font.large, full_text) > available_width - SCALE1(BUTTON_PADDING*2);
+						SDL_Surface* text = GFX_renderText(font.large, too_wide ? full_text : display_name, text_color);
 						int clip_w = max_width-SCALE1(BUTTON_PADDING*2);
 						int src_x = 0;
-						if (selected_full && text->w > clip_w) {
+						if (too_wide && text->w > clip_w) {
 							// it doesn't fit: scroll it, with a pause at each end
 							uint32_t now = SDL_GetTicks();
 							if (marquee_entry!=entry) { marquee_entry = entry; marquee_start = now; }
@@ -1838,6 +1826,7 @@ int main (int argc, char *argv[]) {
 	}
 	
 	if (version) SDL_FreeSurface(version);
+	if (thumb_cache) SDL_FreeSurface(thumb_cache);
 
 	Menu_quit();
 	PWR_quit();

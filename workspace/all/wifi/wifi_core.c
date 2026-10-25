@@ -42,12 +42,6 @@ static void trim(char* s) {
 	if (start!=s) memmove(s, start, len+1);
 }
 
-static int usable_ssid(const char* s) { // not empty and not all zero bytes escaped (a hidden network)
-	if (!*s) return 0;
-	for (const char* p=s; *p; p++) if (*p!='\0') return 1;
-	return 0;
-}
-
 typedef struct { WifiNet net; int has_rsn; int has_privacy; int active; } Bss;
 
 static void bss_finish(Bss* b, WifiNet* out, int* count, int max) {

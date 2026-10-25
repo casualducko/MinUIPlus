@@ -131,11 +131,12 @@ int main(int argc, char* argv[]) {
 
 		if (confirm) {
 			if (PAD_justPressed(BTN_A)) {
-				unlink(shots[index].path);
-				memmove(&shots[index], &shots[index+1], sizeof(Shot) * (count - index - 1));
-				count--;
-				if (index>=count) index = count - 1;
-				if (index<0) index = 0;
+				if (unlink(shots[index].path)==0 || access(shots[index].path, F_OK)!=0) { // gone (or already gone)
+					memmove(&shots[index], &shots[index+1], sizeof(Shot) * (count - index - 1));
+					count--;
+					if (index>=count) index = count - 1;
+					if (index<0) index = 0;
+				} // else it stays in the list: the card is read-only or the like
 				confirm = 0;
 				loaded_index = -1;
 				dirty = 1;

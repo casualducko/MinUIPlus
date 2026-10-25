@@ -77,13 +77,20 @@ int ClockNet_sync(time_t* now, const char** error, ClockNet_tick tick, void* ctx
 		const char* t = getenv("CLOCK_WIFI_TIMEOUT_MS");
 		uint64_t limit = (t && *t) ? (uint64_t)atoll(t) : 30000;
 		uint64_t start = nowMs();
+		int done = 0; // wifictl has exited (and was collected)
 		while (!hasRoute()) {
-			if (tick(ctx, "Turning on Wi-Fi...")) { *error = "Cancelled."; if (pid>0) waitpid(pid, NULL, WNOHANG); return -1; }
-			if (nowMs() - start > limit) { *error = "No network.\nSet up Wi-Fi in Tools > Wi-Fi."; if (pid>0) waitpid(pid, NULL, WNOHANG); return -1; }
-			if (pid>0) waitpid(pid, NULL, WNOHANG);
+			int cancelled = tick(ctx, "Turning on Wi-Fi...");
+			int too_slow = nowMs() - start > limit;
+			if (pid>0 && !done && waitpid(pid, NULL, WNOHANG)==pid) done = 1;
+			if (cancelled || too_slow) {
+				*error = cancelled ? "Cancelled." : "No network.\nSet up Wi-Fi in Tools > Wi-Fi.";
+				if (pid>0 && !done) { kill(pid, SIGTERM); waitpid(pid, NULL, 0); } // stopped and collected: no zombie
+				return -1;
+			}
 			usleep(50000);
 		}
-		if (pid>0) waitpid(pid, NULL, WNOHANG);
+		// the route is up; wifictl may still be finishing: it is left to, and collected on the next call or when the tool ends
+		if (pid>0 && !done) waitpid(pid, NULL, WNOHANG);
 	}
 	const char* env = getenv("CLOCK_URL");
 	const char* urls[] = { env, "http://connectivitycheck.gstatic.com/generate_204", "http://www.msftconnecttest.com/connecttest.txt", "http://detectportal.firefox.com/success.txt", NULL };
