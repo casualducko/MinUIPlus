@@ -1312,6 +1312,92 @@ static void Menu_quit(void) {
 
 ///////////////////////////////////////
 
+///////////////////////////////////////
+// The random button (Y): a game that has not been played, if there is one. In a folder of games it
+// moves the selection (A opens it, Y again picks another); at the root it opens a random folder first.
+
+static uint32_t random_state = 0;
+static void showSelected(Directory* d, int index) { // selects it and scrolls the list so it is on screen, with some of what is around it
+	int count = d->entries->count;
+	d->selected = index;
+	if (count>MAIN_ROW_COUNT) {
+		int start = index - MAIN_ROW_COUNT/2;
+		if (start<0) start = 0;
+		int end = start + MAIN_ROW_COUNT;
+		if (end>count) { end = count; start = end - MAIN_ROW_COUNT; }
+		d->start = start;
+		d->end = end;
+	}
+	else {
+		d->start = 0;
+		d->end = count;
+	}
+}
+static void seedRandom(void) {
+	if (!random_state) random_state = (uint32_t)time(NULL) ^ (SDL_GetTicks() * 2654435761u);
+}
+static int pickGameHere(void) { // selects a random game in the open folder; 1 if there was one
+	Directory* d = top;
+	int count = d->entries->count;
+	if (count<=0) return 0;
+	int* index = malloc(sizeof(int) * count);
+	unsigned char* played = calloc(count, 1);
+	PlayRecord* records = calloc(PLAYTIME_MAX, sizeof(PlayRecord));
+	char* text = allocFile(PLAYTIME_PATH);
+	int record_count = (text && records) ? Playtime_parse(text, records, PLAYTIME_MAX) : 0;
+	int n = 0, chosen = -1;
+	if (index && played) {
+		for (int i=0; i<count; i++) {
+			Entry* entry = d->entries->items[i];
+			if (entry->type!=ENTRY_ROM) continue;
+			index[n] = i;
+			for (int j=0; j<record_count; j++) if (!strcmp(records[j].path, entry->path)) { played[n] = 1; break; }
+			n++;
+		}
+		seedRandom();
+		int pick = Random_pick(played, n, &random_state);
+		if (pick>=0) chosen = index[pick];
+	}
+	free(index);
+	free(played);
+	free(records);
+	free(text);
+	if (chosen<0) return 0;
+	showSelected(d, chosen);
+	return 1;
+}
+static int isPlainFolder(Entry* entry) { // not Recently Played, not a folder of discs that opens a game
+	char cue[MAX_PATH];
+	return entry->type==ENTRY_DIR && !exactMatch(entry->path, FAUX_RECENT_PATH) && !hasCue(entry->path, cue);
+}
+// Looks for a random game here, or (at the root, or in a folder of folders) in a random folder. 1 if it
+// found one: the selection, and maybe the open folder, changed. 0 leaves everything as it was.
+static int jumpToRandomGame(void) {
+	if (pickGameHere()) return 1;
+	int depth = stack->count;
+	for (int attempt=0; attempt<8; attempt++) {
+		Directory* d = top;
+		int dirs = 0;
+		for (int i=0; i<d->entries->count; i++) if (isPlainFolder(d->entries->items[i])) dirs++;
+		if (!dirs) break;
+		seedRandom();
+		int pick = Random_pick(NULL, dirs, &random_state);
+		int at = -1;
+		for (int i=0; i<d->entries->count && at<0; i++) if (isPlainFolder(d->entries->items[i]) && pick--==0) at = i;
+		if (at<0) break;
+		Entry* folder = d->entries->items[at];
+		showSelected(d, at); // so Back returns to the folder it came from, in view
+		openDirectory(folder->path, 0); // 0: a folder of discs must not start a game
+		if (stack->count<=depth || top==d) break; // it didn't open
+		if (pickGameHere()) return 1;
+		int has_folders = 0;
+		for (int i=0; i<top->entries->count; i++) if (isPlainFolder(top->entries->items[i])) { has_folders = 1; break; }
+		if (!has_folders) closeDirectory(); // empty: back, and try another
+	}
+	while (stack->count>depth) closeDirectory(); // nothing found: where it started
+	return 0;
+}
+
 int main (int argc, char *argv[]) {
 	// LOG_info("time from launch to:\n");
 	// unsigned long main_begin = SDL_GetTicks();
@@ -1473,6 +1559,13 @@ int main (int argc, char *argv[]) {
 						top->start = top->end - MAIN_ROW_COUNT;
 					}
 				}
+			}
+	
+			if (PAD_justPressed(BTN_Y)) { // a random game
+				jumpToRandomGame();
+				total = top->entries->count; // (the folder may have changed)
+				selected = top->selected;
+				dirty = 1;
 			}
 	
 			if (selected!=top->selected) {
@@ -1714,7 +1807,7 @@ int main (int argc, char *argv[]) {
 						GFX_blitButtonGroup((char*[]){ "B","BACK", "A","OPEN", NULL }, 1, screen, 1);
 					}
 					else {
-						GFX_blitButtonGroup((char*[]){ "A","OPEN", NULL }, 0, screen, 1);
+						GFX_blitButtonGroup((char*[]){ "Y","RANDOM", "A","OPEN", NULL }, 0, screen, 1);
 					}
 				}
 			}

@@ -652,3 +652,25 @@ time_t HTTPDate_parse(const char* headers) {
 	return 0;
 }
 // end of the HTTP date code
+
+// Random game (see utils.h)
+int Random_pick(const unsigned char* played, int count, uint32_t* state) {
+	if (count<=0 || !state) return -1;
+	if (*state==0) *state = 0x9E3779B9u;
+	uint32_t x = *state;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	*state = x;
+	int fresh = 0;
+	for (int i=0; i<count; i++) if (!played || !played[i]) fresh++;
+	int use_fresh = fresh>0;
+	int n = use_fresh ? fresh : count;
+	int pick = (int)((x >> 8) % (uint32_t)n); // the low bits of xorshift are the weakest
+	for (int i=0; i<count; i++) {
+		if (use_fresh && played && played[i]) continue;
+		if (pick--==0) return i;
+	}
+	return count-1; // not reached
+}
+// end of the random game code

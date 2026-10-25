@@ -19,6 +19,9 @@ void trimTrailingNewlines(char* line);
 void trimSortingMeta(char** str);
 
 int exists(char* path);
+// A random game: played[i] is 1 for a game that has been played; the pick is among those that have not
+// (any, if all have). state is the generator's (xorshift32; start it from the clock, never 0).
+int Random_pick(const unsigned char* played, int count, uint32_t* state); // an index, or -1 when count<=0
 // An HTTP Date header (RFC 7231: "Date: Sat, 25 Oct 2026 04:30:00 GMT") in the text of a response's headers
 time_t HTTPDate_parse(const char* headers); // seconds since 1970 (UTC), or 0 if there is no usable date (before 2024 or after 2100 counts as none)
 // The recently played list (recent.txt: paths relative to the card, newest first, an optional \talias after each)
