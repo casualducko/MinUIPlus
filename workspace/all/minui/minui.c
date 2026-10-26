@@ -1398,7 +1398,71 @@ static void refreshStack(void) {
 	top = stack->items[stack->count-1];
 }
 
-// START on a game: the collections, A puts the game in one or takes it out. 1 if anything changed.
+// Deleting a game from the launcher: the ROM file goes (and its title picture), and the game comes off Recently
+// Played and out of the collections. Saves and save states are kept, so putting the game back finds them again.
+// Not for multi-disc games (an .m3u or a folder of discs): those are several files, deleted on a computer.
+static void removeRecent(const char* sd_path) {
+	int id = RecentArray_indexOf(recents, (char*)sd_path + strlen(SDCARD_PATH));
+	if (id<0) return;
+	Recent_free(recents->items[id]);
+	for (int i=id; i<recents->count-1; i++) recents->items[i] = recents->items[i+1];
+	recents->count--;
+	saveRecents();
+}
+static int canDelete(Entry* entry) {
+	return entry->type==ENTRY_ROM && prefixMatch(ROMS_PATH, entry->path) && !suffixMatch(".m3u", entry->path) && !suffixMatch(".pak", entry->path);
+}
+static int deleteGame(Entry* entry) { // 1 if the file is gone
+	if (!canDelete(entry)) return 0;
+	if (unlink(entry->path)!=0 && exists(entry->path)) return 0;
+	char art[MAX_PATH];
+	const char* slash = strrchr(entry->path, '/');
+	if (slash) {
+		snprintf(art, sizeof(art), "%.*s/.res/%s.png", (int)(slash - entry->path), entry->path, slash+1);
+		unlink(art);
+	}
+	removeRecent(entry->path);
+	const char* rel = Collection_rel(entry->path, SDCARD_PATH);
+	if (rel) {
+		char names[COLLECTION_MAX][COLLECTION_NAME_MAX];
+		int n = Collection_choices(COLLECTIONS_PATH, names, COLLECTION_MAX);
+		for (int i=0; i<n; i++) {
+			char file[MAX_PATH];
+			snprintf(file, sizeof(file), "%s/%s.txt", COLLECTIONS_PATH, names[i]);
+			if (Collection_contains(file, rel)) Collection_set(file, rel, 0);
+		}
+	}
+	sync();
+	return 1;
+}
+// asks first; 1 if the game was deleted
+static int confirmDelete(Entry* entry, SDL_Surface* screen, int* show_setting) {
+	int dirty = 1, answer = 0, done = 0;
+	char msg[MAX_PATH + 200];
+	if (canDelete(entry)) snprintf(msg, sizeof(msg), "Delete this game?\n\n%s\n\nThe file is removed from the card.\nSaves and save states are kept.", entry->name);
+	else snprintf(msg, sizeof(msg), "This one can't be deleted here.\n\nA game made of several files\n(discs, an .m3u) is deleted\non a computer.");
+	int can = canDelete(entry);
+	while (!done) {
+		GFX_startFrame();
+		PAD_poll();
+		PWR_update(&dirty, show_setting, NULL, NULL);
+		if (PAD_justPressed(BTN_B) || (!can && PAD_justPressed(BTN_A))) done = 1;
+		else if (can && PAD_justPressed(BTN_A)) { answer = deleteGame(entry); done = 1; if (!answer) { snprintf(msg, sizeof(msg), "Couldn't delete it.\n\nThe card may be read-only."); can = 0; done = 0; dirty = 1; } }
+		if (dirty) {
+			GFX_clearUI(screen);
+			GFX_blitHardwareGroup(screen, *show_setting);
+			GFX_blitMessage(font.large, msg, screen, &(SDL_Rect){0, SCALE1(PADDING), screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
+			if (can) GFX_blitButtonGroup((char*[]){"B","NO","A","DELETE",NULL}, 1, screen, 1);
+			else GFX_blitButtonGroup((char*[]){"A","OKAY",NULL}, 1, screen, 1);
+			GFX_flip(screen);
+			dirty = 0;
+		}
+		else GFX_sync();
+	}
+	return answer;
+}
+
+// START on a game: the collections, A puts the game in one or takes it out; the last row deletes the game. 1 if anything changed.
 static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) {
 	const char* rel = Collection_rel(entry->path, SDCARD_PATH);
 	if (!rel) return 0;
@@ -1415,14 +1479,19 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 	int visible = (screen->h - SCALE1(PADDING+PILL_SIZE) - SCALE1(8) - top_y) / row_h;
 	if (visible<1) visible = 1;
 	int sel = 0, first = 0, changed = 0, dirty = 1, quit = 0;
+	int rows = count + 1; // the collections, then Delete game
 	char message[64] = "";
 	while (!quit) {
 		GFX_startFrame();
 		PAD_poll();
 		PWR_update(&dirty, show_setting, NULL, NULL);
 		if (PAD_justPressed(BTN_B) || PAD_justPressed(BTN_START)) quit = 1;
-		else if (PAD_justRepeated(BTN_UP) && count) { sel = (sel + count - 1) % count; dirty = 1; message[0] = '\0'; }
-		else if (PAD_justRepeated(BTN_DOWN) && count) { sel = (sel + 1) % count; dirty = 1; message[0] = '\0'; }
+		else if (PAD_justRepeated(BTN_UP)) { sel = (sel + rows - 1) % rows; dirty = 1; message[0] = '\0'; }
+		else if (PAD_justRepeated(BTN_DOWN)) { sel = (sel + 1) % rows; dirty = 1; message[0] = '\0'; }
+		else if (PAD_justPressed(BTN_A) && sel==count) { // Delete game
+			if (confirmDelete(entry, screen, show_setting)) { changed = 1; quit = 1; }
+			dirty = 1;
+		}
 		else if (PAD_justPressed(BTN_A) && count) {
 			int want = !in[sel];
 			if (Collection_set(files[sel], rel, want)==0) {
@@ -1439,15 +1508,20 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 			GFX_clearUI(screen);
 			int ow = GFX_blitHardwareGroup(screen, *show_setting);
 			char title[MAX_PATH], out[MAX_PATH];
-			snprintf(title, sizeof(title), "Collections: %s", entry->name);
+			snprintf(title, sizeof(title), "%s", entry->name);
 			GFX_truncateText(font.large, title, out, screen->w - SCALE1(PADDING*2) - ow, SCALE1(BUTTON_PADDING*2));
 			SDL_Surface* t = GFX_renderText(font.large, out, COLOR_LIGHT_TEXT);
 			if (t) { SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), SCALE1(PADDING)+4}); SDL_FreeSurface(t); }
 			int w = screen->w - SCALE1(PADDING*2);
-			for (int i=0; i<visible && first+i<count; i++) {
+			for (int i=0; i<visible && first+i<rows; i++) {
 				int y = top_y + i*row_h;
 				int selected = first+i==sel;
 				if (selected) GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){SCALE1(PADDING), y, w, row_h});
+				if (first+i==count) { // the last row
+					SDL_Surface* d = GFX_renderText(font.large, "Delete game...", selected ? COLOR_BLACK : COLOR_LIGHT_TEXT);
+					if (d) { SDL_BlitSurface(d, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), y+(row_h-d->h)/2}); SDL_FreeSurface(d); }
+					continue;
+				}
 				char name[COLLECTION_NAME_MAX*2];
 				GFX_truncateText(font.large, names[first+i], name, w * 6 / 10, SCALE1(BUTTON_PADDING*2));
 				SDL_Surface* n = GFX_renderText(font.large, name, selected ? COLOR_BLACK : COLOR_WHITE);
@@ -1457,9 +1531,9 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 			}
 			if (message[0]) {
 				SDL_Surface* m = GFX_renderText(font.small, message, COLOR_LIGHT_TEXT);
-				if (m) { SDL_BlitSurface(m, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), top_y + (visible<count ? visible : count)*row_h + SCALE1(4)}); SDL_FreeSurface(m); }
+				if (m) { SDL_BlitSurface(m, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), top_y + (visible<rows ? visible : rows)*row_h + SCALE1(4)}); SDL_FreeSurface(m); }
 			}
-			GFX_blitButtonGroup((char*[]){"B","BACK","A", count && in[sel] ? "REMOVE" : "ADD", NULL}, 1, screen, 1);
+			GFX_blitButtonGroup((char*[]){"B","BACK","A", sel==count ? "DELETE" : in[sel] ? "REMOVE" : "ADD", NULL}, 1, screen, 1);
 			GFX_flip(screen);
 			dirty = 0;
 		}
