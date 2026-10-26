@@ -425,8 +425,8 @@ static void draw_row(int j, int selected, const char* text, const char* right, i
 static void draw_note(const char* text) {
 	GFX_blitMessage(font.large, (char*)text, screen, &(SDL_Rect){0, ROW_H, screen->w, screen->h-ROW_H*2});
 }
-static void keep_visible(int* s, int* top, int count) {
-	int rows = list_rows();
+static int cart_rows(void) { return list_rows() - 1; } // the cart list keeps its last row for the selected cart's details
+static void keep_visible(int* s, int* top, int count, int rows) {
 	if (*s<0) *s = 0;
 	if (*s>=count) *s = count>0 ? count-1 : 0;
 	if (*s<*top) *top = *s;
@@ -451,7 +451,7 @@ static void draw_list(int ow) {
 		else draw_note("No carts found.");
 	}
 	else {
-		int rows = list_rows();
+		int rows = cart_rows();
 		int extra = (!exhausted && !page_failed) ? 1 : 0; // a last row while more is loading
 		for (int j=0; j<rows && scroll+j<cart_count+extra; j++) {
 			int i = scroll+j;
@@ -460,8 +460,27 @@ static void draw_list(int ow) {
 			char right[80];
 			int saved = is_saved(c);
 			if (saved) snprintf(right, sizeof(right), "SAVED");
-			else snprintf(right, sizeof(right), "%s  *%d", c->author, c->stars);
+			else snprintf(right, sizeof(right), "*%d", c->stars);
 			draw_row(j, i==sel, c->title, right, saved && i!=sel);
+		}
+		if (sel>=0 && sel<cart_count) { // under the list: the selected cart's tags, then who made it and when
+			BbsCart* c = &carts[sel];
+			int w = screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2);
+			int y = SCALE1(PADDING) + (rows+1)*ROW_H + SCALE1(6);
+			char tags[200] = "", line[200], out[256];
+			const char* p = c->tags;
+			while (*p) { // "rpg, earthbound" -> "#rpg #earthbound"
+				const char* e = strstr(p, ", ");
+				size_t n = e ? (size_t)(e-p) : strlen(p);
+				size_t t = strlen(tags);
+				if (t+n+3<sizeof(tags)) snprintf(tags+t, sizeof(tags)-t, "%s#%.*s", t ? " " : "", (int)n, p);
+				p += n + (e ? 2 : 0);
+			}
+			GFX_truncateText(font.small, tags[0] ? tags : "(no tags)", out, w, 0);
+			blit_text(font.small, out, tags[0] ? COLOR_LIGHT_TEXT : COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y, w);
+			snprintf(line, sizeof(line), "by %s  -  %.10s  -  %d stars", c->author, c->date, c->stars);
+			GFX_truncateText(font.small, line, out, w, 0);
+			blit_text(font.small, out, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(15), w);
 		}
 	}
 	if (!list_is_search && browse_kind==BBS_BROWSE_RANDOM) GFX_blitButtonGroup((char*[]){"X","SEARCH","Y","SHUFFLE",NULL}, 0, screen, 0);
@@ -643,7 +662,7 @@ static void handle_input(void) {
 		else if (PAD_justRepeated(BTN_DPAD_DOWN)) { moved(&tag_sel, count, 1); dirty = 1; }
 		else if (PAD_justRepeated(BTN_L1)) { moved(&tag_sel, count, -list_rows()); dirty = 1; }
 		else if (PAD_justRepeated(BTN_R1)) { moved(&tag_sel, count, list_rows()); dirty = 1; }
-		keep_visible(&tag_sel, &tag_scroll, count);
+		keep_visible(&tag_sel, &tag_scroll, count, list_rows());
 		if (PAD_justPressed(BTN_A)) {
 			list_is_search = 0;
 			browse_kind = BBS_BROWSE_TAG;
@@ -698,9 +717,9 @@ static void handle_input(void) {
 	if (count>0) {
 		if (PAD_justRepeated(BTN_DPAD_UP)) { moved(&sel, count, -1); dirty = 1; }
 		else if (PAD_justRepeated(BTN_DPAD_DOWN)) { moved(&sel, count, 1); dirty = 1; }
-		else if (PAD_justRepeated(BTN_L1)) { moved(&sel, count, -list_rows()); dirty = 1; }
-		else if (PAD_justRepeated(BTN_R1)) { moved(&sel, count, list_rows()); dirty = 1; }
-		keep_visible(&sel, &scroll, count);
+		else if (PAD_justRepeated(BTN_L1)) { moved(&sel, count, -cart_rows()); dirty = 1; }
+		else if (PAD_justRepeated(BTN_R1)) { moved(&sel, count, cart_rows()); dirty = 1; }
+		keep_visible(&sel, &scroll, count, cart_rows());
 	}
 	if (PAD_justPressed(BTN_A)) {
 		if (cart_count==0 || sel>=cart_count) {
