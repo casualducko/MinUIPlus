@@ -816,6 +816,14 @@ static void open_games(void) {
 	new_search();
 }
 
+static void osk_sideways(int dx) { // left/right: a column on the letter rows; on the bottom row a whole button (SPACE, DELETE, SEARCH)
+	if (osk_y==4) {
+		static const int middle[3] = { 1, 5, 8 };
+		int b = osk_x<4 ? 0 : (osk_x<7 ? 1 : 2);
+		osk_x = middle[(b + (dx>0 ? 1 : 2)) % 3];
+	}
+	else osk_x = (osk_x + (dx>0 ? 1 : 9)) % 10;
+}
 static void do_osk_press(void) {
 	size_t n = strlen(osk_text);
 	if (osk_y<4) {
@@ -892,8 +900,8 @@ static void handle_input(void) {
 		return;
 	}
 	if (cur_screen==SCR_OSK) {
-		if (PAD_justRepeated(BTN_DPAD_LEFT)) { osk_x = (osk_x+9)%10; dirty = 1; }
-		else if (PAD_justRepeated(BTN_DPAD_RIGHT)) { osk_x = (osk_x+1)%10; dirty = 1; }
+		if (PAD_justPressed(BTN_DPAD_LEFT) || (osk_y<4 && PAD_justRepeated(BTN_DPAD_LEFT))) { osk_sideways(-1); dirty = 1; }
+		else if (PAD_justPressed(BTN_DPAD_RIGHT) || (osk_y<4 && PAD_justRepeated(BTN_DPAD_RIGHT))) { osk_sideways(1); dirty = 1; }
 		else if (PAD_justRepeated(BTN_DPAD_UP)) { osk_y = (osk_y+4)%5; dirty = 1; }
 		else if (PAD_justRepeated(BTN_DPAD_DOWN)) { osk_y = (osk_y+1)%5; dirty = 1; }
 		if (PAD_justPressed(BTN_A)) { do_osk_press(); dirty = 1; }
