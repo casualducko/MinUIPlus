@@ -561,13 +561,17 @@ static GridGeom grid_geom(void) {
 	GridGeom g;
 	int list_w = screen->w - SCALE1(PADDING*2);
 	g.cell_w = (list_w - GRID_GAP*(GRID_COLS-1)) / GRID_COLS;
-	g.thumb_h = g.cell_w; // most of the BBS's pictures are square
-	g.cell_h = g.thumb_h + TTF_FontHeight(font.small) + SCALE1(3);
+	int caption = TTF_FontHeight(font.small) + SCALE1(3);
 	g.x0 = SCALE1(PADDING) + (list_w - (g.cell_w*GRID_COLS + GRID_GAP*(GRID_COLS-1)))/2;
 	g.y0 = SCALE1(PADDING) + ROW_H + SCALE1(2);
 	int bottom = screen->h - SCALE1(PADDING+PILL_SIZE) - SCALE1(6);
 	g.info_y = bottom - SCALE1(13) - SCALE1(2); // one line under the grid
-	g.rows = (g.info_y - g.y0) / (g.cell_h + GRID_GAP);
+	// three rows, if the picture can be a little less than square to make them fit (most of the BBS's pictures are square)
+	g.thumb_h = (g.info_y - g.y0 - GRID_GAP*2) / 3 - caption;
+	if (g.thumb_h>g.cell_w) g.thumb_h = g.cell_w;
+	if (g.thumb_h<g.cell_w*3/4) g.thumb_h = g.cell_w*3/4;
+	g.cell_h = g.thumb_h + caption;
+	g.rows = (g.info_y - g.y0 + GRID_GAP) / (g.cell_h + GRID_GAP);
 	if (g.rows<1) g.rows = 1;
 	return g;
 }
