@@ -1814,6 +1814,7 @@ int main (int argc, char *argv[]) {
 					total = top->entries->count;
 					selected = top->selected;
 				}
+				PAD_reset(); // the A that answered the page must not also open the game now under the cursor
 				dirty = 1;
 			}
 	

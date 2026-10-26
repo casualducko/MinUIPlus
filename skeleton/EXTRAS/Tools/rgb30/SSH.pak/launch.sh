@@ -74,10 +74,17 @@ has_route() { ip route 2>/dev/null | grep -q '^default'; } # by whatever interfa
 
 if [ "$STATE" != "active" ]; then
 	say.elf "Couldn't start SSH.
-See SSH.pak/log.txt on the card."
+
+See SSH.pak/log.txt
+on the card."
 elif [ -z "$IP" ]; then
-	say.elf "SSH is on, but Wi-Fi didn't connect.
-Check your network (Tools > Wi-Fi), then run this again."
+	say.elf "SSH is on, but Wi-Fi
+didn't connect.
+
+Check your network
+(Tools > Wi-Fi),
+
+then run this again."
 else
 	say.elf "SSH is on until you reboot.
 Address: $IP"
