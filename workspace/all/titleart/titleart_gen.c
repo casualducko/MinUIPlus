@@ -96,7 +96,7 @@ static void shrink(const Raster* r, int dw, int dh, uint8_t* out) { // box filte
 }
 
 #define CONT 0xFFFFFFFFu // the second column of a wide character
-typedef struct { uint32_t ch[TA_ROWS][TA_COLS]; uint8_t lv[TA_ROWS][TA_COLS]; uint8_t big[TA_ROWS][TA_COLS]; } Grid; // lv: 0..100; big: a character drawn double size (it fills this cell and the ones right of and below it)
+typedef struct { uint32_t ch[TA_ROWS][TA_COLS]; uint8_t lv[TA_ROWS][TA_COLS]; uint8_t big[TA_ROWS][TA_COLS]; } Grid; // lv: 0..100; big: a character drawn this many times its size (2, 3 or 4: it fills this cell and the ones right of and below it)
 static void gridPut(Grid* g, int x, int y, uint32_t c, int lv) {
 	if (x>=0 && x<TA_COLS && y>=0 && y<TA_ROWS) { g->ch[y][x] = c; g->lv[y][x] = lv; }
 }
@@ -113,21 +113,27 @@ static void gridText(Grid* g, int x, int y, const char* s, int lv) { // UTF-8; a
 		p += n;
 	}
 }
-static void gridTextBig(Grid* g, int x, int y, const char* s, int lv) { // double size: each character takes 2x2 cells (a wide one 4x2)
+static void gridTextBigK(Grid* g, int x, int y, const char* s, int lv, int k) { // k times the size: each character takes k x k cells (a wide one 2k x k)
 	for (const char* p = s; *p; ) {
 		uint32_t cp;
 		int n = UTF8_next(p, &cp);
 		if (n<=0) break;
-		int w = TA_cellWidth(cp) * 2;
-		if (x+w>TA_COLS || y+1>=TA_ROWS) break;
-		for (int dy=0; dy<2; dy++) for (int dx=0; dx<w; dx++) gridPut(g, x+dx, y+dy, CONT, lv);
+		int w = TA_cellWidth(cp) * k;
+		if (x+w>TA_COLS || y+k-1>=TA_ROWS) break;
+		for (int dy=0; dy<k; dy++) for (int dx=0; dx<w; dx++) gridPut(g, x+dx, y+dy, CONT, lv);
 		gridPut(g, x, y, cp, lv);
-		g->big[y][x] = 1;
+		g->big[y][x] = k;
 		x += w;
 		p += n;
 	}
 }
+static void gridTextBig(Grid* g, int x, int y, const char* s, int lv) { gridTextBigK(g, x, y, s, lv, 2); }
 static void gridCenter(Grid* g, int y, const char* s, int lv);
+static void gridCenterBigK(Grid* g, int y, const char* s, int lv, int k) {
+	int cells = TA_cells(s) * k;
+	if (cells>TA_COLS) cells = TA_COLS;
+	gridTextBigK(g, (TA_COLS-cells)/2, y, s, lv, k);
+}
 static void gridCenterBig(Grid* g, int y, const char* s, int lv) { // too wide for double size: normal size on the lower row
 	int cells = TA_cells(s) * 2;
 	if (cells>TA_COLS-2) { gridCenter(g, y+1, s, lv); return; }
@@ -395,27 +401,31 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		if (TA_cellWidth(cp)==2) wide = 1;
 		p += n;
 	}
+	int chars = letterStyle()==STYLE_ASCII || letterStyle()==STYLE_CLASSIC;
 	int fits = !wide && TA_layout(main, TEXT_COLS, max_rows, lineAspect, NULL, &lay);
-	if (fits && (letterStyle()==STYLE_ASCII || letterStyle()==STYLE_CLASSIC) && lay.h<ASCII_MIN_ROWS) fits = 0; // characters need taller letters than solid dots do
+	if (fits && chars && lay.h<ASCII_MIN_ROWS) fits = 0; // characters need taller letters than solid dots do
 	if (!fits) {
 		// too long for letters this big: the whole title in plain characters instead, never a cut one
 		char upper[256];
 		snprintf(upper, sizeof(upper), "%s", main);
 		for (char* p = upper; *p; p++) *p = toupper((unsigned char)*p);
 		char plain[TA_MAX_LINES][TA_LINE_MAX];
-		// double size when the whole title fits that way (never a cut one), else the small plain letters
+		// the biggest characters (3 or 2 times) the whole title fits in (never a cut one), else the small plain letters
 		int sub_block = sub_count ? sub_rows + 1 : 0;
-		int max_big = MIN(TA_MAX_LINES, (TA_ROWS - 8 - sub_block) / 2);
-		int n = max_big>0 ? TA_wrapPlain(upper, TEXT_COLS/2, max_big, plain) : 0;
-		int big = n>0 && plain[n-1][strlen(plain[n-1])-1]!='~';
-		if (!big) n = TA_wrapPlain(upper, TEXT_COLS, TA_MAX_LINES, plain);
-		int block = (big ? n*2 : n) + sub_block;
+		int k = 1, n = 0;
+		for (int kk=3; kk>=2 && k==1; kk--) {
+			int max_big = MIN(TA_MAX_LINES, (TA_ROWS - 8 - sub_block) / kk);
+			int m = max_big>0 ? TA_wrapPlain(upper, TEXT_COLS/kk, max_big, plain) : 0;
+			if (m>0 && plain[m-1][strlen(plain[m-1])-1]!='~') { k = kk; n = m; }
+		}
+		if (k==1) n = TA_wrapPlain(upper, TEXT_COLS, TA_MAX_LINES, plain);
+		int block = n*k + sub_block;
 		int top = (TA_ROWS - 3 - block) / 2;
 		for (int i=0; i<n; i++) {
-			if (big) gridCenterBig(g, top + i*2, plain[i], 100);
+			if (k>1) gridCenterBigK(g, top + i*k, plain[i], 100, k);
 			else gridCenter(g, top + i, plain[i], 100);
 		}
-		if (big) n *= 2; // rows used, for the subtitle below
+		n *= k; // rows used, for the subtitle below
 		for (int i=0; i<sub_count; i++) subLine(g, top + n + 1 + i*2, sub_lines[i]);
 		char tag[96];
 		snprintf(tag, sizeof(tag), "[ %s ]", badge);
@@ -476,7 +486,7 @@ static int writeTile(const Grid* g, const char* path) { // 0 if the PNG is on di
 		uint32_t gg = dim.g + (bright.g - dim.g) * lv / 100;
 		uint32_t b = dim.b + (bright.b - dim.b) * lv / 100;
 		const Glyph* gl = glyphFor(cp);
-		int k = g->big[cy][cx] ? 2 : 1; // double size: every pixel of the glyph is drawn 2 x 2
+		int k = g->big[cy][cx] ? g->big[cy][cx] : 1; // bigger: every pixel of the glyph is drawn k x k
 		int width = gl->cells * CELL_W * k;
 		for (int y=0; y<CELL_H*k; y++) for (int x=0; x<width; x++) {
 			uint32_t a = gl->cov[(y/k)*CELL_W*2 + x/k];

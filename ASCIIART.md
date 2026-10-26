@@ -7,7 +7,7 @@ Tiles are 360 x 360 PNGs (a cartridge front) made by `workspace/all/titleart/tit
 2. **Layout** (`TA_layout`): the main title is wrapped onto up to 4 lines and the letter height (in 12 px rows) chosen so the whole title fits in 50 columns x 22 rows. The widths come from rendering each line in the big font (`rasterLine`, 96 px) and measuring it; `CONDENSE` (0.9) makes the letters a little narrower than the font's own shape so long words get taller letters.
 3. **Raster to a grid**: each line's coverage is shrunk with a box filter (`shrink`) onto the grid the look needs.
 4. **Look** (below).
-5. The subtitle, the `[ SYSTEM ]` tag and the cartridge outline (`drawCart`) are added; colors come from the theme (`theme.white` bright, `theme.dark_text` dim). Titles that do not fit in letters (too long, or Japanese/Chinese) are drawn as plain double-size characters from the small cell font.
+5. The subtitle, the `[ SYSTEM ]` tag and the cartridge outline (`drawCart`) are added; colors come from the theme (`theme.white` bright, `theme.dark_text` dim). Titles that do not fit in letters (a word too long for 4-row letters in 50 columns, like RETRANSLATED, a title too long, or Japanese/Chinese) are drawn as plain characters from the small cell font, 3 times its size if the whole title fits that way, else 2 times, else 1 (never cut off).
 
 ## The looks (`.userdata/rgb30/titleart-style`)
 | Value | What | Notes |
