@@ -8,6 +8,8 @@ SAVED=${WIFIUP_SAVED:-/storage/roms/.userdata/rgb30/wifi-networks.txt}
 FIRST=${WIFIUP_FIRST_WAIT:-10}
 NEXT=${WIFIUP_NEXT_WAIT:-12}
 
+# what is going on, for a screen that shows it (SSH tool: say.elf --live $WIFIUP_STATUS)
+say() { [ -n "$WIFIUP_STATUS" ] && printf '%s\n%s\n%s\n' "$1" "$2" "$3" > "$WIFIUP_STATUS"; return 0; } # up to three lines
 has_route() { ip route 2>/dev/null | grep -q '^default'; }
 wait_route() { # seconds
 	i=0
@@ -19,15 +21,17 @@ wait_route() { # seconds
 	has_route
 }
 
+PREV_SSID=$(get_setting wifi.ssid 2>/dev/null)
+PREV_KEY=$(get_setting wifi.key 2>/dev/null)
+if [ -n "$PREV_SSID" ]; then say "Connecting to" "$PREV_SSID..."; else say "Turning Wi-Fi on..."; fi
 wifictl enable &
 wait_route "$FIRST" && exit 0
 [ -f "$SAVED" ] || exit 1
 
-PREV_SSID=$(get_setting wifi.ssid 2>/dev/null)
-PREV_KEY=$(get_setting wifi.key 2>/dev/null)
 TAB=$(printf '\t')
 BS=$(printf '\001')
 
+say "Couldn't reach ${PREV_SSID:-that network}." "Looking for your" "other networks..."
 connmanctl scan wifi >/dev/null 2>&1
 sleep 3
 SEEN=$(iw dev wlan0 scan dump 2>/dev/null | sed -n 's/^[[:space:]]*SSID: //p')
@@ -42,6 +46,7 @@ while IFS="$TAB" read -r NAME PASS; do
 	# in range? (with no scan result at all, try them in order anyway)
 	if [ -n "$SEEN" ] && ! printf '%s\n' "$SEEN" | grep -qxF -- "$NAME"; then continue; fi
 	tried=1
+	say "Trying" "$NAME..."
 	set_setting wifi.ssid "$NAME" >/dev/null 2>&1
 	set_setting wifi.key "$PASS" >/dev/null 2>&1
 	if [ -n "$PASS" ]; then wifictl enable "$NAME" "$PASS" & else wifictl enable "$NAME" & fi

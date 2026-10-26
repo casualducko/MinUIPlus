@@ -14,18 +14,22 @@ has_route() { ip route 2>/dev/null | grep -q '^default'; } # by whatever interfa
 {
 	date
 	if ! has_route; then
+		# say.elf --live shows what is in this file (and the seconds passed), so the wait doesn't look frozen
+		export WIFIUP_STATUS=/tmp/wifiup-status
+		echo "Turning Wi-Fi on..." > "$WIFIUP_STATUS"
 		if [ "$(cat /sys/class/net/wlan0/operstate 2>/dev/null)" = "up" ]; then
 			echo "wifi: link is up, waiting for an address"   # on already, just no address yet: don't touch it
+			echo "Waiting for an address..." > "$WIFIUP_STATUS"
 		else
 			echo "wifi: enabling (the set-up network, then the other saved ones)"
 			wifiup &
 		fi
-		show.elf "$RES_PATH/enable.png" 45 &
+		say.elf --live "$WIFIUP_STATUS" &
 		for i in $(seq 1 45); do
 			has_route && break
 			sleep 1
 		done
-		killall -s KILL show.elf 2>/dev/null
+		killall -s KILL say.elf 2>/dev/null
 		has_route && echo "wifi: connected after ${i}s" || echo "wifi: no connection after 45s"
 	fi
 
