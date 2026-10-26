@@ -43,7 +43,7 @@ static const Choice battery_choices[] = {
 };
 
 static const Choice roll_choices[] = {
-	{0,"Off"}, {3,"Every 3 minutes"}, {5,"Every 5 minutes"}, {10,"Every 10 minutes"}, {15,"Every 15 minutes"}, {-1,NULL}
+	{0,"Off"}, {3,"Every 3 min"}, {5,"Every 5 min"}, {10,"Every 10 min"}, {15,"Every 15 min"}, {-1,NULL}
 };
 
 static const Choice art_choices[] = {
@@ -75,7 +75,7 @@ static Row rows[] = { // alphabetical
 	{"Art for new games", TITLEART_AUTO_PATH, auto_art_choices, 0, 1, 1, 0, "Automatic: new games get a title picture at boot."},
 	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0, "Bigger is safer against crackle, with a little more delay."},
 	{"Auto-save on quit", AUTOSAVE_PATH, art_choices, 1, 1, 1, 1, "Quitting a game also saves a state, for the Switcher (Fn)."},
-	{"Auto-save while playing", AUTOSAVE_ROLL, roll_choices, 5, 1, 60, 5, "A crash or a dead battery then loses minutes, not the game (Switcher, Fn)."},
+	{"Auto-save in game", AUTOSAVE_ROLL, roll_choices, 5, 1, 60, 5, "A crash or a dead battery then loses minutes, not the game (Switcher, Fn)."},
 	{"Clock in corner", CLOCK_PATH, clock_choices, 0, 12, 24, 0, "Shows the time beside the Wi-Fi and battery icons."},
 	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1, "Off: only text in the launcher."},
 	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5, "At this level the game is saved and the device powers off."},

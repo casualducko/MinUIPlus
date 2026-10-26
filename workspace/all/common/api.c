@@ -196,7 +196,7 @@ static void GFX_tintAssets(void) {
 		}
 	}
 	// the corner icons (volume, brightness, battery, Wi-Fi) are white on the sheet: they follow the text color.
-	// The low-battery red and the scroll arrows keep their own colors.
+	// The low-battery red keeps its own color. (The scroll arrows are tinted below, always.)
 	if (theme.white.r!=0xff || theme.white.g!=0xff || theme.white.b!=0xff) {
 		static const int icons[] = {ASSET_BRIGHTNESS, ASSET_VOLUME_MUTE, ASSET_VOLUME, ASSET_BATTERY, ASSET_BATTERY_FILL, ASSET_BATTERY_BOLT, ASSET_WIFI};
 		for (int i=0; i<(int)(sizeof(icons)/sizeof(icons[0])); i++) {
@@ -208,6 +208,19 @@ static void GFX_tintAssets(void) {
 					SDL_GetRGBA(row[x], fmt, &pr, &pg, &pb, &pa);
 					if (pa) row[x] = SDL_MapRGBA(fmt, theme.white.r, theme.white.g, theme.white.b, pa);
 				}
+			}
+		}
+	}
+	// the scroll arrows (more rows above or below) are the UI's white, not the sheet's gray
+	static const int arrows[] = {ASSET_SCROLL_UP, ASSET_SCROLL_DOWN};
+	for (int i=0; i<2; i++) {
+		SDL_Rect rect = asset_rects[arrows[i]];
+		for (int y=rect.y; y<rect.y+rect.h && y<sheet->h; y++) {
+			uint32_t* row = (uint32_t*)((uint8_t*)sheet->pixels + y*sheet->pitch);
+			for (int x=rect.x; x<rect.x+rect.w && x<sheet->w; x++) {
+				uint8_t pr,pg,pb,pa;
+				SDL_GetRGBA(row[x], fmt, &pr, &pg, &pb, &pa);
+				if (pa) row[x] = SDL_MapRGBA(fmt, theme.white.r, theme.white.g, theme.white.b, pa);
 			}
 		}
 	}
