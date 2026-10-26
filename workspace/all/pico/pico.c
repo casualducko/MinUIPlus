@@ -30,6 +30,7 @@
 #define DOWNLOAD_TMP	USERDATA_PATH "/pico-download.tmp"
 #define MAX_PAGES		3 // pages of 30 fetched for one list
 #define MAX_CARTS		(BBS_PAGE_SIZE * MAX_PAGES)
+#define NOPREVIEW_PATH	USERDATA_PATH "/pico-no-preview"	// a file here: the list shows no preview picture
 #define LEDGER_PATH		USERDATA_PATH "/pico-downloaded.txt" // "<thread>\t<file name>" for each cart downloaded
 
 typedef enum { SCR_HOME, SCR_TAGS, SCR_LIST, SCR_OSK } Screen;
@@ -70,6 +71,19 @@ static Screen cur_screen = SCR_HOME;
 static BbsJob job;
 static JobKind job_kind = JOB_NONE;
 static char list_tmp[512];
+// the preview picture of the selected cart: fetched a moment after the cursor stops, one at a time, kept in a
+// folder of its own that goes when the tool does
+#define THUMB_DELAY_MS 350
+static BbsJob tjob;
+static int tjob_on = 0;
+static long tjob_tid = 0;
+static char tjob_path[600];
+static char thumb_dir[512];
+static SDL_Surface* thumb_surf = NULL; // the selected cart's, scaled for the box
+static long thumb_surf_tid = 0;
+static int show_thumb = 1;
+static int last_sel = -1;
+static uint32_t sel_changed_at = 0;
 static BbsCart dl_cart;			// the cart being downloaded
 static char dl_path[256];		// its file on the BBS
 static uint32_t dl_drawn_at = 0;
@@ -435,13 +449,90 @@ static void draw_row(int j, int selected, const char* text, const char* right, i
 static void draw_note(const char* text) {
 	GFX_blitMessage(font.large, (char*)text, screen, &(SDL_Rect){0, ROW_H, screen->w, screen->h-ROW_H*2});
 }
-static int cart_rows(void) { return list_rows() - 1; } // the cart list keeps its last row for the selected cart's details
+static int cart_rows(void) { return list_rows() - (show_thumb ? 2 : 1); } // the cart list keeps its last row (two with the preview) for the selected cart's details
 static void keep_visible(int* s, int* top, int count, int rows) {
 	if (*s<0) *s = 0;
 	if (*s>=count) *s = count>0 ? count-1 : 0;
 	if (*s<*top) *top = *s;
 	if (*s>=*top+rows) *top = *s-rows+1;
 	if (*top<0) *top = 0;
+}
+
+
+///////////////////////////////
+// the preview picture
+
+#define THUMB_XRGB 0x00FF0000, 0x0000FF00, 0x000000FF, 0
+static void thumb_file(long tid, char* out, size_t cap) { snprintf(out, cap, "%s/%ld.png", thumb_dir, tid); }
+static void thumb_clear_dir(void) {
+	if (!thumb_dir[0]) return;
+	DIR* d = opendir(thumb_dir);
+	if (d) {
+		struct dirent* e;
+		char p[640];
+		while ((e = readdir(d))) {
+			if (e->d_name[0]=='.') continue;
+			snprintf(p, sizeof(p), "%s/%s", thumb_dir, e->d_name);
+			unlink(p);
+		}
+		closedir(d);
+	}
+	rmdir(thumb_dir);
+}
+// the picture as large as a whole number of times fits the box (pixel art stays sharp); one that is too big is thinned out
+static SDL_Surface* load_thumb(const char* path, int max_w, int max_h) {
+	SDL_Surface* img = IMG_Load(path);
+	if (!img || img->w<=0 || img->h<=0 || img->w>4096 || img->h>4096) { if (img) SDL_FreeSurface(img); return NULL; }
+	SDL_Surface* src = SDL_CreateRGBSurface(SDL_SWSURFACE, img->w, img->h, 32, THUMB_XRGB);
+	if (!src) { SDL_FreeSurface(img); return NULL; }
+	SDL_BlitSurface(img, NULL, src, NULL);
+	SDL_FreeSurface(img);
+	int factor = MIN(max_w/src->w, max_h/src->h);
+	int dw, dh;
+	if (factor>=1) { dw = src->w * factor; dh = src->h * factor; }
+	else { double s = MIN((double)max_w/src->w, (double)max_h/src->h); dw = (int)(src->w * s); dh = (int)(src->h * s); }
+	if (dw<1) dw = 1;
+	if (dh<1) dh = 1;
+	SDL_Surface* out = SDL_CreateRGBSurface(SDL_SWSURFACE, dw, dh, 32, THUMB_XRGB);
+	if (!out) { SDL_FreeSurface(src); return NULL; }
+	for (int y=0; y<dh; y++) {
+		uint32_t* d = (uint32_t*)((uint8_t*)out->pixels + y*out->pitch);
+		uint32_t* s = (uint32_t*)((uint8_t*)src->pixels + (long)(y*(long)src->h/dh)*src->pitch);
+		for (int x=0; x<dw; x++) d[x] = s[(long)x*src->w/dw];
+	}
+	SDL_FreeSurface(src);
+	return out;
+}
+static void thumb_forget(void) { if (thumb_surf) SDL_FreeSurface(thumb_surf); thumb_surf = NULL; thumb_surf_tid = 0; }
+static int thumb_box(void) { return ROW_H*2 + SCALE1(PADDING) - SCALE1(8); } // its height: two rows and the spare room under the list; it is a third wider (the BBS's pictures are 3:2 or square)
+static void thumb_finish(void) { // the fetch has ended: remember how it went for the cart (by thread: the list may have been sorted since)
+	const char* err = bbs_job_error(&tjob);
+	bbs_job_cleanup(&tjob);
+	tjob_on = 0;
+	int state = 1;
+	if (err) state = 2;
+	else {
+		SDL_Surface* t = load_thumb(tjob_path, 8, 8); // (is it a picture at all?)
+		if (!t) state = 2; else SDL_FreeSurface(t);
+	}
+	if (state==2) unlink(tjob_path);
+	for (int i=0; i<cart_count; i++) if (carts[i].tid==tjob_tid) carts[i].thumb_state = state;
+	dirty = 1;
+}
+static void thumb_tick(uint32_t now) { // start the fetch for the selected cart when the cursor has rested
+	if (tjob_on && bbs_job_poll(&tjob)) thumb_finish();
+	if (sel!=last_sel) { last_sel = sel; sel_changed_at = now; }
+	if (!show_thumb || tjob_on || cur_screen!=SCR_LIST || modal!=MODAL_NONE || job_kind==JOB_CART || job_kind==JOB_THREAD || net_state!=NET_READY) return;
+	if (sel<0 || sel>=cart_count || now-sel_changed_at<THUMB_DELAY_MS) return;
+	BbsCart* c = &carts[sel];
+	if (!c->thumb[0] || c->thumb_state!=0 || !thumb_dir[0]) return;
+	thumb_file(c->tid, tjob_path, sizeof(tjob_path));
+	if (access(tjob_path, F_OK)==0) { c->thumb_state = 1; dirty = 1; return; } // got it earlier in this visit
+	char url[512];
+	bbs_thumb_url(url, sizeof(url), c->thumb);
+	if (bbs_job_start(&tjob, url, tjob_path, 0)) { c->thumb_state = 2; return; }
+	tjob_on = 1;
+	tjob_tid = c->tid;
 }
 
 static void draw_list(int ow) {
@@ -472,9 +563,12 @@ static void draw_list(int ow) {
 			else snprintf(right, sizeof(right), "*%d", c->stars);
 			draw_row(j, i==sel, c->title, right, c->saved && i!=sel);
 		}
-		if (sel>=0 && sel<cart_count) { // under the list: the selected cart's tags, then who made it and when
+		if (sel>=0 && sel<cart_count) { // under the list: the selected cart's tags, then who made it and when (and its picture)
 			BbsCart* c = &carts[sel];
-			int w = screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2);
+			int list_w = screen->w - SCALE1(PADDING*2);
+			int box = show_thumb ? thumb_box() : 0;
+			int box_w = box*4/3;
+			int w = list_w - SCALE1(BUTTON_PADDING*2) - (box ? box_w + SCALE1(BUTTON_PADDING) : 0);
 			int y = SCALE1(PADDING) + (rows+1)*ROW_H + SCALE1(6);
 			char tags[200] = "", line[200], out[256];
 			const char* p = c->tags;
@@ -487,9 +581,35 @@ static void draw_list(int ow) {
 			}
 			GFX_truncateText(font.small, tags[0] ? tags : "(no tags)", out, w, 0);
 			blit_text(font.small, out, tags[0] ? COLOR_LIGHT_TEXT : COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y, w);
-			snprintf(line, sizeof(line), "by %s  -  %.10s  -  %d stars", c->author, c->date, c->stars);
-			GFX_truncateText(font.small, line, out, w, 0);
-			blit_text(font.small, out, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(15), w);
+			if (box) { // one fact to a line beside the picture
+				snprintf(line, sizeof(line), "by %s", c->author);
+				GFX_truncateText(font.small, line, out, w, 0);
+				blit_text(font.small, out, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(15), w);
+				snprintf(line, sizeof(line), "%.10s  -  %d stars", c->date, c->stars);
+				blit_text(font.small, line, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(30), w);
+				blit_text(font.small, "SELECT: hide the picture", COLOR_DARK_TEXT, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(45), w);
+				SDL_Rect frame = {SCALE1(PADDING)+list_w-box_w, y-SCALE1(2), box_w, box};
+				SDL_FillRect(screen, &frame, SDL_MapRGB(screen->format, 0x18, 0x18, 0x18));
+				if (c->thumb_state==1 && thumb_surf_tid!=c->tid) {
+					char path[640];
+					thumb_forget();
+					thumb_file(c->tid, path, sizeof(path));
+					thumb_surf = load_thumb(path, box_w, box);
+					thumb_surf_tid = thumb_surf ? c->tid : 0;
+				}
+				if (c->thumb_state==1 && thumb_surf && thumb_surf_tid==c->tid) SDL_BlitSurface(thumb_surf, NULL, screen, &(SDL_Rect){frame.x+(box_w-thumb_surf->w)/2, frame.y+(box-thumb_surf->h)/2});
+				else {
+					const char* msg = c->thumb_state==2 || !c->thumb[0] ? "no picture" : "...";
+					SDL_Surface* m = GFX_renderText(font.small, msg, COLOR_GRAY);
+					if (m) { SDL_BlitSurface(m, NULL, screen, &(SDL_Rect){frame.x+(box_w-m->w)/2, frame.y+(box-m->h)/2}); SDL_FreeSurface(m); }
+				}
+			}
+			else {
+				snprintf(line, sizeof(line), "by %s  -  %.10s  -  %d stars", c->author, c->date, c->stars);
+				GFX_truncateText(font.small, line, out, w, 0);
+				blit_text(font.small, out, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(15), w);
+				blit_text(font.small, "SELECT: show the picture", COLOR_DARK_TEXT, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(30), w);
+			}
 		}
 	}
 	if (!list_is_search && browse_kind==BBS_BROWSE_RANDOM) GFX_blitButtonGroup((char*[]){"X","SEARCH","Y","SHUFFLE",NULL}, 0, screen, 0);
@@ -715,6 +835,14 @@ static void handle_input(void) {
 		dirty = 1;
 		return;
 	}
+	if (PAD_justPressed(BTN_SELECT)) { // the preview picture on or off (kept for next time)
+		show_thumb = !show_thumb;
+		if (show_thumb) unlink(NOPREVIEW_PATH);
+		else { FILE* f = fopen(NOPREVIEW_PATH, "w"); if (f) fclose(f); }
+		keep_visible(&sel, &scroll, cart_count + (exhausted ? 0 : 1), cart_rows());
+		dirty = 1;
+		return;
+	}
 	if (PAD_justPressed(BTN_Y) && !list_is_search && browse_kind==BBS_BROWSE_RANDOM) { stop_job(); begin_load(); dirty = 1; return; } // another shuffle
 	if (PAD_justPressed(BTN_Y) && cart_count>1) {
 		if (list_is_search) sort_mode = sort_mode==BBS_SORT_BEST ? BBS_SORT_STARS : sort_mode==BBS_SORT_STARS ? BBS_SORT_NEWEST : BBS_SORT_BEST;
@@ -761,6 +889,9 @@ int main(int argc, char* argv[]) {
 	const char* tmp = getenv("TMPDIR");
 	snprintf(list_tmp, sizeof(list_tmp), "%s/pico-list-%d.html", (tmp && *tmp) ? tmp : "/tmp", (int)getpid());
 	unlink(DOWNLOAD_TMP);
+	show_thumb = access(NOPREVIEW_PATH, F_OK)!=0;
+	snprintf(thumb_dir, sizeof(thumb_dir), "%s/pico-thumbs-%d", (tmp && *tmp) ? tmp : "/tmp", (int)getpid());
+	if (mkdir(thumb_dir, 0700)!=0) thumb_dir[0] = '\0'; // no folder, no previews
 
 
 	while (!quit) {
@@ -793,6 +924,7 @@ int main(int argc, char* argv[]) {
 		}
 		// the rest of the search is fetched in the background while the list is being read
 		if (job_kind==JOB_NONE && modal==MODAL_NONE && cur_screen==SCR_LIST && !exhausted && !page_failed && pages_loaded>0 && cart_count>0 && net_state==NET_READY) load_next_page();
+		thumb_tick(now);
 		if ((job_kind==JOB_CART || job_kind==JOB_THREAD) && now-dl_drawn_at>=150) { dirty = 1; dl_drawn_at = now; }
 
 		handle_input();
@@ -814,6 +946,9 @@ int main(int argc, char* argv[]) {
 	}
 
 	stop_job();
+	if (tjob_on) { bbs_job_cancel(&tjob); bbs_job_cleanup(&tjob); }
+	thumb_forget();
+	thumb_clear_dir();
 	unlink(list_tmp);
 	TAGen_close();
 	QuitSettings();

@@ -65,6 +65,7 @@ static const char* const tags[] = { // the common ones on the BBS, each seen to 
 };
 const char* const* bbs_tag_list(int* count) { *count = (int)(sizeof(tags)/sizeof(tags[0])); return tags; }
 void bbs_thread_url(char* out, size_t cap, long tid) { snprintf(out, cap, "%s/bbs/?tid=%ld", base_url(), tid); }
+void bbs_thumb_url(char* out, size_t cap, const char* thumb_path) { snprintf(out, cap, "%s%s", base_url(), thumb_path); }
 void bbs_cart_url(char* out, size_t cap, const char* cart_path) { snprintf(out, cap, "%s%s", base_url(), cart_path); }
 
 ///////////////////////////////
@@ -198,6 +199,9 @@ int bbs_parse_search(const char* html, size_t len, BbsCart* out, int max) {
 				case 0: put(c.pid, sizeof(c.pid), cell); break;
 				case 1: c.tid = atol(cell); break;
 				case 2: put(c.title, sizeof(c.title), cell); break;
+				case 3: // only a plain file under /bbs/thumbs/ (the path is put on the BBS address and used by the fetch)
+					if (!strncmp(cell, "/bbs/thumbs/", 12) && !strstr(cell, "..") && strlen(cell)<sizeof(c.thumb) && strspn(cell, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-")==strlen(cell)) put(c.thumb, sizeof(c.thumb), cell);
+					break;
 				case 6: put(c.date, sizeof(c.date), cell); break;
 				case 8: put(c.author, sizeof(c.author), cell); break;
 				case 12: c.stars = atoi(cell); break;

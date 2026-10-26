@@ -16,8 +16,10 @@ typedef struct {
 	char date[24];		// "2021-02-27 17:33:02"
 	int stars;
 	char tags[128];		// "rpg, earthbound, shooter"
+	char thumb[80];		// the preview picture on the BBS, "/bbs/thumbs/pico15133.png" ("" if the row has none we trust)
 	int order;			// where it came in the listing (set by the caller, for "as listed")
 	int saved;			// the cart is on the card (set by the caller)
+	int thumb_state;	// 0 not fetched, 1 on disk, 2 could not be had (set by the caller)
 } BbsCart;
 
 // The base is https://www.lexaloffle.com unless PICO_BBS_BASE says otherwise (tests). Both build into out.
@@ -28,6 +30,7 @@ typedef enum { BBS_BROWSE_FEATURED, BBS_BROWSE_POPULAR, BBS_BROWSE_NEWEST, BBS_B
 void bbs_browse_url(char* out, size_t cap, BbsBrowse kind, const char* tag, int page); // tag only for BBS_BROWSE_TAG (featured carts with that tag)
 const char* bbs_browse_name(BbsBrowse kind, const char* tag); // for a title: "Featured", "#platformer"...
 const char* const* bbs_tag_list(int* count); // the tags worth offering (each checked to have carts)
+void bbs_thumb_url(char* out, size_t cap, const char* thumb_path); // "/bbs/thumbs/pico15133.png"
 void bbs_cart_url(char* out, size_t cap, const char* cart_path); // "/bbs/cposts/1/15133.p8.png"
 void bbs_urlencode(const char* in, char* out, size_t cap);
 

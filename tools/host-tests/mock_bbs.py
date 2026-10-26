@@ -4,6 +4,7 @@
      /bbs/?cat=7&carts_tab=1&page=N&search=Q   the fixture listing on page 1 (more pages if MOCK_PAGES), nothing after
      /bbs/lister.php?...&page=N                the same fixture listing (the browse lists)
      /bbs/?tid=T                               the fixture thread page (404 for tid 404)
+     /bbs/thumbs/*                             a small colour PNG (404 for the Pico de Pon one)
      /bbs/cposts/1/15133.p8.png                a valid PNG, big enough to look like a cart
 """
 import http.server, os, random, struct, sys, urllib.parse, zlib
@@ -17,12 +18,20 @@ def png(w=128, h=128):
     def chunk(t, d): c = struct.pack(">I", len(d)) + t + d; return c + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
+def thumb(w=96, h=64): # a small colour picture (RGB), like the BBS's previews
+    raw = b"".join(b"\x00" + b"".join(bytes(((x*255)//w, (y*255)//h, 200 if (x//8+y//8)%2 else 90)) for x in range(w)) for y in range(h))
+    def chunk(t, d): c = struct.pack(">I", len(d)) + t + d; return c + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def send(self, code, body, ctype="text/html; charset=utf-8"):
         self.send_response(code); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
     def do_GET(self):
         u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query, keep_blank_values=True)
+        if u.path.startswith("/bbs/thumbs/"):
+            if "pico8_picodepon" in u.path: return self.send(404, b"nope") # one that has no picture
+            return self.send(200, thumb(), "image/png")
         if u.path == "/bbs/cposts/1/15133.p8.png": return self.send(200, png(), "image/png")
         if u.path == "/bbs/" and "tid" in q:
             if q["tid"][0] == "404": return self.send(404, b"not found")

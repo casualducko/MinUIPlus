@@ -36,6 +36,13 @@ int main(int argc, char** argv) {
 	CHECK(n==5 && !strncmp(c[3].title, "\xe2\x97\x86", 3), "a title with a non-ASCII character is kept");
 	CHECK(n==5 && c[4].tid==41010 && !strcmp(c[4].author, "petthepetra") && !strcmp(c[4].tags, "celeste, mod, platformer"), "the last row");
 	CHECK(bbs_parse_search(page, len, c, 2)==2, "no more than max");
+	CHECK(!strcmp(c[0].thumb, "/bbs/thumbs/pico15133.png") && !strcmp(c[1].thumb, "/bbs/thumbs/pico8_celeste_classic_2-5.png"), "the preview path of a row");
+	{
+		const char* odd = "<script>pdat=[\n['1', 7, `A`,\"/bbs/thumbs/../../etc/passwd\",96,64,\"2020-01-01 00:00:00\",1,\"x\",\"l\",2,\"y\",3,4,0,7,2,'0',[],0,1,,``,``],\n['2', 8, `B`,\"http://evil.example/x.png\",96,64,\"2020-01-01 00:00:00\",1,\"x\",\"l\",2,\"y\",3,4,0,7,2,'0',[],0,1,,``,``],\n];</script>";
+		BbsCart o[4];
+		int k = bbs_parse_search(odd, strlen(odd), o, 4);
+		CHECK(k==2 && !o[0].thumb[0] && !o[1].thumb[0], "a preview path that climbs out or points elsewhere is dropped");
+	}
 	CHECK(bbs_parse_search("<html>nothing here</html>", 25, c, 64)==-1, "a page with no listing: -1");
 	const char* empty = "<script>pdat=[\n\t];</script>";
 	CHECK(bbs_parse_search(empty, strlen(empty), c, 64)==0, "an empty listing: 0");
