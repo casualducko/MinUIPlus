@@ -7,6 +7,7 @@
 #include <strings.h>
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -423,15 +424,41 @@ static void draw_title(const char* text, int ow) {
 	GFX_truncateText(font.large, text, out, w, SCALE1(BUTTON_PADDING*2));
 	blit_text(font.large, out, COLOR_LIGHT_TEXT, SCALE1(PADDING+BUTTON_PADDING), SCALE1(PADDING)+4, w);
 }
+// a filled five-pointed star, size px across, by scanlines (no image needed, takes any colour)
+static void draw_star(int x, int y, int size, SDL_Color c) {
+	double cx = size/2.0, cy = size*0.53, R = size/2.0, r = R*0.4, px[10], py[10];
+	for (int i=0; i<10; i++) {
+		double a = -M_PI/2 + i*M_PI/5, rad = (i%2) ? r : R;
+		px[i] = cx + rad*cos(a); py[i] = cy + rad*sin(a);
+	}
+	Uint32 col = SDL_MapRGB(screen->format, c.r, c.g, c.b);
+	for (int row=0; row<size; row++) {
+		double sy = row + 0.5, xs[10]; int n = 0;
+		for (int i=0; i<10; i++) { // where the outline crosses this line
+			int k = (i+1)%10;
+			if ((py[i]<=sy && py[k]>sy) || (py[k]<=sy && py[i]>sy)) xs[n++] = px[i] + (sy-py[i])*(px[k]-px[i])/(py[k]-py[i]);
+		}
+		for (int a=0; a<n; a++) for (int b=a+1; b<n; b++) if (xs[b]<xs[a]) { double t = xs[a]; xs[a] = xs[b]; xs[b] = t; }
+		for (int a=0; a+1<n; a+=2) {
+			int x0 = (int)(xs[a]+0.5), x1 = (int)(xs[a+1]+0.5);
+			if (x1>x0) SDL_FillRect(screen, &(SDL_Rect){x+x0, y+row, x1-x0, 1}, col);
+		}
+	}
+}
+// a right-hand text that starts with \x01 is a star count: the number, then a star
+#define STAR_MARK "\x01"
 static void draw_row(int j, int selected, const char* text, const char* right, int dim) { // j counts from 0 below the title row
 	int y = SCALE1(PADDING) + (j+1)*ROW_H;
 	int w = screen->w - SCALE1(PADDING*2);
 	SDL_Color color = dim ? COLOR_DARK_TEXT : COLOR_WHITE;
 	int right_w = 0;
 	SDL_Surface* rs = NULL;
+	int star = right && right[0]==STAR_MARK[0];
+	if (star) right++;
+	int star_sz = TTF_FontHeight(font.small)*8/10, star_gap = SCALE1(4);
 	if (right && *right) {
 		rs = GFX_renderText(font.small, right, selected ? COLOR_BLACK : COLOR_DARK_TEXT);
-		if (rs) right_w = rs->w + SCALE1(BUTTON_PADDING);
+		if (rs) right_w = rs->w + SCALE1(BUTTON_PADDING) + (star ? star_sz + star_gap : 0);
 	}
 	if (selected) {
 		GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){SCALE1(PADDING), y, w, ROW_H});
@@ -442,7 +469,9 @@ static void draw_row(int j, int selected, const char* text, const char* right, i
 	GFX_truncateText(font.large, text, out, avail, SCALE1(BUTTON_PADDING*2));
 	blit_text(font.large, out, color, SCALE1(PADDING+BUTTON_PADDING), y+4, avail-SCALE1(BUTTON_PADDING*2));
 	if (rs) {
-		SDL_BlitSurface(rs, NULL, screen, &(SDL_Rect){SCALE1(PADDING)+w-rs->w-SCALE1(BUTTON_PADDING), y+(ROW_H-rs->h)/2});
+		int right_x = SCALE1(PADDING)+w-SCALE1(BUTTON_PADDING);
+		if (star) { right_x -= star_sz + star_gap; draw_star(right_x + star_gap, y+(ROW_H-star_sz)/2, star_sz, selected ? COLOR_BLACK : COLOR_DARK_TEXT); }
+		SDL_BlitSurface(rs, NULL, screen, &(SDL_Rect){right_x-rs->w, y+(ROW_H-rs->h)/2});
 		SDL_FreeSurface(rs);
 	}
 }
@@ -560,7 +589,7 @@ static void draw_list(int ow) {
 			BbsCart* c = &carts[i];
 			char right[80];
 			if (c->saved) snprintf(right, sizeof(right), "SAVED");
-			else snprintf(right, sizeof(right), "*%d", c->stars);
+			else snprintf(right, sizeof(right), STAR_MARK "%d", c->stars);
 			draw_row(j, i==sel, c->title, right, c->saved && i!=sel);
 		}
 		if (sel>=0 && sel<cart_count) { // under the list: the selected cart's tags, then who made it and when (and its picture)
@@ -569,7 +598,7 @@ static void draw_list(int ow) {
 			int box = show_thumb ? thumb_box() : 0;
 			int box_w = box*4/3;
 			int w = list_w - SCALE1(BUTTON_PADDING*2) - (box ? box_w + SCALE1(BUTTON_PADDING) : 0);
-			int y = SCALE1(PADDING) + (rows+1)*ROW_H + SCALE1(6);
+			int y = SCALE1(PADDING) + (rows+1)*ROW_H + (show_thumb ? SCALE1(6) : 0); // (without the picture the text has less room above the buttons)
 			char tags[200] = "", line[200], out[256];
 			const char* p = c->tags;
 			while (*p) { // "rpg, earthbound" -> "#rpg #earthbound"
@@ -607,8 +636,8 @@ static void draw_list(int ow) {
 			else {
 				snprintf(line, sizeof(line), "by %s  -  %.10s  -  %d stars", c->author, c->date, c->stars);
 				GFX_truncateText(font.small, line, out, w, 0);
-				blit_text(font.small, out, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(15), w);
-				blit_text(font.small, "SELECT: show the picture", COLOR_DARK_TEXT, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(30), w);
+				blit_text(font.small, out, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(13), w);
+				blit_text(font.small, "SELECT: show the picture", COLOR_DARK_TEXT, SCALE1(PADDING+BUTTON_PADDING), y + SCALE1(26), w);
 			}
 		}
 	}
