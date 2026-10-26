@@ -67,21 +67,29 @@ static void load(void) {
 		Playtime_name(sd_path, c->title, sizeof(c->title));
 		snprintf(c->tag, sizeof(c->tag), "%s", emu);
 
-		// the slot the launcher would resume from, and that slot's picture
-		c->slot = -1;
-		char slot_file[MAX_PATH];
+		// the slot to resume from: the one the launcher would use (the last you saved to), or the auto-save
+		// a quit or sleep made if that is newer; and that slot's picture
+		int manual = -1;
+		char slot_file[MAX_PATH], manual_bmp[MAX_PATH], auto_bmp[MAX_PATH];
 		snprintf(slot_file, sizeof(slot_file), "%s/.minui/%s/%s.txt", SHARED_USERDATA_PATH, emu, file);
 		char slot_text[16] = "";
 		if (exists(slot_file)) {
 			getFile(slot_file, slot_text, sizeof(slot_text));
-			c->slot = SW_parseSlot(slot_text);
+			manual = SW_parseSlot(slot_text);
 		}
-		if (c->slot>=0) {
-			snprintf(c->bmp, sizeof(c->bmp), "%s/.minui/%s/%s.%d.bmp", SHARED_USERDATA_PATH, emu, file, c->slot);
-			struct stat st;
-			if (stat(c->bmp, &st)==0) c->saved_at = (long)st.st_mtime;
-			else c->bmp[0] = '\0';
+		long manual_at = 0, auto_at = 0;
+		struct stat st;
+		manual_bmp[0] = '\0';
+		if (manual>=0) {
+			snprintf(manual_bmp, sizeof(manual_bmp), "%s/.minui/%s/%s.%d.bmp", SHARED_USERDATA_PATH, emu, file, manual);
+			if (stat(manual_bmp, &st)==0) manual_at = (long)st.st_mtime;
+			else manual_bmp[0] = '\0';
 		}
+		snprintf(auto_bmp, sizeof(auto_bmp), "%s/.minui/%s/%s.%d.bmp", SHARED_USERDATA_PATH, emu, file, AUTO_RESUME_SLOT);
+		if (stat(auto_bmp, &st)==0) auto_at = (long)st.st_mtime;
+		c->slot = SW_pickSlot(manual, manual_at, auto_at);
+		if (c->slot==AUTO_RESUME_SLOT) { snprintf(c->bmp, sizeof(c->bmp), "%s", auto_bmp); c->saved_at = auto_at; }
+		else if (c->slot>=0) { snprintf(c->bmp, sizeof(c->bmp), "%s", manual_bmp); c->saved_at = manual_at; }
 
 		// title art, for a game with no picture
 		const char* slash = strrchr(sd_path, '/');
@@ -209,7 +217,9 @@ int main(int argc, char* argv[]) {
 			else if (PAD_justPressed(BTN_SELECT)) { show_time = !show_time; dirty = 1; }
 			else if (PAD_justPressed(BTN_X) && !full) { confirm = 1; dirty = 1; }
 			else if (PAD_justPressed(BTN_A)) {
-				char* line = cards[index].rel;
+				char line[SW_PATH_MAX + 8];
+				if (cards[index].slot>=0) snprintf(line, sizeof(line), "%s\t%d", cards[index].rel, cards[index].slot); // resume from that state
+				else snprintf(line, sizeof(line), "%s", cards[index].rel);
 				putFile(SWITCH_PATH, line);
 				quit = 1;
 			}
@@ -268,7 +278,8 @@ int main(int argc, char* argv[]) {
 					if (has_picture) {
 						char ago[48];
 						SW_ago((long)time(NULL) - c->saved_at, ago, sizeof(ago));
-						snprintf(when, sizeof(when), "Slot %d, saved %s", c->slot + 1, ago);
+						if (c->slot==AUTO_RESUME_SLOT) snprintf(when, sizeof(when), "Where you left off, %s", ago);
+						else snprintf(when, sizeof(when), "Slot %d, saved %s", c->slot + 1, ago);
 					}
 					else if (has_state) snprintf(when, sizeof(when), "Slot %d (no picture)", c->slot + 1);
 					else snprintf(when, sizeof(when), "No save state yet");

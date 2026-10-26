@@ -33,6 +33,7 @@
 #define COLLECTIONS_PATH SDCARD_PATH "/Collections"
 
 #define LAST_PATH "/tmp/last.txt" // transient
+#define AUTOSAVE_QUIT_PATH USERDATA_PATH "/autosave-quit" // "0": quitting a game does not save a state (anything else, or no file: it does, into slot 9, for the Switcher)
 #define SWITCH_PATH "/tmp/switch-to.txt" // Tools > Switcher leaves a game here (a path below the card); the launcher opens it, resuming its last save state
 #define CHANGE_DISC_PATH "/tmp/change_disc.txt"
 #define RESUME_SLOT_PATH "/tmp/resume_slot.txt"

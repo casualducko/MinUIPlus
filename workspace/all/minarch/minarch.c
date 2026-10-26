@@ -3614,11 +3614,28 @@ void Menu_init(void) {
 void Menu_quit(void) {
 	SDL_FreeSurface(menu.overlay);
 }
+// The auto-save state (slot 9) gets a picture too, like the ones the slot picker makes, so the Switcher can show it.
+static void Menu_saveAutoPreview(void) {
+	char state_path[MAX_PATH], bmp_path[MAX_PATH];
+	int last_slot = state_slot;
+	state_slot = AUTO_RESUME_SLOT;
+	State_getPath(state_path);
+	state_slot = last_slot;
+	if (!exists(state_path)) return; // the core had nothing to save: no picture for a state that is not there
+	snprintf(bmp_path, sizeof(bmp_path), "%s/%s.%d.bmp", menu.minui_dir, game.name, AUTO_RESUME_SLOT);
+	SDL_Surface* bitmap = menu.bitmap;
+	if (!bitmap) bitmap = SDL_CreateRGBSurfaceFrom(renderer.src, renderer.true_w, renderer.true_h, FIXED_DEPTH, renderer.src_p, RGBA_MASK_565);
+	if (!bitmap) return;
+	SDL_RWops* out = SDL_RWFromFile(bmp_path, "wb");
+	if (out) SDL_SaveBMP_RW(bitmap, out, 1);
+	if (bitmap!=menu.bitmap) SDL_FreeSurface(bitmap);
+}
 void Menu_beforeSleep(void) {
 	// LOG_info("beforeSleep\n");
 	SRAM_write();
 	RTC_write();
 	State_autosave();
+	Menu_saveAutoPreview();
 	putFile(AUTO_RESUME_PATH, game.path + strlen(SDCARD_PATH));
 	PWR_setCPUSpeed(CPU_SPEED_MENU);
 }
@@ -5185,6 +5202,11 @@ static void Menu_loop(void) {
 				}
 				break;
 				case ITEM_QUIT:
+					{ // Tools > Settings > "Auto-save on quit": leaving a game also saves a state (slot 9) for the Switcher
+						char flag[8] = "";
+						getFile(AUTOSAVE_QUIT_PATH, flag, sizeof(flag));
+						if (flag[0]!='0') { State_autosave(); Menu_saveAutoPreview(); }
+					}
 					status = STATUS_QUIT;
 					show_menu = 0;
 					quit = 1; // TODO: tmp?

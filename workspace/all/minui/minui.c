@@ -1562,6 +1562,9 @@ int main (int argc, char *argv[]) {
 		getFile(SWITCH_PATH, rel, sizeof(rel));
 		unlink(SWITCH_PATH);
 		rel[strcspn(rel, "\r\n")] = '\0';
+		int slot = -1; // "<path>\t<slot>": the save slot to resume from (the Switcher says which: its newest state)
+		char* tab = strchr(rel, '\t');
+		if (tab) { *tab = '\0'; slot = atoi(tab+1); if (slot<0 || slot>9) slot = -1; }
 		char sd_path[MAX_PATH], emu_name[MAX_PATH], emu_path[MAX_PATH];
 		snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, rel);
 		getEmuName(sd_path, emu_name);
@@ -1570,6 +1573,7 @@ int main (int argc, char *argv[]) {
 			readyResumePath(sd_path, ENTRY_ROM);
 			should_resume = can_resume;
 			openRom(sd_path, NULL);
+			if (slot>=0) putInt(RESUME_SLOT_PATH, slot); // (openRom decided on the launcher's own slot: the Switcher knows better)
 		}
 	}
 	

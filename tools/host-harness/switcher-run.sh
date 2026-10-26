@@ -52,6 +52,10 @@ for folder, file, size, slot, col in games:
     dr.text((10,10), file[:24], fill=(255,255,255))
     im.save(os.path.join(sd, "%s.%d.bmp" % (file, slot)))
     os.utime(os.path.join(sd, "%s.%d.bmp" % (file, slot)), (os.path.getatime(sd), os.path.getmtime(sd) - 3600*5*(slot+1)))
+# the GBA game was also auto-saved on quit a minute ago (slot 9), newer than its manual slot: it resumes from that one
+sd = os.path.join(shared, "MGBA"); os.makedirs(sd, exist_ok=True)
+im = Image.new("RGB", (240,160), (200,120,20)); dr = ImageDraw.Draw(im); dr.text((10,10), "auto-save (slot 9)", fill=(255,255,255)); dr.rectangle([4,4,235,155], outline=(255,255,255))
+im.save(os.path.join(sd, "Pokemon ROWE (v2.02).gba.9.bmp"))
 open(os.path.join(shared, "recent.txt"), "w").write("\n".join(lines + ["/Roms/Gone (GB)/Missing.gb"]) + "\n")
 open(os.path.join(shared, "playtime.txt"), "w").write("15420\t12\t1790000000\t/Roms/GBA (MGBA)/Pokemon ROWE (v2.02).gba\n600\t3\t1790000000\t/Roms/SNES (SFC)/Legend of Zelda, The (USA).sfc\n")
 PY

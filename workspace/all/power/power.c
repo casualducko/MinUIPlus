@@ -20,6 +20,7 @@
 #define ART_PATH SHOW_ART_PATH
 #define CLOCK_PATH SHOW_CLOCK_PATH
 #define NEW_PATH SHOW_NEW_PATH
+#define AUTOSAVE_PATH AUTOSAVE_QUIT_PATH
 #define DEFAULT_SECONDS 120 // what the system uses when there is no file
 
 typedef struct { int seconds; const char* label; } Choice;
@@ -67,6 +68,7 @@ typedef struct {
 static Row rows[] = { // alphabetical
 	{"Art for new games", TITLEART_AUTO_PATH, auto_art_choices, 0, 1, 1, 0},
 	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
+	{"Auto-save on quit", AUTOSAVE_PATH, art_choices, 1, 1, 1, 1},
 	{"Clock in corner", CLOCK_PATH, clock_choices, 0, 12, 24, 0},
 	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1},
 	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
@@ -118,6 +120,7 @@ static void step(Row* row, int dir) {
 static const char* noteFor(const Row* row) { // what a setting does, in one short line
 	if (!strcmp(row->name, "Art for new games")) return "Automatic: new games get a title picture at boot.";
 	if (!strcmp(row->name, "Audio buffer")) return "Bigger is safer against crackle, with a little more delay.";
+	if (!strcmp(row->name, "Auto-save on quit")) return "Quitting a game also saves a state, for the Switcher (Fn).";
 	if (!strcmp(row->name, "Clock in corner")) return "Shows the time beside the Wi-Fi and battery icons.";
 	if (!strcmp(row->name, "Game art")) return "Off: only text in the launcher.";
 	if (!strcmp(row->name, "Low battery shutdown")) return "At this level the game is saved and the device powers off.";

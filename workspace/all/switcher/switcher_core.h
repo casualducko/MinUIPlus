@@ -12,6 +12,10 @@ int SW_parseRecents(char* text, char paths[][SW_PATH_MAX], int max);
 int SW_dropRecent(const char* text, const char* path, char* out, size_t cap);
 // the slot a .minui/<EMU>/<game>.txt names: 0 to 9, or -1 for anything else (an empty file, text, a number out of range)
 int SW_parseSlot(const char* text);
+// Which state a game resumes from: -1 for none; otherwise the slot you saved to last (manual_slot, 0 to 8, -1 if
+// none) or 9, the auto-save a quit or a sleep makes, whichever picture is newer. A picture time of 0 means the
+// slot has no picture (a manual slot is still a state; the auto-save only counts with its picture).
+int SW_pickSlot(int manual_slot, long manual_at, long auto_at);
 // "just now", "5 minutes ago", "3 hours ago", "2 days ago", "4 months ago", "2 years ago"
 void SW_ago(long seconds, char* out, size_t cap);
 // the file name part of a path

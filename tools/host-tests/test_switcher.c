@@ -32,6 +32,11 @@ int main(void) {
 	CHECK(SW_parseSlot("3\n")==3 && SW_parseSlot("0")==0 && SW_parseSlot(" 9 ")==9, "a slot number, whitespace around it ignored");
 	CHECK(SW_parseSlot("")==-1 && SW_parseSlot("x")==-1 && SW_parseSlot("12")==-1 && SW_parseSlot("-1")==-1 && SW_parseSlot("3x")==-1 && SW_parseSlot(NULL)==-1, "anything else: -1");
 
+	CHECK(SW_pickSlot(2, 1000, 0)==2 && SW_pickSlot(-1, 0, 0)==-1, "no auto-save: the slot you saved to, or none");
+	CHECK(SW_pickSlot(-1, 0, 500)==9, "only an auto-save: it");
+	CHECK(SW_pickSlot(2, 1000, 2000)==9 && SW_pickSlot(2, 3000, 2000)==2, "both: the newer picture wins");
+	CHECK(SW_pickSlot(2, 0, 2000)==9 && SW_pickSlot(3, 1000, 1000)==3, "a manual slot with no picture loses to an auto-save; a tie keeps the manual one");
+	CHECK(SW_pickSlot(9, 500, 0)==-1 && SW_pickSlot(12, 500, 0)==-1, "slot 9 is not a manual slot (and out of range is no slot)");
 	char s[64];
 	SW_ago(5, s, sizeof(s)); CHECK(!strcmp(s, "just now"), "seconds");
 	SW_ago(60, s, sizeof(s)); CHECK(!strcmp(s, "1 minute ago"), "one minute");

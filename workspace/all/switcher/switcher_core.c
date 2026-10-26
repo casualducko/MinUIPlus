@@ -45,6 +45,11 @@ int SW_parseSlot(const char* text) {
 	while (*end==' ' || *end=='\t' || *end=='\n' || *end=='\r') end++;
 	return *end ? -1 : (int)v;
 }
+int SW_pickSlot(int manual_slot, long manual_at, long auto_at) {
+	if (manual_slot<0 || manual_slot>8) manual_slot = -1;
+	if (auto_at>0 && (manual_slot<0 || auto_at>manual_at)) return 9;
+	return manual_slot;
+}
 void SW_ago(long s, char* out, size_t cap) {
 	if (s<60) snprintf(out, cap, "just now");
 	else if (s<3600) snprintf(out, cap, "%ld minute%s ago", s/60, s/60==1 ? "" : "s");
