@@ -1117,6 +1117,7 @@ static void openRom(char* path, char* last) {
 	// NOTE: escapeSingleQuotes() modifies the passed string 
 	// so we need to save the path before we call that
 	addRecent(recent_path, recent_alias); // yiiikes
+	if (Emu_isNative(emu_path)) Playtime_save(PLAYTIME_PATH, sd_path, 0, 1, (long)time(NULL)); // minarch records its own starts; a native emulator does not, and a game never recorded keeps its New dot
 	saveLast(last==NULL ? sd_path : last);
 	
 	char cmd[MAX_PATH*2+16]; // two (escaped) paths, quotes and a space

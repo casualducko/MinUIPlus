@@ -110,6 +110,15 @@ void getEmuPath(char* emu_name, char* pak_path) {
 	if (exists(pak_path)) return;
 	sprintf(pak_path, "%s/Emus/%s.pak/launch.sh", PAKS_PATH, emu_name);
 }
+// Native emulators (see utils.h)
+int Emu_isNative(const char* launch_path) {
+	char* text = allocFile((char*)launch_path);
+	if (!text) return 0;
+	int native = strstr(text, "minarch")==NULL;
+	free(text);
+	return native;
+}
+// end of the native emulator code
 
 // Saves must never be destroyed by a failed save: fopen(path, "w") truncates the old file before
 // anything is written, so a full card, a crash or a power cut in the middle left nothing.

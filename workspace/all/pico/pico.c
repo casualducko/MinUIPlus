@@ -125,6 +125,7 @@ static int is_saved(const BbsCart* c) {
 
 static char play_cmd[MAX_PATH*2+64];
 static char play_rom[MAX_PATH];
+static int play_native = 0; // the emulator does not record play time itself
 static void shell_quote(const char* in, char* out, size_t size) { // 'it'\''s'
 	size_t n = 0;
 	out[n++] = '\'';
@@ -145,11 +146,13 @@ static int make_play_cmd(const char* rom_path) { // 1 if the folder has an emula
 	shell_quote(rom_path, b, sizeof(b));
 	snprintf(play_cmd, sizeof(play_cmd), "%s %s\n", a, b);
 	snprintf(play_rom, sizeof(play_rom), "%s", rom_path);
+	play_native = Emu_isNative(emu_path);
 	return 1;
 }
 static void start_play(void) {
 	putFile(PLAY_NEXT_PATH, play_cmd);
 	Recents_add(play_rom);
+	if (play_native) Playtime_save(PLAYTIME_PATH, play_rom, 0, 1, (long)time(NULL)); // so its New dot goes
 	putFile(LAST_PATH, play_rom);
 	putInt(RESUME_SLOT_PATH, 8);
 	quit = 1;
