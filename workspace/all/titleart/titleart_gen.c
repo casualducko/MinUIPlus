@@ -24,7 +24,7 @@
 #define FILL_TOP 2
 #define FILL_BOTTOM 3
 #define TEXT_COLS (TA_COLS-10)  // the title never gets wider than this, so it keeps a gap to the label outline (about 12 px each side)
-#define CONDENSE 0.9f         // the big letters are drawn this much narrower, so a long word still gets tall letters
+static float condense(void); // how much narrower than the font's own shape the big letters are drawn, so a long word still gets tall letters
 
 // the tile
 
@@ -74,7 +74,7 @@ static Raster* rasterLine(const char* text) { // the line in big letters: its co
 static float lineAspect(const char* text, void* ctx) {
 	(void)ctx;
 	Raster* r = rasterLine(text);
-	return r ? CONDENSE * r->w / r->h : 0;
+	return r ? condense() * r->w / r->h : 0;
 }
 static void shrink(const Raster* r, int dw, int dh, uint8_t* out) { // box filter
 	for (int y=0; y<dh; y++) {
@@ -215,20 +215,24 @@ static const Glyph* glyphFor(uint32_t cp) {
 // out of the font cleanly at any size. This is their coverage (0..255), blended in by writeTile.
 #define DOT 3
 static uint8_t letter_px[TILE*TILE];
-// .userdata/<platform>/titleart-style picks the look of the big letters: "ascii" (the default, characters),
-// "solid" (clean solid letters) or "dots" (solid letters with a gap between the dots, a dot-matrix look)
-enum { STYLE_ASCII, STYLE_SOLID, STYLE_DOTS };
+// .userdata/<platform>/titleart-style picks the look of the big letters:
+//   classic (the default, and the original look): a mark per half cell, H for a full one, ' on top, . below
+//   ascii: characters of different weight on a finer grid;  solid: clean solid letters;  dots: solid with a gap
+enum { STYLE_CLASSIC, STYLE_ASCII, STYLE_SOLID, STYLE_DOTS };
 static int letterStyle(void) {
 	static int style = -1;
 	if (style<0) {
 		char* text = allocFile(USERDATA_PATH "/titleart-style");
-		style = STYLE_ASCII;
-		if (text && !strncmp(text, "solid", 5)) style = STYLE_SOLID;
+		style = STYLE_CLASSIC;
+		if (text && !strncmp(text, "ascii", 5)) style = STYLE_ASCII;
+		else if (text && !strncmp(text, "solid", 5)) style = STYLE_SOLID;
 		else if (text && !strncmp(text, "dots", 4)) style = STYLE_DOTS;
 		free(text);
 	}
 	return style;
 }
+static float condense(void) { return letterStyle()==STYLE_CLASSIC ? 0.8f : 0.9f; }
+static Grid* tile_grid = NULL; // the tile being composed (the classic look puts its marks in it)
 static void putDot(int px, int py, int a) { // one dot with its top left corner at px, py
 	int gap = letterStyle()==STYLE_DOTS ? 1 : 0;
 	for (int y=py; y<py+DOT-gap; y++) for (int x=px; x<px+DOT-gap; x++) if (x>=0 && x<TILE && y>=0 && y<TILE && a>letter_px[y*TILE+x]) letter_px[y*TILE+x] = a;
@@ -288,7 +292,7 @@ static void drawChars(const char* text, int row, int h, int level) {
 	rampBuild();
 	if (!ramp_ready) return;
 	int hpx = h * CELL_H;
-	int ncol = (int)lroundf(hpx * CONDENSE * r->w / r->h / ASCII_CW);
+	int ncol = (int)lroundf(hpx * condense() * r->w / r->h / ASCII_CW);
 	if (ncol<1) ncol = 1;
 	if (ncol*ASCII_CW > TEXT_COLS*CELL_W) ncol = TEXT_COLS*CELL_W/ASCII_CW;
 	int nrow = hpx / ASCII_CH;
@@ -317,7 +321,26 @@ static void drawLetters(const char* text, int row, int h, int level) {
 	if (letterStyle()==STYLE_ASCII) { drawChars(text, row, h, level); return; }
 	Raster* r = rasterLine(text);
 	if (!r) return;
-	int wcols = (int)lroundf(h * 2.0f * CONDENSE * r->w / r->h);
+	if (letterStyle()==STYLE_CLASSIC) { // the original: the line on the character grid, one mark per half cell
+		int wcols = (int)lroundf(h * 2.0f * condense() * r->w / r->h);
+		if (wcols<1) wcols = 1;
+		if (wcols>TEXT_COLS) wcols = TEXT_COLS;
+		uint8_t* px = malloc((size_t)wcols * h * 2);
+		char* chars = malloc((size_t)wcols * h);
+		if (px && chars && tile_grid) {
+			shrink(r, wcols, h*2, px);
+			TA_pack(px, wcols, h, chars);
+			int ox = (TA_COLS - wcols) / 2;
+			for (int y=0; y<h; y++) for (int x=0; x<wcols; x++) {
+				char c = chars[y*wcols + x];
+				if (c!=' ') gridPut(tile_grid, ox+x, row+y, c=='H' ? FILL_BOTH : c=='\'' ? FILL_TOP : FILL_BOTTOM, level);
+			}
+		}
+		free(px);
+		free(chars);
+		return;
+	}
+	int wcols = (int)lroundf(h * 2.0f * condense() * r->w / r->h);
 	if (wcols<1) wcols = 1;
 	if (wcols>TEXT_COLS) wcols = TEXT_COLS;
 	int dw = wcols * (CELL_W/DOT), dh = h * (CELL_H/DOT); // the letters' dots
@@ -335,7 +358,7 @@ static void drawLetters(const char* text, int row, int h, int level) {
 }
 
 static void subLine(Grid* g, int row, const char* text) { // the subtitle: double-size characters; in the solid and dots looks, letters two rows high (unless it has wide characters)
-	if (letterStyle()==STYLE_ASCII) { gridCenterBig(g, row, text, 70); return; }
+	if (letterStyle()==STYLE_ASCII || letterStyle()==STYLE_CLASSIC) { gridCenterBig(g, row, text, 70); return; }
 	for (const char* p = text; *p; ) {
 		uint32_t cp;
 		int n = UTF8_next(p, &cp);
@@ -349,6 +372,7 @@ static void subLine(Grid* g, int row, const char* text) { // the subtitle: doubl
 // the layout of one tile: the title in big letters, its subtitle in small ones, a rule and the system
 static void composeTile(const char* file, const char* badge, Grid* g) {
 	memset(g, 0, sizeof(*g));
+	tile_grid = g;
 	memset(letter_px, 0, sizeof(letter_px));
 	for (int y=0; y<TA_ROWS; y++) for (int x=0; x<TA_COLS; x++) g->ch[y][x] = ' ';
 	char title[256], main[256], sub[256];
@@ -372,7 +396,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		p += n;
 	}
 	int fits = !wide && TA_layout(main, TEXT_COLS, max_rows, lineAspect, NULL, &lay);
-	if (fits && letterStyle()==STYLE_ASCII && lay.h<ASCII_MIN_ROWS) fits = 0; // characters need taller letters than solid dots do
+	if (fits && (letterStyle()==STYLE_ASCII || letterStyle()==STYLE_CLASSIC) && lay.h<ASCII_MIN_ROWS) fits = 0; // characters need taller letters than solid dots do
 	if (!fits) {
 		// too long for letters this big: the whole title in plain characters instead, never a cut one
 		char upper[256];
