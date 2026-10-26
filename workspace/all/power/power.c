@@ -76,7 +76,7 @@ static Row rows[] = { // alphabetical
 	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))
-#define VISIBLE_ROWS 5 // more rows than that scroll, so the notes and buttons keep their room
+#define VISIBLE_ROWS 7 // more rows than that scroll, so the notes and buttons keep their room (7 rows end at 520 px; the notes sit below, the buttons from 620)
 
 static int readValue(const Row* row) { // same rules as the system: a bad file means the default
 	char text[32] = "";
@@ -201,7 +201,7 @@ int main(int argc, char* argv[]) {
 			// small text under the rows: what the selected setting does, then what applies to all of them
 			{
 				const char* notes[3] = { noteFor(&rows[sel]), "Changes apply when a game or the launcher starts.", NULL };
-				int y = SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + SCALE1(16); // below the arrow
+				int y = SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + SCALE1(11); // below the arrow
 				for (int i=0; notes[i]; i++) {
 					SDL_Surface* n = TTF_RenderUTF8_Blended(font.small, notes[i], i==0 ? COLOR_LIGHT_TEXT : COLOR_GRAY);
 					if (!n) continue;
