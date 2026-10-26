@@ -5042,7 +5042,14 @@ static char* getAlias(char* path, char* alias) {
 	}
 }
 
+#define SWITCHER_DOUBLE_TAP_MS 700
+static int Menu_switcherAvailable(void) {
+	char path[MAX_PATH];
+	snprintf(path, sizeof(path), "%s/Tools/%s/Switcher.pak/launch.sh", SDCARD_PATH, PLATFORM);
+	return access(path, X_OK)==0;
+}
 static void Menu_loop(void) {
+	uint32_t menu_opened_at = SDL_GetTicks(); // (a second tap of Fn soon after this is the game switcher)
 	menu.bitmap = SDL_CreateRGBSurfaceFrom(renderer.src, renderer.true_w, renderer.true_h, FIXED_DEPTH, renderer.src_p, RGBA_MASK_565);
 	// LOG_info("Menu_loop:menu.bitmap %ix%i\n", menu.bitmap->w,menu.bitmap->h);
 	
@@ -5148,7 +5155,16 @@ static void Menu_loop(void) {
 			Menu_updateState();
 		}
 		
-		if (PAD_justPressed(BTN_B) || (BTN_WAKE!=BTN_MENU && PAD_tappedMenu(now))) {
+		int fn_tapped = BTN_WAKE!=BTN_MENU && PAD_tappedMenu(now);
+		if (fn_tapped && now-menu_opened_at<SWITCHER_DOUBLE_TAP_MS && Menu_switcherAvailable()) { // Fn twice: save and go to the game switcher
+			State_autosave(); // always (whatever "Auto-save on quit" says): the Switcher resumes from this
+			Menu_saveAutoPreview();
+			putFile(SWITCHER_REQUEST_PATH, "1");
+			status = STATUS_QUIT;
+			show_menu = 0;
+			quit = 1;
+		}
+		else if (PAD_justPressed(BTN_B) || fn_tapped) {
 			status = STATUS_CONT;
 			show_menu = 0;
 		}

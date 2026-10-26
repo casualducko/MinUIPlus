@@ -14,7 +14,7 @@ This is an add-on for a card that already runs MinUI under Moss; it does not ins
 
 ## What it adds
 
-- **Launcher:** Y picks a random game from the whole library, SELECT opens Tools, START on a game opens its page (add it to a collection, or delete it, with a confirmation), Fn opens the game switcher (your recent games as cards with their last save state; the system info page, which also turns Wi-Fi on and off, is Tools > Info), an optional clock beside the Wi-Fi and battery icons, scrolling long names, Japanese titles.
+- **Launcher:** Y picks a random game from the whole library, SELECT opens Tools, START on a game opens its page (add it to a collection, or delete it, with a confirmation), Fn opens the game switcher, and Fn twice in a game saves it and opens the switcher (your recent games as cards with their last save state; the system info page, which also turns Wi-Fi on and off, is Tools > Info), an optional clock beside the Wi-Fi and battery icons, scrolling long names, Japanese titles.
 - **In games:** fixed volume keys and audio, numbered save slots, screenshots, cheats (download per game, Turn All Cheats Off), turbo buttons, restore earlier saves.
 - **Tools:** Settings, Info, Switcher, Screenshots gallery, Stats, Themes, ASCIIArt (cartridge tiles for every game), Clock (sets itself from the network), Wi-Fi, SSH, Romulus (download games from your own server), PicoSearch (search and download PICO-8 carts from the Lexaloffle BBS), Update.
 - **Moss (the OS):** `moss/` has the fix that makes the CPU speed scale (and how to apply it); the card tools above do not need it.

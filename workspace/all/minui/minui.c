@@ -1605,7 +1605,7 @@ int main (int argc, char *argv[]) {
 	// unsigned long main_begin = SDL_GetTicks();
 	// unsigned long first_draw = 0;
 	
-	if (autoResume()) { unlink(SWITCH_PATH); return 0; } // (a request left behind must not start a game on some later boot)
+	if (autoResume()) { unlink(SWITCH_PATH); unlink(SWITCHER_REQUEST_PATH); return 0; } // (a request left behind must not start a game on some later boot)
 	
 	simple_mode = exists(SIMPLE_MODE_PATH);
 	loadPlayed();
@@ -1666,6 +1666,13 @@ int main (int argc, char *argv[]) {
 			// the launcher's slot when it has one: that is the slot whose disc openRom just chose.
 			if (slot>=0 && !(several_discs && can_resume)) putInt(RESUME_SLOT_PATH, slot);
 		}
+	}
+	
+	if (exists(SWITCHER_REQUEST_PATH)) { // Fn twice in a game: minarch saved the game and left this; on to the switcher
+		unlink(SWITCHER_REQUEST_PATH);
+		char switcher[MAX_PATH];
+		snprintf(switcher, sizeof(switcher), "%s/Tools/%s/Switcher.pak", SDCARD_PATH, PLATFORM);
+		if (exists(switcher)) openPak(switcher);
 	}
 	
 	// LOG_info("- loop start: %lu\n", SDL_GetTicks() - main_begin);
