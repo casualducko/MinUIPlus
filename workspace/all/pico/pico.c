@@ -553,20 +553,20 @@ static SDL_Surface* thumb_get(long tid, int bw, int bh, int fill) {
 }
 static int thumb_box(void) { return ROW_H*2 + SCALE1(PADDING) - SCALE1(8); } // its height: two rows and the spare room under the list; it is a third wider (the BBS's pictures are 3:2 or square)
 
-// the thumbnail grid: 4 across, a picture over its title
-#define GRID_COLS 4
-#define GRID_GAP SCALE1(5)
+// the thumbnail grid: 5 across, a (square) picture over its title; 3 rows
+#define GRID_COLS 5
+#define GRID_GAP SCALE1(4)
 typedef struct { int cell_w, thumb_h, cell_h, rows, x0, y0, info_y; } GridGeom;
 static GridGeom grid_geom(void) {
 	GridGeom g;
 	int list_w = screen->w - SCALE1(PADDING*2);
 	g.cell_w = (list_w - GRID_GAP*(GRID_COLS-1)) / GRID_COLS;
-	g.thumb_h = g.cell_w * 3 / 4;
+	g.thumb_h = g.cell_w; // most of the BBS's pictures are square
 	g.cell_h = g.thumb_h + TTF_FontHeight(font.small) + SCALE1(3);
 	g.x0 = SCALE1(PADDING) + (list_w - (g.cell_w*GRID_COLS + GRID_GAP*(GRID_COLS-1)))/2;
 	g.y0 = SCALE1(PADDING) + ROW_H + SCALE1(2);
 	int bottom = screen->h - SCALE1(PADDING+PILL_SIZE) - SCALE1(6);
-	g.info_y = bottom - SCALE1(13)*2 - SCALE1(2);
+	g.info_y = bottom - SCALE1(13) - SCALE1(2); // one line under the grid
 	g.rows = (g.info_y - g.y0) / (g.cell_h + GRID_GAP);
 	if (g.rows<1) g.rows = 1;
 	return g;
@@ -651,10 +651,9 @@ static void draw_grid(void) {
 		int w = screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2);
 		char line[256], out[256];
 		if (page_failed && sel==cart_count-1) snprintf(line, sizeof(line), "Couldn't load more. SELECT, then A to retry");
-		else snprintf(line, sizeof(line), "by %s  -  %.10s  -  %d stars", c->author, c->date, c->stars);
+		else snprintf(line, sizeof(line), "%s  -  by %s  -  %d stars", c->title, c->author, c->stars);
 		GFX_truncateText(font.small, line, out, w, 0);
-		blit_text(font.small, out, COLOR_GRAY, SCALE1(PADDING+BUTTON_PADDING), g.info_y, w);
-		blit_text(font.small, "SELECT: next view", COLOR_DARK_TEXT, SCALE1(PADDING+BUTTON_PADDING), g.info_y + SCALE1(13), w);
+		blit_text(font.small, out, COLOR_LIGHT_TEXT, SCALE1(PADDING+BUTTON_PADDING), g.info_y, w);
 	}
 }
 
