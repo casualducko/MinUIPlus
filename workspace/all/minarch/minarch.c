@@ -3726,7 +3726,7 @@ void Menu_quit(void) {
 	SDL_FreeSurface(menu.overlay);
 }
 // The auto-save state (slot 9) gets a picture too, like the ones the slot picker makes, so the Switcher can show it.
-static void Menu_saveAutoPreview(void) {
+static void Menu_saveAutoPreview(int live) { // live: the picture is the game on screen now, not the one behind the menu
 	char state_path[MAX_PATH], bmp_path[MAX_PATH];
 	int last_slot = state_slot;
 	state_slot = AUTO_RESUME_SLOT;
@@ -3734,7 +3734,7 @@ static void Menu_saveAutoPreview(void) {
 	state_slot = last_slot;
 	if (!exists(state_path)) return; // the core had nothing to save: no picture for a state that is not there
 	snprintf(bmp_path, sizeof(bmp_path), "%s/%s.%d.bmp", menu.minui_dir, game.name, AUTO_RESUME_SLOT);
-	SDL_Surface* bitmap = menu.bitmap;
+	SDL_Surface* bitmap = live ? NULL : menu.bitmap;
 	if (!bitmap) bitmap = SDL_CreateRGBSurfaceFrom(renderer.src, renderer.true_w, renderer.true_h, FIXED_DEPTH, renderer.src_p, RGBA_MASK_565);
 	if (!bitmap) return;
 	SDL_RWops* out = SDL_RWFromFile(bmp_path, "wb");
@@ -3746,7 +3746,7 @@ void Menu_beforeSleep(void) {
 	SRAM_write();
 	RTC_write();
 	State_autosave();
-	Menu_saveAutoPreview();
+	Menu_saveAutoPreview(0);
 	putFile(AUTO_RESUME_PATH, game.path + strlen(SDCARD_PATH));
 	PWR_setCPUSpeed(CPU_SPEED_MENU);
 }
@@ -5269,7 +5269,7 @@ static void Menu_loop(void) {
 		int fn_tapped = BTN_WAKE!=BTN_MENU && PAD_tappedMenu(now);
 		if (fn_tapped && now-menu_opened_at<SWITCHER_DOUBLE_TAP_MS && Menu_switcherAvailable()) { // Fn twice: save and go to the game switcher
 			State_autosave(); // always (whatever "Auto-save on quit" says): the Switcher resumes from this
-			Menu_saveAutoPreview();
+			Menu_saveAutoPreview(0);
 			{ // the game and its slot, so that backing out of the Switcher comes back to it
 				char back[MAX_PATH+16];
 				snprintf(back, sizeof(back), "%s\t%d", game.path + strlen(SDCARD_PATH), AUTO_RESUME_SLOT);
@@ -5337,7 +5337,7 @@ static void Menu_loop(void) {
 					{ // Tools > Settings > "Auto-save on quit": leaving a game also saves a state (slot 9) for the Switcher
 						char flag[8] = "";
 						getFile(AUTOSAVE_QUIT_PATH, flag, sizeof(flag));
-						if (flag[0]!='0') { State_autosave(); Menu_saveAutoPreview(); }
+						if (flag[0]!='0') { State_autosave(); Menu_saveAutoPreview(0); }
 					}
 					status = STATUS_QUIT;
 					show_menu = 0;
@@ -5801,6 +5801,16 @@ int main(int argc , char* argv[]) {
 	unsigned ft_frames = 0, ft_over25 = 0, ft_over50 = 0, ft_over100 = 0;
 	int ft_skip = 1; // the first trip, and the one after the menu, include time that isn't the game
 	
+	// Tools > Settings > "Auto-save while playing": every so many minutes of play the state goes into slot 9 (the Switcher
+	// resumes from it), so a crash or a flat battery costs minutes. Not with "Prioritize Audio" (the core runs on another thread).
+	uint64_t roll_every_ms = 5 * 60000, roll_at_ms = 0;
+	{
+		char text[16] = "";
+		getFile(AUTOSAVE_ROLL_PATH, text, sizeof(text));
+		if (text[0]) { long m = strtol(text, NULL, 10); if (m>=0 && m<=60) roll_every_ms = (uint64_t)m * 60000; }
+		roll_at_ms = play_ms + roll_every_ms;
+	}
+	
 	while (!quit) {
 		GFX_startFrame();
 		
@@ -5820,6 +5830,16 @@ int main(int argc , char* argv[]) {
 		ft_skip = 0;
 		ft_last = ft_now;
 		if (play_ms/1000 - play_saved_s >= 300) PlayStats_flush(0);
+		if (roll_every_ms && play_ms>=roll_at_ms) {
+			roll_at_ms = play_ms + roll_every_ms;
+			if (!thread_video && !fast_forward && !ft_skip && !show_menu) {
+				uint32_t t0 = SDL_GetTicks();
+				State_autosave();
+				Menu_saveAutoPreview(1);
+				LOG_info("auto-save while playing: %ums\n", SDL_GetTicks()-t0);
+				ft_skip = 1; // (the save is not a slow frame)
+			}
+		}
 		if (ft_now - ft_logged >= 5000) {
 			LOG_info("frames: %u in %ums, slowest %ums (core %ums), over 25ms: %u, over 50ms: %u, over 100ms: %u\n", ft_frames, ft_now-ft_logged, ft_max, ft_run_max, ft_over25, ft_over50, ft_over100);
 			ft_logged = ft_now; ft_frames = ft_over25 = ft_over50 = ft_over100 = 0; ft_max = ft_run_max = 0;
