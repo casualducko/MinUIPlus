@@ -215,18 +215,106 @@ static const Glyph* glyphFor(uint32_t cp) {
 // out of the font cleanly at any size. This is their coverage (0..255), blended in by writeTile.
 #define DOT 3
 static uint8_t letter_px[TILE*TILE];
-static void putDot(int px, int py, int a) { // one dot with its top left corner at px, py
-	static int gap = -1; // .userdata/<platform>/titleart-style: "dots" leaves a gap between the dots (a dot-matrix look), anything else is solid
-	if (gap<0) {
-		char* style = allocFile(USERDATA_PATH "/titleart-style");
-		gap = style && !strncmp(style, "dots", 4) ? 1 : 0;
-		free(style);
+// .userdata/<platform>/titleart-style picks the look of the big letters: "ascii" (the default, characters),
+// "solid" (clean solid letters) or "dots" (solid letters with a gap between the dots, a dot-matrix look)
+enum { STYLE_ASCII, STYLE_SOLID, STYLE_DOTS };
+static int letterStyle(void) {
+	static int style = -1;
+	if (style<0) {
+		char* text = allocFile(USERDATA_PATH "/titleart-style");
+		style = STYLE_ASCII;
+		if (text && !strncmp(text, "solid", 5)) style = STYLE_SOLID;
+		else if (text && !strncmp(text, "dots", 4)) style = STYLE_DOTS;
+		free(text);
 	}
+	return style;
+}
+static void putDot(int px, int py, int a) { // one dot with its top left corner at px, py
+	int gap = letterStyle()==STYLE_DOTS ? 1 : 0;
 	for (int y=py; y<py+DOT-gap; y++) for (int x=px; x<px+DOT-gap; x++) if (x>=0 && x<TILE && y>=0 && y<TILE && a>letter_px[y*TILE+x]) letter_px[y*TILE+x] = a;
+}
+
+// The default look, real ASCII art: the title is cut from the big font into a fine grid of character cells
+// (ASCII_CW x ASCII_CH px) and each cell gets a character whose weight matches how much of the cell the letter
+// covers: " .:+#@". The characters are drawn in one box (the ink of a #), each keeping its own shape in it, so
+// the edges of a letter are light marks and its body is heavy ones.
+#define ASCII_CW 4
+#define ASCII_CH 8
+#define ASCII_MIN_ROWS 4       // letters shorter than this are too fine for characters: that title is plain text
+static const char ascii_ramp[] = " .:+#@";
+static TTF_Font* ramp_font = NULL;
+static uint8_t ramp_cov[sizeof(ascii_ramp)][ASCII_CW*ASCII_CH];
+static uint8_t ramp_ready = 0;
+static void rampBuild(void) { // every character of the ramp, as coverage over a cell
+	if (ramp_ready) return;
+	if (!ramp_font) ramp_font = TTF_OpenFont(FONT_PATH, ASCII_CH + 2);
+	if (!ramp_font) return;
+	SDL_Color white = {255,255,255,0};
+	int rx0 = 0, ry0 = 0, iw = 0, ih = 0;
+	SDL_Surface* ref = TTF_RenderGlyph_Blended(ramp_font, '#', white); // the box all characters share
+	if (!ref) return;
+	{
+		Uint32 am = ref->format->Amask, as = ref->format->Ashift;
+		int x0 = ref->w, y0 = ref->h, x1 = -1, y1 = -1;
+		for (int y=0; y<ref->h; y++) {
+			Uint32* row = (Uint32*)((Uint8*)ref->pixels + y*ref->pitch);
+			for (int x=0; x<ref->w; x++) if ((row[x] & am) >> as) { if (x<x0) x0 = x; if (x>x1) x1 = x; if (y<y0) y0 = y; if (y>y1) y1 = y; }
+		}
+		if (x1>=0) { rx0 = x0; ry0 = y0; iw = x1-x0+1; ih = y1-y0+1; }
+	}
+	SDL_FreeSurface(ref);
+	if (iw<1 || ih<1) return;
+	for (int k=1; k<(int)sizeof(ascii_ramp)-1; k++) { // not the NUL, and a space is blank
+		SDL_Surface* sf = TTF_RenderGlyph_Blended(ramp_font, (Uint16)ascii_ramp[k], white);
+		if (!sf) continue;
+		Uint32 amask = sf->format->Amask, ashift = sf->format->Ashift;
+		for (int y=0; y<ASCII_CH; y++) for (int x=0; x<ASCII_CW; x++) {
+			int sy0 = ry0 + y*ih/ASCII_CH, sy1 = ry0 + (y+1)*ih/ASCII_CH; if (sy1<=sy0) sy1 = sy0 + 1;
+			int sx0 = rx0 + x*iw/ASCII_CW, sx1 = rx0 + (x+1)*iw/ASCII_CW; if (sx1<=sx0) sx1 = sx0 + 1;
+			unsigned sum = 0, n = 0;
+			for (int yy=sy0; yy<sy1; yy++) for (int xx=sx0; xx<sx1; xx++) {
+				n++;
+				if (yy>=0 && yy<sf->h && xx>=0 && xx<sf->w) sum += (((Uint32*)((Uint8*)sf->pixels + yy*sf->pitch))[xx] & amask) >> ashift;
+			}
+			ramp_cov[k][y*ASCII_CW + x] = n ? sum/n : 0;
+		}
+		SDL_FreeSurface(sf);
+	}
+	ramp_ready = 1;
+}
+static void drawChars(const char* text, int row, int h, int level) {
+	Raster* r = rasterLine(text);
+	if (!r) return;
+	rampBuild();
+	if (!ramp_ready) return;
+	int hpx = h * CELL_H;
+	int ncol = (int)lroundf(hpx * CONDENSE * r->w / r->h / ASCII_CW);
+	if (ncol<1) ncol = 1;
+	if (ncol*ASCII_CW > TEXT_COLS*CELL_W) ncol = TEXT_COLS*CELL_W/ASCII_CW;
+	int nrow = hpx / ASCII_CH;
+	uint8_t* px = malloc((size_t)ncol*nrow);
+	if (!px) return;
+	shrink(r, ncol, nrow, px);
+	int ox = (TILE - ncol*ASCII_CW)/2, oy = row*CELL_H;
+	const int nr = (int)sizeof(ascii_ramp)-1;
+	for (int y=0; y<nrow; y++) for (int x=0; x<ncol; x++) {
+		float c = px[y*ncol + x] / 255.0f;
+		if (c < 0.20f) continue; // no mark
+		int k = (int)(powf(c, 0.7f) * (nr-1) + 0.5f);
+		if (k<1) k = 1;
+		if (k>nr-1) k = nr-1;
+		for (int yy=0; yy<ASCII_CH; yy++) for (int xx=0; xx<ASCII_CW; xx++) {
+			int a = ramp_cov[k][yy*ASCII_CW + xx] * level / 100;
+			int tx = ox + x*ASCII_CW + xx, ty = oy + y*ASCII_CH + yy;
+			if (a && tx>=0 && tx<TILE && ty>=0 && ty<TILE && a>letter_px[ty*TILE+tx]) letter_px[ty*TILE+tx] = a;
+		}
+	}
+	free(px);
 }
 
 // one line of letters h rows high, centered, its top at row `row`; level 0..100 is its brightness
 static void drawLetters(const char* text, int row, int h, int level) {
+	if (letterStyle()==STYLE_ASCII) { drawChars(text, row, h, level); return; }
 	Raster* r = rasterLine(text);
 	if (!r) return;
 	int wcols = (int)lroundf(h * 2.0f * CONDENSE * r->w / r->h);
@@ -246,7 +334,8 @@ static void drawLetters(const char* text, int row, int h, int level) {
 	free(px);
 }
 
-static void subLine(Grid* g, int row, const char* text) { // the subtitle: letters two rows high (the old double-size characters when it has wide ones)
+static void subLine(Grid* g, int row, const char* text) { // the subtitle: double-size characters; in the solid and dots looks, letters two rows high (unless it has wide characters)
+	if (letterStyle()==STYLE_ASCII) { gridCenterBig(g, row, text, 70); return; }
 	for (const char* p = text; *p; ) {
 		uint32_t cp;
 		int n = UTF8_next(p, &cp);
@@ -282,7 +371,9 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		if (TA_cellWidth(cp)==2) wide = 1;
 		p += n;
 	}
-	if (wide || !TA_layout(main, TEXT_COLS, max_rows, lineAspect, NULL, &lay)) {
+	int fits = !wide && TA_layout(main, TEXT_COLS, max_rows, lineAspect, NULL, &lay);
+	if (fits && letterStyle()==STYLE_ASCII && lay.h<ASCII_MIN_ROWS) fits = 0; // characters need taller letters than solid dots do
+	if (!fits) {
 		// too long for letters this big: the whole title in plain characters instead, never a cut one
 		char upper[256];
 		snprintf(upper, sizeof(upper), "%s", main);
@@ -404,6 +495,8 @@ void TAGen_close(void) {
 	if (cell_font) { TTF_CloseFont(cell_font); cell_font = NULL; }
 	if (big_fallback) { TTF_CloseFont(big_fallback); big_fallback = NULL; }
 	if (cell_fallback) { TTF_CloseFont(cell_fallback); cell_fallback = NULL; }
+	if (ramp_font) { TTF_CloseFont(ramp_font); ramp_font = NULL; }
+	ramp_ready = 0;
 	memset(ascii_ready, 0, sizeof(ascii_ready));
 	other_count = 0;
 }
