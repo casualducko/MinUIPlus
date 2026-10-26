@@ -24,7 +24,7 @@
 #define FILL_TOP 2
 #define FILL_BOTTOM 3
 #define TEXT_COLS (TA_COLS-10)  // the title never gets wider than this, so it keeps a gap to the label outline (about 12 px each side)
-#define CONDENSE 0.8f         // the big letters are drawn this much narrower, so a long word still gets tall letters
+#define CONDENSE 0.9f         // the big letters are drawn this much narrower, so a long word still gets tall letters
 
 // the tile
 
@@ -181,23 +181,86 @@ static const Glyph* glyphFor(uint32_t cp) {
 	if (!s) return gl;
 	Uint32 amask = s->format->Amask, ashift = s->format->Ashift;
 	int width = gl->cells * CELL_W;
-	int ox = (width - s->w) / 2;
 	int oy = (use==cell_font) ? 0 : TTF_FontAscent(cell_font) - TTF_FontAscent(use); // the same baseline
-	for (int y=0; y<s->h; y++) {
-		Uint32* row = (Uint32*)((Uint8*)s->pixels + y*s->pitch);
-		for (int x=0; x<s->w; x++) {
-			int cx = ox + x, cy = oy + y;
-			if (cx<0 || cx>=width || cy<0 || cy>=CELL_H) continue;
-			gl->cov[cy*CELL_W*2 + cx] = (row[x] & amask) >> ashift;
+	if (s->w > width) { // wider than its cell (M, W): squeezed to fit, not cut off
+		for (int y=0; y<s->h; y++) {
+			Uint32* row = (Uint32*)((Uint8*)s->pixels + y*s->pitch);
+			int cy = oy + y;
+			if (cy<0 || cy>=CELL_H) continue;
+			for (int cx=0; cx<width; cx++) {
+				int x0 = cx * s->w / width, x1 = (cx+1) * s->w / width;
+				if (x1<=x0) x1 = x0 + 1;
+				unsigned sum = 0;
+				for (int x=x0; x<x1 && x<s->w; x++) sum += (row[x] & amask) >> ashift;
+				gl->cov[cy*CELL_W*2 + cx] = sum / (x1-x0);
+			}
+		}
+	}
+	else {
+		int ox = (width - s->w) / 2;
+		for (int y=0; y<s->h; y++) {
+			Uint32* row = (Uint32*)((Uint8*)s->pixels + y*s->pitch);
+			for (int x=0; x<s->w; x++) {
+				int cx = ox + x, cy = oy + y;
+				if (cx<0 || cx>=width || cy<0 || cy>=CELL_H) continue;
+				gl->cov[cy*CELL_W*2 + cx] = (row[x] & amask) >> ashift;
+			}
 		}
 	}
 	SDL_FreeSurface(s);
 	return gl;
 }
 
+// The big letters are drawn as a fine grid of square dots, DOT px apart, not as characters: their shape comes
+// out of the font cleanly at any size. This is their coverage (0..255), blended in by writeTile.
+#define DOT 3
+static uint8_t letter_px[TILE*TILE];
+static void putDot(int px, int py, int a) { // one dot with its top left corner at px, py
+	static int gap = -1; // .userdata/<platform>/titleart-style: "dots" leaves a gap between the dots (a dot-matrix look), anything else is solid
+	if (gap<0) {
+		char* style = allocFile(USERDATA_PATH "/titleart-style");
+		gap = style && !strncmp(style, "dots", 4) ? 1 : 0;
+		free(style);
+	}
+	for (int y=py; y<py+DOT-gap; y++) for (int x=px; x<px+DOT-gap; x++) if (x>=0 && x<TILE && y>=0 && y<TILE && a>letter_px[y*TILE+x]) letter_px[y*TILE+x] = a;
+}
+
+// one line of letters h rows high, centered, its top at row `row`; level 0..100 is its brightness
+static void drawLetters(const char* text, int row, int h, int level) {
+	Raster* r = rasterLine(text);
+	if (!r) return;
+	int wcols = (int)lroundf(h * 2.0f * CONDENSE * r->w / r->h);
+	if (wcols<1) wcols = 1;
+	if (wcols>TEXT_COLS) wcols = TEXT_COLS;
+	int dw = wcols * (CELL_W/DOT), dh = h * (CELL_H/DOT); // the letters' dots
+	uint8_t* px = malloc((size_t)dw * dh);
+	if (!px) return;
+	shrink(r, dw, dh, px);
+	int ox = (TA_COLS - wcols) / 2 * CELL_W, oy = row * CELL_H;
+	for (int y=0; y<dh; y++) for (int x=0; x<dw; x++) {
+		int a = (px[y*dw + x] - 64) * 255 / 128; // soft threshold: below a quarter nothing, above three quarters solid
+		if (a>255) a = 255;
+		a = a * level / 100;
+		if (a>0) putDot(ox + x*DOT, oy + y*DOT, a);
+	}
+	free(px);
+}
+
+static void subLine(Grid* g, int row, const char* text) { // the subtitle: letters two rows high (the old double-size characters when it has wide ones)
+	for (const char* p = text; *p; ) {
+		uint32_t cp;
+		int n = UTF8_next(p, &cp);
+		if (n<=0) break;
+		if (TA_cellWidth(cp)==2) { gridCenterBig(g, row, text, 70); return; }
+		p += n;
+	}
+	drawLetters(text, row, 2, 80);
+}
+
 // the layout of one tile: the title in big letters, its subtitle in small ones, a rule and the system
 static void composeTile(const char* file, const char* badge, Grid* g) {
 	memset(g, 0, sizeof(*g));
+	memset(letter_px, 0, sizeof(letter_px));
 	for (int y=0; y<TA_ROWS; y++) for (int x=0; x<TA_COLS; x++) g->ch[y][x] = ' ';
 	char title[256], main[256], sub[256];
 	TA_title(file, title, sizeof(title));
@@ -238,7 +301,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 			else gridCenter(g, top + i, plain[i], 100);
 		}
 		if (big) n *= 2; // rows used, for the subtitle below
-		for (int i=0; i<sub_count; i++) gridCenterBig(g, top + n + 1 + i*2, sub_lines[i], 70);
+		for (int i=0; i<sub_count; i++) subLine(g, top + n + 1 + i*2, sub_lines[i]);
 		char tag[96];
 		snprintf(tag, sizeof(tag), "[ %s ]", badge);
 		gridCenterBig(g, TA_ROWS-3, tag, 60);
@@ -248,26 +311,9 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 	int block = total + (sub_count ? sub_rows + 1 : 0);
 	int top = (TA_ROWS - 3 - block) / 2;
 	for (int li=0; li<lay.count; li++) {
-		Raster* r = rasterLine(lay.lines[li]);
-		if (!r) continue;
-		int wcols = (int)lroundf(lay.h * 2.0f * CONDENSE * r->w / r->h);
-		if (wcols<1) wcols = 1;
-		if (wcols>TEXT_COLS) wcols = TEXT_COLS;
-		uint8_t* px = malloc((size_t)wcols * lay.h * 2);
-		char* chars = malloc((size_t)wcols * lay.h);
-		if (px && chars) {
-			shrink(r, wcols, lay.h*2, px);
-			TA_pack(px, wcols, lay.h, chars);
-			int ox = (TA_COLS - wcols) / 2, oy = top + li*(lay.h+1);
-			for (int y=0; y<lay.h; y++) for (int x=0; x<wcols; x++) {
-				char c = chars[y*wcols + x];
-				if (c!=' ') gridPut(g, ox+x, oy+y, c=='H' ? FILL_BOTH : c=='\'' ? FILL_TOP : FILL_BOTTOM, 100);
-			}
-		}
-		free(px);
-		free(chars);
+		drawLetters(lay.lines[li], top + li*(lay.h+1), lay.h, 100);
 	}
-	for (int i=0; i<sub_count; i++) gridCenterBig(g, top + total + 1 + i*2, sub_lines[i], 70);
+	for (int i=0; i<sub_count; i++) subLine(g, top + total + 1 + i*2, sub_lines[i]);
 	char tag[96];
 	snprintf(tag, sizeof(tag), "[ %s ]", badge);
 	gridCenterBig(g, TA_ROWS-3, tag, 60);
@@ -325,6 +371,10 @@ static int writeTile(const Grid* g, const char* path) { // 0 if the PNG is on di
 			uint32_t* p = &tile_pixels[(cy*CELL_H + y)*TILE + px];
 			if (a > (*p >> 24)) *p = (a << 24) | (r << 16) | (gg << 8) | b;
 		}
+	}
+	for (int i=0; i<TILE*TILE; i++) { // the big letters
+		uint32_t a = letter_px[i];
+		if (a > (tile_pixels[i] >> 24)) tile_pixels[i] = (a << 24) | ((uint32_t)bright.r << 16) | ((uint32_t)bright.g << 8) | bright.b;
 	}
 	SDL_Surface* s = SDL_CreateRGBSurfaceFrom(tile_pixels, TILE, TILE, 32, TILE*4, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 	if (!s) return -1;

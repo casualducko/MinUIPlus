@@ -237,7 +237,7 @@ int TA_layout(const char* text, int max_cols, int max_rows, float (*aspect)(cons
 	TA_Layout best;
 	memset(&best, 0, sizeof(best));
 	ta_layoutTry(words, count, max_cols, max_rows, aspect, ctx, &best, &have);
-	if (!have || best.h<4) return 0; // too long for letters this big: the caller shows the title as plain text
+	if (!have || best.h<3) return 0; // too long for letters this big: the caller shows the title as plain text
 	*out = best;
 	return 1;
 }

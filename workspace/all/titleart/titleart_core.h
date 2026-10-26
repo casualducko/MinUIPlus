@@ -25,7 +25,7 @@ int TA_cells(const char* s); // the columns a UTF-8 string takes
 void TA_truncate(char* s, int max_bytes); // at most that many bytes, cut between characters
 int TA_wrapPlain(const char* text, int width, int max_lines, char lines[][TA_LINE_MAX]); // greedy by columns (wide characters count two); a word wider than a line is broken between characters; the last line cut with ~
 // aspect(line, ctx) is width / height of that line in big letters. Fills `out` and returns 1 when
-// the whole title fits on up to four lines with letters at least 4 rows high; returns 0 when it does
+// the whole title fits on up to four lines with letters at least 3 rows high; returns 0 when it does
 // not (nothing is cut: the caller shows the title in plain text instead).
 int TA_layout(const char* text, int max_cols, int max_rows, float (*aspect)(const char*, void*), void* ctx, TA_Layout* out);
 // px: w x (2*rows) coverage; out: rows x w characters ('H' both halves, ' top half, . bottom half, space none)
