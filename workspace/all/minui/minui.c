@@ -1607,7 +1607,11 @@ int main (int argc, char *argv[]) {
 			if (show_version && now-about_at>3000) { InfoView_gather(); about_at = now; dirty = 1; }
 		}
 		else {
-			if (PAD_tappedMenu(now)) {
+			char switcher[MAX_PATH];
+			snprintf(switcher, sizeof(switcher), "%s/Tools/%s/Switcher.pak", SDCARD_PATH, PLATFORM);
+			int fn_tapped = PAD_tappedMenu(now);
+			if (fn_tapped && exists(switcher)) openPak(switcher); // Fn: the game switcher (the Info page is Tools > Info)
+			else if (fn_tapped) { // no Switcher on this card: the Info page, as before
 				show_version = 1;
 				about_first = 0;
 				InfoView_forceWifi();

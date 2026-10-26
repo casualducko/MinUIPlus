@@ -17,6 +17,13 @@ cp -R "$repo/workspace/macos/platform" "$WORK/platform"
 python3 "$here/platform-patch.py" "$WORK/platform" "$CARD"
 rm -f /tmp/switch-to.txt
 
+# emulator paks: the ones that run minarch have save states, the native PICO-8 does not (the tool skips it)
+for tag in MGBA SFC PS FC; do
+	mkdir -p "$CARD/.system/macos/paks/Emus/$tag.pak"
+	printf '#!/bin/sh\nminarch.elf core "$1"\n' > "$CARD/.system/macos/paks/Emus/$tag.pak/launch.sh"
+done
+mkdir -p "$CARD/.system/macos/paks/Emus/P8-NATIVE.pak"
+printf '#!/bin/sh\n./pico8_64 -run "$1"\n' > "$CARD/.system/macos/paks/Emus/P8-NATIVE.pak/launch.sh"
 python3 - "$CARD" <<'PY'
 import os, sys, struct
 from PIL import Image, ImageDraw
@@ -26,6 +33,7 @@ games = [  # folder, file, preview size, slot (None: no state), colour
  ("SNES (SFC)", "Legend of Zelda, The (USA).sfc", (256,224), 0, (60,80,150)),
  ("Playstation (PS)", "Castlevania - Symphony of the Night.chd", (320,240), 4, (110,40,60)),
  ("NES (FC)", "Mega Man (USA).nes", (256,240), None, (0,0,0)),
+ ("Pico-8 (P8-NATIVE)", "Celeste Classic.p8.png", (128,128), None, (0,0,0)),
 ]
 shared = os.path.join(card, ".userdata", "shared", ".minui")
 os.makedirs(shared, exist_ok=True)

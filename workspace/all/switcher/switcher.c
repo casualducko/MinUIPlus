@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <math.h>
 #include <unistd.h>
 #include <time.h>
@@ -56,12 +57,14 @@ static void load(void) {
 		char sd_path[MAX_PATH];
 		snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, paths[i]);
 		if (!exists(sd_path)) continue; // a game that is gone
+		char emu[MAX_PATH], emu_path[MAX_PATH];
+		getEmuName(sd_path, emu);
+		getEmuPath(emu, emu_path);
+		if (!strncasecmp(emu, "P8", 2) || Emu_isNative(emu_path)) continue; // PICO-8 and the other native programs have no save states to switch between
 		Card* c = &cards[card_count];
 		snprintf(c->rel, sizeof(c->rel), "%s", paths[i]);
 		const char* file = SW_baseName(sd_path);
 		Playtime_name(sd_path, c->title, sizeof(c->title));
-		char emu[MAX_PATH];
-		getEmuName(sd_path, emu);
 		snprintf(c->tag, sizeof(c->tag), "%s", emu);
 
 		// the slot the launcher would resume from, and that slot's picture
