@@ -1557,6 +1557,22 @@ int main (int argc, char *argv[]) {
 	int show_setting = 0; // 1=brightness,2=volume
 	int was_online = PLAT_isOnline();
 	
+	if (exists(SWITCH_PATH)) { // Tools > Switcher picked a game: open it like a press of X (Resume) or A on it
+		char rel[MAX_PATH] = "";
+		getFile(SWITCH_PATH, rel, sizeof(rel));
+		unlink(SWITCH_PATH);
+		rel[strcspn(rel, "\r\n")] = '\0';
+		char sd_path[MAX_PATH], emu_name[MAX_PATH], emu_path[MAX_PATH];
+		snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, rel);
+		getEmuName(sd_path, emu_name);
+		getEmuPath(emu_name, emu_path);
+		if (rel[0] && exists(sd_path) && prefixMatch(ROMS_PATH, sd_path) && exists(emu_path)) {
+			readyResumePath(sd_path, ENTRY_ROM);
+			should_resume = can_resume;
+			openRom(sd_path, NULL);
+		}
+	}
+	
 	// LOG_info("- loop start: %lu\n", SDL_GetTicks() - main_begin);
 	while (!quit) {
 		GFX_startFrame();

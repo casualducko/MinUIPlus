@@ -113,6 +113,11 @@ $CC $FLAGS -I"$all/pico" -o "$out/test_pico" "$here/test_pico.c" "$all/pico/bbs.
 if ! PICO_PORT="$bport" "$out/test_pico" "$here"; then failed=1; echo "   ^ FAILED: pico"; fi
 kill $mockbbs 2>/dev/null; wait $mockbbs 2>/dev/null || true
 
+# the Switcher tool: the recent list, slots and times
+echo "== switcher"
+$CC $FLAGS -I"$all/switcher" -o "$out/test_switcher" "$here/test_switcher.c" "$all/switcher/switcher_core.c"
+if ! "$out/test_switcher"; then failed=1; echo "   ^ FAILED: switcher"; fi
+
 # the Wi-Fi tool: parsing iw output, the saved networks file, running commands
 echo "== wifi"
 $CC $FLAGS -I"$all/wifi" -o "$out/test_wifi" "$here/test_wifi.c" "$all/wifi/wifi_core.c"
