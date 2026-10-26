@@ -8,6 +8,7 @@
 #include <strings.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <time.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -38,8 +39,8 @@
 #define MAX_PLATS		40
 #define PRELOAD_ROWS	6 // fetch the next page when the cursor is this close to the end
 
-typedef enum { SCR_PLATFORMS, SCR_GAMES, SCR_OSK } Screen;
-typedef enum { JOB_NONE, JOB_PLATFORMS, JOB_ROMS, JOB_DOWNLOAD } JobKind;
+typedef enum { SCR_PLATFORMS, SCR_GAMES, SCR_OSK, SCR_RANDOM } Screen;
+typedef enum { JOB_NONE, JOB_PLATFORMS, JOB_ROMS, JOB_DOWNLOAD, JOB_RANDOM } JobKind;
 typedef enum { MODAL_NONE, MODAL_MESSAGE, MODAL_CONFIRM, MODAL_PLAY } ModalKind;
 
 typedef struct { char slug[48]; int count; char label[96]; } PlatRow;
@@ -74,18 +75,29 @@ static char osk_text[64];
 
 static Screen cur_screen = SCR_PLATFORMS;
 
+// random game: one pick from anywhere in a platform's list (or in the current search), shown on its own card
+static RRom rnd;						// the game on the card
+static int rnd_have = 0;
+static Screen rnd_from = SCR_PLATFORMS;	// where B goes back to
+static char rnd_slug[48];				// platform it picks from ("" = all)
+static char rnd_label[96];
+static char rnd_query[64];
+static long rnd_total = 0;				// games it can pick from
+static int rnd_tries = 0;				// a page can come back empty (a disc set was cut): ask again a few times
+#define RND_TRIES 5
+
 // background work
 static RJob job;
 static JobKind job_kind = JOB_NONE;
 static char list_tmp[512];
-static int dl_index = -1;		// which game is downloading
+static RRom dl_rom;				// the game downloading (from the list or the random card)
 static uint32_t dl_drawn_at = 0;
 
 // modal
 static ModalKind modal = MODAL_NONE;
 static char modal_msg[320];
 static uint32_t modal_until = 0;
-static int confirm_index = -1;
+static int confirm_index = -1;	// -1 none, -2 the random card's game, else a row of the list
 
 static int show_setting = 0;
 
@@ -360,6 +372,72 @@ static void finish_page(void) {
 	dirty = 1;
 }
 
+static void pick_random(void) { // ask for one game at a random place in the list
+	long total = rnd_total>0 ? rnd_total : 1;
+	int offset = (int)((unsigned long)rand() % (unsigned long)total);
+	char path[1024];
+	rapi_roms_path(path, sizeof(path), rnd_slug[0] ? rnd_slug : NULL, usable_csv, rnd_query, offset, 1);
+	stop_job();
+	if (rjob_start(&job, &cfg, path, list_tmp, 0)) { say("Couldn't start curl", 0); return; }
+	job_kind = JOB_RANDOM;
+	dirty = 1;
+}
+static void start_random(Screen from) { // Y: from the platform list (the highlighted platform) or from a game list (that list)
+	rnd_from = from;
+	if (from==SCR_PLATFORMS) {
+		PlatRow* p = &plats[plat_sel];
+		snprintf(rnd_slug, sizeof(rnd_slug), "%s", p->slug);
+		snprintf(rnd_label, sizeof(rnd_label), "%s", p->slug[0] ? p->label : "All");
+		char* paren = strrchr(rnd_label, '(');
+		if (paren && paren>rnd_label && paren[-1]==' ') paren[-1] = '\0';
+		rnd_query[0] = '\0';
+		rnd_total = p->count;
+	}
+	else {
+		snprintf(rnd_slug, sizeof(rnd_slug), "%s", cur_slug);
+		snprintf(rnd_label, sizeof(rnd_label), "%s", cur_label);
+		snprintf(rnd_query, sizeof(rnd_query), "%s", query);
+		rnd_total = roms_total>0 ? roms_total : plats[plat_sel].count;
+	}
+	if (rnd_total<=0) { say("Nothing to pick from", 1500); return; }
+	rnd_tries = 0;
+	rnd_have = 0;
+	cur_screen = SCR_RANDOM;
+	pick_random();
+}
+static void finish_random(void) {
+	const char* err = rjob_error(&job);
+	if (err) { cur_screen = rnd_from; say(err, 0); return; }
+	FILE* f = fopen(list_tmp, "rb");
+	long len = 0;
+	char* body = NULL;
+	if (f) {
+		fseek(f, 0, SEEK_END);
+		len = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		if (len>0 && len<=8*1024*1024) body = malloc(len+1);
+		if (body && fread(body, 1, len, f)!=(size_t)len) { free(body); body = NULL; }
+		fclose(f);
+	}
+	RRomList got = {0};
+	long total = rnd_total;
+	int raw = 0;
+	int added = body ? rapi_parse_roms(body, len, &got, &total, &raw) : -1;
+	free(body);
+	if (added<0) { rromlist_free(&got); cur_screen = rnd_from; say("The server's game list made no sense", 0); return; }
+	if (total>0) rnd_total = total;
+	if (got.count>0) {
+		rnd = got.items[0];
+		rnd_have = 1;
+	}
+	rromlist_free(&got);
+	if (!rnd_have) {
+		if (++rnd_tries<RND_TRIES) { pick_random(); return; }
+		cur_screen = rnd_from;
+		say("Couldn't find a game to pick", 2000);
+	}
+}
+
 static int copy_file(const char* from, const char* to) {
 	FILE* in = fopen(from, "rb");
 	if (!in) return -1;
@@ -397,7 +475,7 @@ static long file_bytes(const char* path) {
 }
 
 static void finish_download(void) {
-	RRom rom = roms.items[dl_index];
+	RRom rom = dl_rom;
 	const char* err = rjob_error(&job);
 	PWR_enableAutosleep();
 	if (err) { unlink(DOWNLOAD_TMP); say(err, 0); return; }
@@ -480,8 +558,7 @@ static void finish_download(void) {
 	else say(msg, 3000);
 }
 
-static void start_download(int index) {
-	RRom* rom = &roms.items[index];
+static void start_download(const RRom* rom) {
 	const SysDef* sys = sys_for_slug(rom->platform);
 	char dir[MAX_PATH];
 	if (dest_dir(rom->platform, 0, dir, sizeof(dir))) { say("This device can't play that system", 0); return; }
@@ -499,7 +576,7 @@ static void start_download(int index) {
 	stop_job();
 	if (rjob_start(&job, &cfg, path, DOWNLOAD_TMP, 1)) { say("Couldn't start curl", 0); return; }
 	job_kind = JOB_DOWNLOAD;
-	dl_index = index;
+	dl_rom = *rom;
 	PWR_disableAutosleep(); // a long download must not sleep the device
 	dirty = 1;
 }
@@ -516,6 +593,14 @@ static void blit_text(TTF_Font* ttf, const char* text, SDL_Color color, int x, i
 	SDL_Surface* s = GFX_renderText(ttf, text, color);
 	if (!s) return;
 	SDL_BlitSurface(s, &(SDL_Rect){0,0,MIN(s->w, max_w),s->h}, screen, &(SDL_Rect){x,y});
+	SDL_FreeSurface(s);
+}
+static void blit_text_centered(TTF_Font* ttf, const char* text, SDL_Color color, int x, int y, int w) { // centered in x..x+w
+	if (!text || !*text) return;
+	SDL_Surface* s = GFX_renderText(ttf, text, color);
+	if (!s) return;
+	int sw = MIN(s->w, w);
+	SDL_BlitSurface(s, &(SDL_Rect){0,0,sw,s->h}, screen, &(SDL_Rect){x + (w-sw)/2, y});
 	SDL_FreeSurface(s);
 }
 static void draw_title(const char* text, int ow) {
@@ -575,7 +660,7 @@ static void draw_platforms(int ow) {
 			draw_row(j, i==plat_sel, plats[i].label, NULL, 0);
 		}
 	}
-	GFX_blitButtonGroup((char*[]){"B","QUIT",NULL}, 0, screen, 0);
+	GFX_blitButtonGroup(plat_count ? (char*[]){"B","QUIT","Y","RANDOM",NULL} : (char*[]){"B","QUIT",NULL}, 0, screen, 0);
 	if (plat_count) GFX_blitButtonGroup((char*[]){"A","OPEN",NULL}, 1, screen, 1);
 	else if (plats_failed) GFX_blitButtonGroup((char*[]){"A","RETRY",NULL}, 1, screen, 1);
 }
@@ -607,8 +692,34 @@ static void draw_games(int ow) {
 			draw_row(j, i==sel, r->name, right, saved && i!=sel);
 		}
 	}
-	GFX_blitButtonGroup((char*[]){"FN","SEARCH",NULL}, 0, screen, 0);
-	GFX_blitButtonGroup((char*[]){"B","BACK","A","DOWNLOAD",NULL}, 1, screen, 1);
+	GFX_blitButtonGroup((char*[]){"FN","FIND","Y","RANDOM",NULL}, 0, screen, 0);
+	GFX_blitButtonGroup((char*[]){"B","BACK","A","GET",NULL}, 1, screen, 1);
+}
+static void draw_random(int ow) {
+	char title[256];
+	snprintf(title, sizeof(title), "Random: %s", rnd_label);
+	draw_title(title, ow);
+	if (!rnd_have) {
+		draw_note("Finding a game...");
+		GFX_blitButtonGroup((char*[]){"B","BACK",NULL}, 0, screen, 1);
+		return;
+	}
+	int w = screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2);
+	int x = SCALE1(PADDING+BUTTON_PADDING);
+	int y = SCALE1(PADDING) + ROW_H*2;
+	char name[256];
+	snprintf(name, sizeof(name), "%s", rnd.name);
+	GFX_wrapText(font.large, name, w, 3);
+	GFX_blitMessage(font.large, name, screen, &(SDL_Rect){x, y, w, ROW_H*3});
+	const SysDef* sys = sys_for_slug(rnd.platform);
+	char line[160];
+	snprintf(line, sizeof(line), "%s", sys ? sys->name : rnd.platform);
+	if (rnd.region[0]) { size_t n = strlen(line); snprintf(line+n, sizeof(line)-n, "  -  %s", rnd.region); }
+	if (rnd.size>0) { size_t n = strlen(line); snprintf(line+n, sizeof(line)-n, "  -  %.1f MB", rnd.size/1048576.0); }
+	blit_text_centered(font.small, line, COLOR_LIGHT_TEXT, x, y + ROW_H*3 + SCALE1(6), w);
+	if (is_saved(&rnd)) blit_text_centered(font.small, "You already have this one", COLOR_LIGHT_TEXT, x, y + ROW_H*4, w);
+	GFX_blitButtonGroup((char*[]){"B","BACK","Y","ANOTHER",NULL}, 0, screen, 0);
+	GFX_blitButtonGroup((char*[]){"A","GET",NULL}, 1, screen, 1);
 }
 static void draw_osk(void) {
 	// the text so far
@@ -647,7 +758,7 @@ static void draw_osk(void) {
 	GFX_blitButtonGroup((char*[]){"B","DELETE","A","TYPE",NULL}, 1, screen, 1);
 }
 static void draw_progress(void) {
-	RRom* rom = &roms.items[dl_index];
+	RRom* rom = &dl_rom;
 	int w = screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2);
 	int x = (screen->w-w)/2;
 	int y = screen->h/2 - ROW_H*2;
@@ -739,7 +850,8 @@ static void handle_modal_input(void) {
 	}
 	if (PAD_justPressed(BTN_A)) {
 		modal = MODAL_NONE;
-		if (confirm_index>=0 && confirm_index<roms.count) start_download(confirm_index);
+		if (confirm_index==-2) start_download(&rnd);
+		else if (confirm_index>=0 && confirm_index<roms.count) start_download(&roms.items[confirm_index]);
 		dirty = 1;
 	}
 	else if (PAD_justPressed(BTN_B)) { modal = MODAL_NONE; dirty = 1; }
@@ -752,6 +864,18 @@ static void handle_input(void) {
 	}
 	if (modal!=MODAL_NONE) { handle_modal_input(); return; }
 
+	if (cur_screen==SCR_RANDOM) {
+		if (PAD_justPressed(BTN_B)) { stop_job(); cur_screen = rnd_from; dirty = 1; return; }
+		if (!rnd_have) return; // still looking
+		if (PAD_justPressed(BTN_Y)) { rnd_have = 0; rnd_tries = 0; pick_random(); dirty = 1; }
+		else if (PAD_justPressed(BTN_A)) {
+			if (is_saved(&rnd)) ask("You already have this one.\nDownload it again?", -2);
+			else start_download(&rnd);
+			dirty = 1;
+		}
+		return;
+	}
+
 	if (cur_screen==SCR_PLATFORMS) {
 		if (PAD_justPressed(BTN_B)) { quit = 1; return; }
 		if (plat_count==0) {
@@ -763,7 +887,8 @@ static void handle_input(void) {
 		else if (PAD_justRepeated(BTN_L1)) { moved(&plat_sel, plat_count, -list_rows()); dirty = 1; }
 		else if (PAD_justRepeated(BTN_R1)) { moved(&plat_sel, plat_count, list_rows()); dirty = 1; }
 		keep_visible(&plat_sel, &plat_scroll, plat_count);
-		if (PAD_justPressed(BTN_A)) open_games();
+		if (PAD_justPressed(BTN_Y)) start_random(SCR_PLATFORMS);
+		else if (PAD_justPressed(BTN_A)) open_games();
 		return;
 	}
 	if (cur_screen==SCR_OSK) {
@@ -791,6 +916,7 @@ static void handle_input(void) {
 		dirty = 1;
 		return;
 	}
+	if (PAD_justPressed(BTN_Y) && job_kind==JOB_NONE) { start_random(SCR_GAMES); return; }
 	int extra = (roms_failed || (!roms_exhausted && job_kind==JOB_ROMS)) ? 1 : 0;
 	int count = roms.count + extra;
 	if (count>0) {
@@ -805,7 +931,7 @@ static void handle_input(void) {
 			if (job_kind==JOB_NONE && (roms_failed || roms.count==0)) { roms_failed = 0; load_page(); }
 		}
 		else if (is_saved(&roms.items[sel])) ask("You already have this one.\nDownload it again?", sel);
-		else start_download(sel);
+		else start_download(&roms.items[sel]);
 		dirty = 1;
 	}
 	// the next page, a little before the end of this one
@@ -817,6 +943,7 @@ static void handle_input(void) {
 int main(int argc, char* argv[]) {
 	(void)argc; (void)argv;
 	PWR_setCPUSpeed(CPU_SPEED_MENU);
+	srand((unsigned)time(NULL) ^ ((unsigned)getpid()<<8));
 
 	screen = GFX_init(MODE_MAIN);
 	PAD_init();
@@ -875,6 +1002,7 @@ int main(int argc, char* argv[]) {
 			if (kind==JOB_PLATFORMS) finish_platforms();
 			else if (kind==JOB_ROMS) finish_page();
 			else if (kind==JOB_DOWNLOAD) finish_download();
+				else if (kind==JOB_RANDOM) finish_random();
 			rjob_cleanup(&job);
 			dirty = 1;
 		}
@@ -895,6 +1023,7 @@ int main(int argc, char* argv[]) {
 			else if (modal!=MODAL_NONE) draw_modal();
 			else if (cur_screen==SCR_PLATFORMS) draw_platforms(ow);
 			else if (cur_screen==SCR_GAMES) draw_games(ow);
+				else if (cur_screen==SCR_RANDOM) draw_random(ow);
 			else draw_osk();
 			GFX_flip(screen);
 			dirty = 0;
