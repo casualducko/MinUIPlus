@@ -24,3 +24,6 @@ Each filled 6 x 12 px cell was one of three hand-drawn marks (an "H" for a full 
 
 ## Trying a new look
 `TA_layout` and `composeTile` decide where letters go; a look is a function that draws one line (`drawLetters` picks it from the style). Generate sample tiles on the Mac with `RES=<res folder> tools/host-harness/titleart-run.sh "wait,X,sleep:3000,A,sleep:8000,snap:done"` (tiles land in the fake card's `Roms/*/.res`); put `printf '%s' ascii` in the card's `.userdata/macos/titleart-style` to try another look.
+
+## The tool's buttons
+A **MAKE NEW** makes tiles only for the games that have no art (shown when there are any); X **REDO ALL** does that and also remakes every tile this tool made before (art you added yourself is never replaced); Y turns the launcher's game art on or off (the line "Art in the launcher" says which); B quits. (Before 2026-10-25 only X existed, as RECREATE ALL.)

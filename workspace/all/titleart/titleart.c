@@ -222,7 +222,8 @@ int main(int argc, char* argv[]) {
 				putFile(SHOW_ART_PATH, art_shown ? "1\n" : "0\n");
 				dirty = 1;
 			}
-			else if (PAD_justPressed(BTN_X) && (missing>0 || mine>0)) { // every game without art, and this tool's tiles again
+			else if ((PAD_justPressed(BTN_X) && (missing>0 || mine>0)) || (PAD_justPressed(BTN_A) && missing>0)) {
+				int redo = PAD_justPressed(BTN_X); // X: every game without art, and this tool's tiles again; A: only the games without art
 				free(jobs);
 				jobs = calloc(MAX_MADE + MAX_GAMES, sizeof(Job));
 				job_count = job_done = job_failed = 0;
@@ -234,7 +235,7 @@ int main(int argc, char* argv[]) {
 						snprintf(j->file, sizeof(j->file), "%s", games[i].file);
 						snprintf(j->folder, sizeof(j->folder), "%s", folders[games[i].folder]);
 					}
-					for (int i=0; i<made_count && job_count<MAX_MADE; i++) {
+					for (int i=0; redo && i<made_count && job_count<MAX_MADE; i++) {
 						if (!isMine(i)) continue;
 						Job* j = &jobs[job_count++];
 						snprintf(j->art, sizeof(j->art), "%s", made[i].path);
@@ -308,8 +309,9 @@ int main(int argc, char* argv[]) {
 				snprintf(line, sizeof(line), "Art in the launcher: %s", art_shown ? "On" : "Off");
 				text(screen, font.large, line, art_shown ? COLOR_WHITE : COLOR_LIGHT_TEXT, tx, y + row_h*4 + SCALE1(8), w);
 				if (!missing && !mine) text(screen, font.small, "Every game has art.", COLOR_LIGHT_TEXT, tx, y + row_h*2 + SCALE1(44), w);
-				GFX_blitButtonGroup((char*[]){"B","BACK","Y",art_shown ? "ART ON" : "ART OFF",NULL}, 0, screen, 0);
-				if (missing>0 || mine>0) GFX_blitButtonGroup((char*[]){"X","RECREATE ALL",NULL}, 1, screen, 1);
+				GFX_blitButtonGroup((char*[]){"B","BACK","Y","ART",NULL}, 0, screen, 0); // (what it does is the "Art in the launcher" line)
+				if (missing>0) GFX_blitButtonGroup((char*[]){"A","MAKE NEW","X","REDO ALL",NULL}, 1, screen, 1);
+				else if (mine>0) GFX_blitButtonGroup((char*[]){"X","REDO ALL",NULL}, 1, screen, 1);
 			}
 			else if (state==ST_WORK) {
 				int bw = w - SCALE1(BUTTON_PADDING*2);
