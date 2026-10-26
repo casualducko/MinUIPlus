@@ -41,7 +41,7 @@
 
 typedef enum { SCR_PLATFORMS, SCR_GAMES, SCR_OSK, SCR_RANDOM } Screen;
 typedef enum { JOB_NONE, JOB_PLATFORMS, JOB_ROMS, JOB_DOWNLOAD, JOB_RANDOM } JobKind;
-typedef enum { MODAL_NONE, MODAL_MESSAGE, MODAL_CONFIRM, MODAL_PLAY } ModalKind;
+typedef enum { MODAL_NONE, MODAL_MESSAGE, MODAL_PLAY } ModalKind;
 
 typedef struct { char slug[48]; int count; char label[96]; } PlatRow;
 
@@ -97,7 +97,6 @@ static uint32_t dl_drawn_at = 0;
 static ModalKind modal = MODAL_NONE;
 static char modal_msg[320];
 static uint32_t modal_until = 0;
-static int confirm_index = -1;	// -1 none, -2 the random card's game, else a row of the list
 
 static int show_setting = 0;
 
@@ -139,24 +138,14 @@ static int is_saved(const RRom* rom) {
 // would run ('emulator launch.sh' 'rom'), written for Romulus's launch.sh to run after we quit.
 static char play_cmd[MAX_PATH*2+64];
 static char play_rom[MAX_PATH]; // the ROM that PLAY starts
-static void shell_quote(const char* in, char* out, size_t size) { // 'it'\''s'
-	size_t n = 0;
-	out[n++] = '\'';
-	for (; *in && n+5<size; in++) {
-		if (*in=='\'') { memcpy(out+n, "'\\''", 4); n += 4; }
-		else out[n++] = *in;
-	}
-	out[n++] = '\'';
-	out[n] = '\0';
-}
 static int make_play_cmd(const char* rom_path) { // 1 if this system has an emulator on the card
 	char emu_name[MAX_PATH], emu_path[MAX_PATH];
 	getEmuName(rom_path, emu_name);
 	getEmuPath(emu_name, emu_path);
 	if (!emu_path[0] || !exists(emu_path)) return 0;
 	char a[MAX_PATH*2], b[MAX_PATH*2];
-	shell_quote(emu_path, a, sizeof(a));
-	shell_quote(rom_path, b, sizeof(b));
+	shellQuote(emu_path, a, sizeof(a));
+	shellQuote(rom_path, b, sizeof(b));
 	snprintf(play_cmd, sizeof(play_cmd), "%s %s\n", a, b);
 	snprintf(play_rom, sizeof(play_rom), "%s", rom_path);
 	return 1;
@@ -173,12 +162,6 @@ static void say(const char* msg, int ms) { // ms==0: until a button is pressed
 	snprintf(modal_msg, sizeof(modal_msg), "%s", msg);
 	modal = MODAL_MESSAGE;
 	modal_until = ms ? SDL_GetTicks()+ms : 0;
-	dirty = 1;
-}
-static void ask(const char* msg, int index) {
-	snprintf(modal_msg, sizeof(modal_msg), "%s", msg);
-	modal = MODAL_CONFIRM;
-	confirm_index = index;
 	dirty = 1;
 }
 
@@ -378,7 +361,7 @@ static void pick_random(void) { // ask for one game at a random place in the lis
 	char path[1024];
 	rapi_roms_path(path, sizeof(path), rnd_slug[0] ? rnd_slug : NULL, usable_csv, rnd_query, offset, 1);
 	stop_job();
-	if (rjob_start(&job, &cfg, path, list_tmp, 0)) { say("Couldn't start curl", 0); return; }
+	if (rjob_start(&job, &cfg, path, list_tmp, 0)) { cur_screen = rnd_from; say("Couldn't start curl", 0); return; }
 	job_kind = JOB_RANDOM;
 	dirty = 1;
 }
@@ -438,23 +421,6 @@ static void finish_random(void) {
 	}
 }
 
-static int copy_file(const char* from, const char* to) {
-	FILE* in = fopen(from, "rb");
-	if (!in) return -1;
-	FILE* out = fopen(to, "wb");
-	if (!out) { fclose(in); return -1; }
-	static char buf[64*1024];
-	size_t n;
-	int ok = 1;
-	while ((n = fread(buf, 1, sizeof(buf), in))>0) {
-		if (fwrite(buf, 1, n, out)!=n) { ok = 0; break; }
-	}
-	if (ferror(in)) ok = 0; // a read error is not the end of the file
-	fclose(in);
-	if (fclose(out)!=0) ok = 0;
-	if (!ok) remove(to);
-	return ok ? 0 : -1;
-}
 
 // a server (or a Wi-Fi login page in front of it) that answers 200 with a web page: not a game
 static int looks_like_html(const char* path) {
@@ -530,7 +496,7 @@ static void finish_download(void) {
 		else if (rename(DOWNLOAD_TMP, final_path)) {
 			// not the same card/folder: copy
 			snprintf(part_path, sizeof(part_path), "%s/.romulus-download.part", dir);
-			if (copy_file(DOWNLOAD_TMP, part_path) || rename(part_path, final_path)) { remove(part_path); unlink(DOWNLOAD_TMP); say("Couldn't save the file (card full?)", 0); return; }
+			if (copyFile(DOWNLOAD_TMP, part_path) || rename(part_path, final_path)) { remove(part_path); unlink(DOWNLOAD_TMP); say("Couldn't save the file (card full?)", 0); return; }
 			unlink(DOWNLOAD_TMP);
 		}
 	}
@@ -787,8 +753,7 @@ static void draw_modal(void) {
 	snprintf(text, sizeof(text), "%s", modal_msg);
 	if (!strchr(text, '\n')) GFX_wrapText(font.large, text, w, 6); // long one-line messages, the rest already have their breaks
 	GFX_blitMessage(font.large, text, screen, &(SDL_Rect){x, y, w, h});
-	if (modal==MODAL_CONFIRM) GFX_blitButtonGroup((char*[]){"B","NO","A","YES",NULL}, 1, screen, 1);
-	else if (modal==MODAL_PLAY) GFX_blitButtonGroup((char*[]){"B","BACK","A","PLAY",NULL}, 1, screen, 1);
+	if (modal==MODAL_PLAY) GFX_blitButtonGroup((char*[]){"B","BACK","A","PLAY",NULL}, 1, screen, 1);
 	else if (!modal_until) GFX_blitButtonGroup((char*[]){"A","OK",NULL}, 1, screen, 1);
 }
 
@@ -856,13 +821,6 @@ static void handle_modal_input(void) {
 		dirty = 1;
 		return;
 	}
-	if (PAD_justPressed(BTN_A)) {
-		modal = MODAL_NONE;
-		if (confirm_index==-2) start_download(&rnd);
-		else if (confirm_index>=0 && confirm_index<roms.count) start_download(&roms.items[confirm_index]);
-		dirty = 1;
-	}
-	else if (PAD_justPressed(BTN_B)) { modal = MODAL_NONE; dirty = 1; }
 }
 
 static void handle_input(void) {
@@ -877,7 +835,7 @@ static void handle_input(void) {
 		if (!rnd_have) return; // still looking
 		if (PAD_justPressed(BTN_Y)) { rnd_have = 0; rnd_tries = 0; pick_random(); dirty = 1; }
 		else if (PAD_justPressed(BTN_A)) {
-			if (is_saved(&rnd)) ask("You already have this one.\nDownload it again?", -2);
+			if (is_saved(&rnd)) say("You already have this one.", 1800); // (a game on the card is never replaced, so a second download would be thrown away)
 			else start_download(&rnd);
 			dirty = 1;
 		}
@@ -938,7 +896,7 @@ static void handle_input(void) {
 		if (roms.count==0 || sel>=roms.count) {
 			if (job_kind==JOB_NONE && (roms_failed || roms.count==0)) { roms_failed = 0; load_page(); }
 		}
-		else if (is_saved(&roms.items[sel])) ask("You already have this one.\nDownload it again?", sel);
+		else if (is_saved(&roms.items[sel])) say("You already have this one.", 1800);
 		else start_download(&roms.items[sel]);
 		dirty = 1;
 	}
@@ -1007,11 +965,11 @@ int main(int argc, char* argv[]) {
 		if (job_kind!=JOB_NONE && rjob_poll(&job)) {
 			JobKind kind = job_kind;
 			job_kind = JOB_NONE;
+			rjob_cleanup(&job); // before the handler: it may start the next job (a random pick that came back empty), whose files these would be
 			if (kind==JOB_PLATFORMS) finish_platforms();
 			else if (kind==JOB_ROMS) finish_page();
 			else if (kind==JOB_DOWNLOAD) finish_download();
-				else if (kind==JOB_RANDOM) finish_random();
-			rjob_cleanup(&job);
+			else if (kind==JOB_RANDOM) finish_random();
 			dirty = 1;
 		}
 		if (job_kind==JOB_DOWNLOAD && now-dl_drawn_at>=150) { dirty = 1; dl_drawn_at = now; } // progress

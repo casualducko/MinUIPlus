@@ -4,7 +4,7 @@ These change the OS on TF1, not the games card. Read `../MOSS.md` and `../MOSS-C
 
 | File | What |
 |---|---|
-| `0003-...dts.diff` | The CPU regulator fix as a diff of the decompiled device tree: the unit has a SYR827 at I2C 0x40, the RGB30 tree says TCS4525 at 0x1c. With it `cpufreq` works (408 to 1992 MHz). Tested on the device: boots, scales, sleeps and wakes. |
+| `0003-...dts.diff` | The CPU regulator fix as a diff of the decompiled device tree: the unit has a SYR827 at I2C 0x40, the RGB30 tree says TCS4525 at 0x1c. With it `cpufreq` works (steps of 408 to 1992 MHz; the launcher menu sits at 600). Tested on the device: boots, scales, sleeps and wakes. |
 | `rk3566-rgb30-original.dtb` | Moss's stock `rk3566-rgb30-linux.dtb` (md5 `5afafbc4...b9`), read from the device. |
 | `rk3566-rgb30-rgb20sx.dtb` | The same with the 0003 change (md5 `a9fc83cf...54`). |
 | `apply-dtb.sh <ip> [revert]` | Installs it (or puts the stock one back) over SSH; checks the current file is one of the two known ones, keeps a copy of the replaced file in `backup-<ip>-<time>/`, verifies the checksum. Reboot afterwards. |

@@ -64,18 +64,19 @@ typedef struct {
 	int fallback;	// what the system uses when the file is missing or unreadable
 	int min, max;	// accepted values besides 0 (and, for the timings, "10 seconds or more")
 	int seconds;	// what is set now (milliseconds for the audio row)
+	const char* note; // what the setting does, in one short line
 } Row;
 static Row rows[] = { // alphabetical
-	{"Art for new games", TITLEART_AUTO_PATH, auto_art_choices, 0, 1, 1, 0},
-	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0},
-	{"Auto-save on quit", AUTOSAVE_PATH, art_choices, 1, 1, 1, 1},
-	{"Clock in corner", CLOCK_PATH, clock_choices, 0, 12, 24, 0},
-	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1},
-	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5},
-	{"New game dot", NEW_PATH, art_choices, 1, 1, 1, 1},
-	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
-	{"Rumble", RUMBLE_PATH, rumble_choices, 100, 1, 100, 100},
-	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS},
+	{"Art for new games", TITLEART_AUTO_PATH, auto_art_choices, 0, 1, 1, 0, "Automatic: new games get a title picture at boot."},
+	{"Audio buffer", AUDIO_PATH, audio_choices, 0, 20, 500, 0, "Bigger is safer against crackle, with a little more delay."},
+	{"Auto-save on quit", AUTOSAVE_PATH, art_choices, 1, 1, 1, 1, "Quitting a game also saves a state, for the Switcher (Fn)."},
+	{"Clock in corner", CLOCK_PATH, clock_choices, 0, 12, 24, 0, "Shows the time beside the Wi-Fi and battery icons."},
+	{"Game art", ART_PATH, art_choices, 1, 1, 1, 1, "Off: only text in the launcher."},
+	{"Low battery shutdown", BATTERY_PATH, battery_choices, 5, 1, 20, 5, "At this level the game is saved and the device powers off."},
+	{"New game dot", NEW_PATH, art_choices, 1, 1, 1, 1, "A dot in the left margin beside games you have not played."},
+	{"Power off after sleep", POWEROFF_PATH, poweroff_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS, "How long it sleeps before it powers off."},
+	{"Rumble", RUMBLE_PATH, rumble_choices, 100, 1, 100, 100, "The RGB20SX has no rumble motor (kept for units that have one)."},
+	{"Sleep after", SLEEP_PATH, sleep_choices, DEFAULT_SECONDS, 10, 86400, DEFAULT_SECONDS, "Games don't sleep by themselves; power still does."},
 };
 #define ROW_COUNT ((int)(sizeof(rows)/sizeof(rows[0])))
 #define VISIBLE_ROWS 7 // more rows than that scroll, so the notes and buttons keep their room (7 rows end at 520 px; the notes sit below, the buttons from 620)
@@ -88,6 +89,7 @@ static int readValue(const Row* row) { // same rules as the system: a bad file m
 	long n = strtol(text, &end, 10);
 	while (end && (*end==' ' || *end=='\n' || *end=='\r')) end++;
 	if (end==text || (end && *end) || n<0 || n>row->max || (n!=0 && n<row->min)) return row->fallback;
+	if (row->choices==clock_choices && n!=0 && n!=12 && n!=24) return row->fallback; // (the launcher shows no clock for any other number)
 	return (int)n;
 }
 static uint32_t rumble_off_at = 0; // when the short buzz after changing the rumble setting stops (0: not buzzing)
@@ -117,19 +119,6 @@ static void step(Row* row, int dir) {
 	}
 }
 
-static const char* noteFor(const Row* row) { // what a setting does, in one short line
-	if (!strcmp(row->name, "Art for new games")) return "Automatic: new games get a title picture at boot.";
-	if (!strcmp(row->name, "Audio buffer")) return "Bigger is safer against crackle, with a little more delay.";
-	if (!strcmp(row->name, "Auto-save on quit")) return "Quitting a game also saves a state, for the Switcher (Fn).";
-	if (!strcmp(row->name, "Clock in corner")) return "Shows the time beside the Wi-Fi and battery icons.";
-	if (!strcmp(row->name, "Game art")) return "Off: only text in the launcher.";
-	if (!strcmp(row->name, "Low battery shutdown")) return "At this level the game is saved and the device powers off.";
-	if (!strcmp(row->name, "New game dot")) return "A dot in the left margin beside games you have not played.";
-	if (!strcmp(row->name, "Power off after sleep")) return "How long it sleeps before it powers off.";
-	if (!strcmp(row->name, "Rumble")) return "The RGB20SX has no rumble motor (kept for units that have one).";
-	if (!strcmp(row->name, "Sleep after")) return "Games don't sleep by themselves; power still does.";
-	return "";
-}
 
 static void drawRow(SDL_Surface* screen, int j, int selected, const Row* row) {
 	int row_h = SCALE1(PILL_SIZE);
@@ -203,7 +192,7 @@ int main(int argc, char* argv[]) {
 			}
 			// small text under the rows: what the selected setting does, then what applies to all of them
 			{
-				const char* notes[3] = { noteFor(&rows[sel]), "Changes apply when a game or the launcher starts.", NULL };
+				const char* notes[3] = { rows[sel].note, "Changes apply when a game or the launcher starts.", NULL };
 				int y = SCALE1(PADDING) + (visible+1)*SCALE1(PILL_SIZE) + SCALE1(11); // below the arrow
 				for (int i=0; notes[i]; i++) {
 					SDL_Surface* n = TTF_RenderUTF8_Blended(font.small, notes[i], i==0 ? COLOR_LIGHT_TEXT : COLOR_GRAY);

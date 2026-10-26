@@ -150,7 +150,7 @@ typedef struct { uint32_t cp; int cells; uint8_t cov[CELL_W*2*CELL_H]; } Glyph;
 static Glyph ascii_glyphs[128];
 static uint8_t ascii_ready[128];
 static Glyph other_glyphs[256];
-static int other_count = 0;
+static int other_count = 0, other_next = 0;
 static const Glyph* glyphFor(uint32_t cp) {
 	Glyph* gl;
 	if (cp<128) {
@@ -160,7 +160,7 @@ static const Glyph* glyphFor(uint32_t cp) {
 	}
 	else {
 		for (int i=0; i<other_count; i++) if (other_glyphs[i].cp==cp) return &other_glyphs[i];
-		gl = &other_glyphs[other_count<256 ? other_count++ : 0]; // a full cache starts over at the front
+		gl = &other_glyphs[other_count<256 ? other_count++ : (other_next++ % 256)]; // a full cache replaces its entries in turn
 	}
 	memset(gl, 0, sizeof(*gl));
 	gl->cp = cp;
@@ -245,19 +245,21 @@ static void putDot(int px, int py, int a) { // one dot with its top left corner 
 	for (int y=py; y<py+DOT-gap; y++) for (int x=px; x<px+DOT-gap; x++) if (x>=0 && x<TILE && y>=0 && y<TILE && a>letter_px[y*TILE+x]) letter_px[y*TILE+x] = a;
 }
 
-// The default look, real ASCII art: the title is cut from the big font into a fine grid of character cells
+// The "ascii" look (titleart-style): the title is cut from the big font into a fine grid of character cells
 // (ASCII_CW x ASCII_CH px) and each cell gets a character whose weight matches how much of the cell the letter
 // covers: " .:+#@". The characters are drawn in one box (the ink of a #), each keeping its own shape in it, so
 // the edges of a letter are light marks and its body is heavy ones.
 #define ASCII_CW 4
 #define ASCII_CH 8
-#define ASCII_MIN_ROWS 4       // letters shorter than this are too fine for characters: that title is plain text
+#define ASCII_MIN_ROWS 4       // the classic and ascii looks: letters shorter than this are too fine for marks or characters, so that title is plain text
 static const char ascii_ramp[] = " .:+#@";
 static TTF_Font* ramp_font = NULL;
 static uint8_t ramp_cov[sizeof(ascii_ramp)][ASCII_CW*ASCII_CH];
 static uint8_t ramp_ready = 0;
+static int ramp_failed = 0; // the font would not open (or has no #): not tried again
 static void rampBuild(void) { // every character of the ramp, as coverage over a cell
-	if (ramp_ready) return;
+	if (ramp_ready || ramp_failed) return;
+	ramp_failed = 1; // until it is built
 	if (!ramp_font) ramp_font = TTF_OpenFont(FONT_PATH, ASCII_CH + 2);
 	if (!ramp_font) return;
 	SDL_Color white = {255,255,255,0};
@@ -292,19 +294,20 @@ static void rampBuild(void) { // every character of the ramp, as coverage over a
 		SDL_FreeSurface(sf);
 	}
 	ramp_ready = 1;
+	ramp_failed = 0;
 }
-static void drawChars(const char* text, int row, int h, int level) {
-	Raster* r = rasterLine(text);
-	if (!r) return;
+static int drawChars(const char* text, int row, int h, int level) { // 0 if the characters are not available (the caller draws the line another way)
 	rampBuild();
-	if (!ramp_ready) return;
+	if (!ramp_ready) return 0;
+	Raster* r = rasterLine(text);
+	if (!r) return 1; // nothing to draw
 	int hpx = h * CELL_H;
 	int ncol = (int)lroundf(hpx * condense() * r->w / r->h / ASCII_CW);
 	if (ncol<1) ncol = 1;
 	if (ncol*ASCII_CW > TEXT_COLS*CELL_W) ncol = TEXT_COLS*CELL_W/ASCII_CW;
 	int nrow = hpx / ASCII_CH;
 	uint8_t* px = malloc((size_t)ncol*nrow);
-	if (!px) return;
+	if (!px) return 1;
 	shrink(r, ncol, nrow, px);
 	int ox = (TILE - ncol*ASCII_CW)/2, oy = row*CELL_H;
 	const int nr = (int)sizeof(ascii_ramp)-1;
@@ -321,11 +324,12 @@ static void drawChars(const char* text, int row, int h, int level) {
 		}
 	}
 	free(px);
+	return 1;
 }
 
 // one line of letters h rows high, centered, its top at row `row`; level 0..100 is its brightness
 static void drawLetters(const char* text, int row, int h, int level) {
-	if (letterStyle()==STYLE_ASCII) { drawChars(text, row, h, level); return; }
+	if (letterStyle()==STYLE_ASCII && drawChars(text, row, h, level)) return; // (without the font for it, solid letters below)
 	Raster* r = rasterLine(text);
 	if (!r) return;
 	if (letterStyle()==STYLE_CLASSIC) { // the original: the line on the character grid, one mark per half cell
@@ -374,6 +378,12 @@ static void subLine(Grid* g, int row, const char* text) { // the subtitle: doubl
 		p += n;
 	}
 	drawLetters(text, row, 2, 80);
+}
+
+static void addTag(Grid* g, const char* badge) { // "[ SNES ]" at the bottom of the label
+	char tag[96];
+	snprintf(tag, sizeof(tag), "[ %s ]", badge);
+	gridCenterBig(g, TA_ROWS-3, tag, 60);
 }
 
 // the layout of one tile: the title in big letters, its subtitle in small ones, a rule and the system
@@ -428,9 +438,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		}
 		n *= k; // rows used, for the subtitle below
 		for (int i=0; i<sub_count; i++) subLine(g, top + n + 1 + i*2, sub_lines[i]);
-		char tag[96];
-		snprintf(tag, sizeof(tag), "[ %s ]", badge);
-		gridCenterBig(g, TA_ROWS-3, tag, 60);
+		addTag(g, badge);
 		return;
 	}
 	int total = lay.count * lay.h + (lay.count - 1);
@@ -440,9 +448,7 @@ static void composeTile(const char* file, const char* badge, Grid* g) {
 		drawLetters(lay.lines[li], top + li*(lay.h+1), lay.h, 100);
 	}
 	for (int i=0; i<sub_count; i++) subLine(g, top + total + 1 + i*2, sub_lines[i]);
-	char tag[96];
-	snprintf(tag, sizeof(tag), "[ %s ]", badge);
-	gridCenterBig(g, TA_ROWS-3, tag, 60);
+	addTag(g, badge);
 }
 
 static uint32_t tile_pixels[TILE*TILE];
@@ -534,6 +540,7 @@ void TAGen_close(void) {
 	ramp_ready = 0;
 	memset(ascii_ready, 0, sizeof(ascii_ready));
 	other_count = 0;
+	other_next = 0;
 }
 int TAGen_write(const char* file, const char* badge, const char* art_path) {
 	if (TAGen_open()) return -1;

@@ -96,7 +96,8 @@ static void readConfig(void) {
 	free(cfg);
 }
 
-// Runs curl for url into file (NULL: a small answer kept in /tmp). *code gets the http status, 0 if none.
+// Runs curl for url into file. *code gets the http status, 0 if none. Only https, also across redirects, unless a test
+// server is named (UPDATE_API).
 // Returns NULL, or a message for the user. The token never goes on a command line: a 0600 file holds it.
 static const char* fetch(const char* url, const char* file, int timeout_ms, int* code, const char* accept) {
 	*code = 0;
@@ -104,6 +105,8 @@ static const char* fetch(const char* url, const char* file, int timeout_ms, int*
 	int a = 0;
 	argv[a++] = "curl";
 	argv[a++] = "-sS"; argv[a++] = "-L";
+	argv[a++] = "--proto"; argv[a++] = getenv("UPDATE_API") ? "=http,https" : "=https";
+	argv[a++] = "--proto-redir"; argv[a++] = getenv("UPDATE_API") ? "=http,https" : "=https";
 	argv[a++] = "--connect-timeout"; argv[a++] = "10";
 	argv[a++] = "-o"; argv[a++] = (char*)file;
 	argv[a++] = "-w"; argv[a++] = "%{http_code}";
@@ -171,8 +174,9 @@ static const char* prepare(void) {
 	mkdir(USERDATA_PATH, 0777);
 	mkdir(WORK_DIR, 0777);
 	struct statvfs sv;
+	if (release.pkg_size > (512ULL<<20)) return "That update is too big to be right."; // (and keeps the sum below from wrapping)
 	if (!statvfs(WORK_DIR, &sv) && release.pkg_size && (uint64_t)sv.f_bavail * sv.f_frsize < release.pkg_size * 3 + (16ULL<<20)) return "Not enough room on the card.";
-	shellOK("rm -rf \"$1\" \"$2\" && echo OK", STAGE_DIR, PKG_FILE, 30000, "Clearing the last update...");
+	if (!shellOK("rm -rf \"$1\" \"$2\" && echo OK", STAGE_DIR, PKG_FILE, 30000, "Clearing the last update...")) return "Couldn't clear the last update."; // (old files must not be mixed into this one)
 	unlink(SUM_FILE);
 	int code = 0;
 	const char* e;
@@ -195,7 +199,9 @@ static const char* prepare(void) {
 
 	char* argv[] = { "sh", "-c", "sha256sum \"$1\" 2>/dev/null || shasum -a 256 \"$1\"", "sh", PKG_FILE, NULL };
 	char out[256];
-	if (ClockNet_capture(argv, out, sizeof(out), 120000, netTick, NULL, "Checking the download...")!=0) return "Cancelled.";
+	int sum_run = ClockNet_capture(argv, out, sizeof(out), 120000, netTick, NULL, "Checking the download...");
+	if (sum_run==-2) return "Cancelled.";
+	if (sum_run!=0) return "Couldn't check the download.";
 	char got[65];
 	if (!Update_parseSum(out, got) || strcmp(got, want)) { unlink(PKG_FILE); return "The download is damaged.\nNothing was changed."; }
 
@@ -204,6 +210,11 @@ static const char* prepare(void) {
 	char* largv[] = { "tar", "tzf", PKG_FILE, NULL };
 	int r = ClockNet_capture(largv, list, 256*1024, 60000, netTick, NULL, "Looking inside...");
 	int safe = r==0 && strlen(list)<256*1024-2 && Update_pathsSafe(list);
+	if (safe) { // and no links (a link out of the folder, then a file written through it, would pass a check of the names)
+		char* vargv[] = { "tar", "tvzf", PKG_FILE, NULL };
+		r = ClockNet_capture(vargv, list, 256*1024, 60000, netTick, NULL, "Looking inside...");
+		safe = r==0 && strlen(list)<256*1024-2 && Update_noLinks(list);
+	}
 	free(list);
 	if (!safe) { unlink(PKG_FILE); return "The package is not valid.\nNothing was changed."; }
 

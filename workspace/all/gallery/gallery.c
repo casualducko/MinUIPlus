@@ -15,7 +15,7 @@
 #include "utils.h"
 #include "gallery_core.h"
 
-#define MAX_SHOTS 4096
+#define MAX_SHOTS 100000 // (the list grows as it is read; this only stops a runaway folder)
 typedef struct { char path[MAX_PATH]; char system[64]; char file[256]; } Shot;
 static Shot* shots = NULL;
 static int count = 0;
@@ -27,9 +27,9 @@ static int byNewest(const void* a, const void* b) {
 }
 static void load(void) {
 	free(shots);
-	shots = calloc(MAX_SHOTS, sizeof(Shot));
+	shots = NULL;
 	count = 0;
-	if (!shots) return;
+	int cap = 0;
 	DIR* root = opendir(SDCARD_PATH "/Screenshots");
 	if (!root) return;
 	struct dirent* fe;
@@ -44,6 +44,12 @@ static void load(void) {
 		struct dirent* e;
 		while ((e = readdir(d)) && count<MAX_SHOTS) {
 			if (!Shots_isImage(e->d_name) || strlen(e->d_name)>=sizeof(shots[0].file)) continue;
+			if (count==cap) { // every picture is read before the sort, however many there are
+				Shot* bigger = realloc(shots, sizeof(Shot) * (cap ? cap*2 : 256));
+				if (!bigger) break;
+				shots = bigger;
+				cap = cap ? cap*2 : 256;
+			}
 			Shot* s = &shots[count++];
 			snprintf(s->path, sizeof(s->path), "%s/%s", dir, e->d_name);
 			snprintf(s->system, sizeof(s->system), "%s", fe->d_name);
@@ -52,7 +58,7 @@ static void load(void) {
 		closedir(d);
 	}
 	closedir(root);
-	qsort(shots, count, sizeof(Shot), byNewest);
+	if (count>0) qsort(shots, count, sizeof(Shot), byNewest);
 }
 
 #define XRGB 0x00FF0000, 0x0000FF00, 0x000000FF, 0

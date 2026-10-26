@@ -38,3 +38,4 @@ workspace/readmes
 
 FAKESD
 release-out
+!moss/*.dtb

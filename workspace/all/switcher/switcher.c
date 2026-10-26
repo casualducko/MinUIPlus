@@ -105,17 +105,19 @@ static void load(void) {
 	free(ptext);
 }
 
-static void removeFromList(const char* rel) { // out of recent.txt; the save states are not touched
+static int removeFromList(const char* rel) { // out of recent.txt; the save states are not touched. 1 if it is done
 	char* text = allocFile(RECENT_PATH);
-	if (!text) return;
+	if (!text) return 0;
 	size_t cap = strlen(text) + 2;
 	char* out = malloc(cap);
+	int ok = 0;
 	if (out) {
 		int n = SW_dropRecent(text, rel, out, cap);
-		writeFileAtomic(RECENT_PATH, out, n);
+		ok = writeFileAtomic(RECENT_PATH, out, n)==0;
 		free(out);
 	}
 	free(text);
+	return ok;
 }
 
 #define XRGB 0x00FF0000, 0x0000FF00, 0x000000FF, 0
@@ -195,11 +197,12 @@ int main(int argc, char* argv[]) {
 
 		if (confirm) {
 			if (PAD_justPressed(BTN_A)) {
-				removeFromList(cards[index].rel);
-				memmove(&cards[index], &cards[index+1], sizeof(Card) * (card_count - index - 1));
-				card_count--;
-				if (index>=card_count) index = card_count - 1;
-				if (index<0) index = 0;
+				if (removeFromList(cards[index].rel)) { // (a card that could not be taken off the list stays on screen too)
+					memmove(&cards[index], &cards[index+1], sizeof(Card) * (card_count - index - 1));
+					card_count--;
+					if (index>=card_count) index = card_count - 1;
+					if (index<0) index = 0;
+				}
 				confirm = 0;
 				loaded_index = -1;
 				dirty = 1;
@@ -275,13 +278,13 @@ int main(int argc, char* argv[]) {
 					}
 					int ly = top + area_h + SCALE1(2);
 					char when[64] = "";
-					if (has_picture) {
+					if (has_picture && (view && !view_is_art)) {
 						char ago[48];
 						SW_ago((long)time(NULL) - c->saved_at, ago, sizeof(ago));
 						if (c->slot==AUTO_RESUME_SLOT) snprintf(when, sizeof(when), "Where you left off, %s", ago);
 						else snprintf(when, sizeof(when), "Slot %d, saved %s", c->slot + 1, ago);
 					}
-					else if (has_state) snprintf(when, sizeof(when), "Slot %d (no picture)", c->slot + 1);
+					else if (has_state) snprintf(when, sizeof(when), c->slot==AUTO_RESUME_SLOT ? "Where you left off" : "Slot %d (no picture)", c->slot + 1);
 					else snprintf(when, sizeof(when), "No save state yet");
 					snprintf(line, sizeof(line), "[%s]  %s", c->tag, when);
 					text(screen, font.small, line, COLOR_LIGHT_TEXT, pad + SCALE1(BUTTON_PADDING), ly, screen->w - pad*2 - SCALE1(80), 0);

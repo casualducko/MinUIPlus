@@ -96,12 +96,12 @@ export async function verifyPackage(files) {
 // onStatus(text) says what it is doing; base is the folder the page is served from.
 export async function downloadLatest(base = new URL('./latest/', import.meta.url).href, onStatus = () => {}, fetchFn = fetch) {
 	onStatus('Looking for the latest release...');
-	const info = await fetchFn(base + 'version.json');
+	const info = await fetchFn(base + 'version.json', { cache: 'no-store' }); // (never an old copy: it must match the package next to it)
 	if (!info.ok) throw new Error(info.status === 404 ? 'No release has been published for this installer yet.' : 'Could not read the release information (' + info.status + ').');
 	const v = await info.json();
 	if (!v || !/^[\w.-]+\.tar\.gz$/.test(v.file || '') || !/^[0-9a-f]{64}$/.test(v.sha256 || '')) throw new Error('The release information is not valid.');
 	onStatus('Downloading ' + v.tag + ' (' + (v.size / 1048576).toFixed(1) + ' MB)...');
-	const r = await fetchFn(base + v.file);
+	const r = await fetchFn(base + v.file, { cache: 'no-store' });
 	if (!r.ok) throw new Error('Downloading the package failed (' + r.status + ').');
 	const bytes = new Uint8Array(await r.arrayBuffer());
 	onStatus('Checking the download...');

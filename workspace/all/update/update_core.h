@@ -24,6 +24,7 @@ int Update_compareVersions(const char* a, const char* b);
 int Update_parseSum(const char* text, char* out);
 // 1 if every path in a `tar tzf` listing stays inside the folder it is unpacked into (no absolute paths, no "..").
 int Update_pathsSafe(const char* listing);
+int Update_noLinks(const char* listing); // a `tar tv` listing with no symbolic or hard links in it
 // "https://" and a plausible repo only: 1 if repo looks like owner/name with safe characters.
 int Update_repoValid(const char* repo);
 

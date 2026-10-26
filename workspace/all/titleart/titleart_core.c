@@ -174,7 +174,7 @@ int TA_wrapPlain(const char* text, int width, int max_lines, char lines[][TA_LIN
 	for (int i=0; i<count; i++) {
 		int wcells = TA_cells(words[i]);
 		int add = (cur[0] ? 1 : 0) + wcells;
-		if (TA_cells(cur) + add <= width) {
+		if (TA_cells(cur) + add <= width && strlen(cur) + strlen(words[i]) + 2 < TA_LINE_MAX) { // (by columns and by bytes: a character may be three bytes and one column)
 			if (cur[0]) strcat(cur, " ");
 			strcat(cur, words[i]);
 			continue;

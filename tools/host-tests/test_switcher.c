@@ -26,6 +26,8 @@ int main(void) {
 	CHECK(!strcmp(out, list), "only a whole path matches");
 	len = SW_dropRecent("/x.gba\n", "/x.gba", out, sizeof(out));
 	CHECK(len==0 && out[0]=='\0', "the last one dropped: empty");
+	len = SW_dropRecent("/Roms/A/one.gba \n/Roms/A/two.gba\n", "/Roms/A/one.gba", out, sizeof(out));
+	CHECK(!strcmp(out, "/Roms/A/two.gba\n"), "a path with trailing spaces (the parser trims them) is dropped too");
 	len = SW_dropRecent(list, "/Roms/A/one.gba", out, 8);
 	CHECK(len<8, "a small buffer is never overrun");
 

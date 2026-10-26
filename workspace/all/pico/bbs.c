@@ -99,6 +99,29 @@ static void entity_decode(char* s) { // &amp; &lt; &gt; &quot; &#39; &#NNN; in p
 	*w = '\0';
 }
 
+// A backslash escape inside a JavaScript string, with p at the backslash: \n \t \uXXXX, or the character itself
+// (\\ \` \' \"). Writes what it means to out (UTF-8) and returns the position after it.
+static const char* js_escape(const char* p, const char* end, char* out, size_t* n, size_t cap) {
+	p++; // the backslash
+	if (p>=end) return p;
+	char c = *p++;
+	unsigned cp = 0;
+	int is_cp = 0;
+	if (c=='n') { cp = '\n'; is_cp = 1; }
+	else if (c=='t') { cp = '\t'; is_cp = 1; }
+	else if (c=='u' && p+4<=end) {
+		char hex[5] = { p[0], p[1], p[2], p[3], 0 };
+		char* stop;
+		unsigned long v = strtoul(hex, &stop, 16);
+		if (!*stop) { cp = (unsigned)v; is_cp = 1; p += 4; }
+	}
+	if (!is_cp) { if (*n+1<cap) out[(*n)++] = c; return p; }
+	if (cp<0x80) { if (*n+1<cap) out[(*n)++] = (char)cp; }
+	else if (cp<0x800) { if (*n+2<cap) { out[(*n)++] = 0xC0 | (cp>>6); out[(*n)++] = 0x80 | (cp&0x3F); } }
+	else { if (*n+3<cap) { out[(*n)++] = 0xE0 | (cp>>12); out[(*n)++] = 0x80 | ((cp>>6)&0x3F); out[(*n)++] = 0x80 | (cp&0x3F); } }
+	return p;
+}
+
 // One cell of a row, as text: strings without their quotes (escapes undone), numbers as written, an
 // array as its strings joined by ", ", an empty slot as "". Returns the position after the cell.
 static const char* read_cell(const char* p, const char* end, char* out, size_t cap) {
@@ -109,7 +132,7 @@ static const char* read_cell(const char* p, const char* end, char* out, size_t c
 	if (*p=='\'' || *p=='"' || *p=='`') {
 		char q = *p++;
 		while (p<end && *p!=q) {
-			if (*p=='\\' && p+1<end) p++;
+			if (*p=='\\') { p = js_escape(p, end, out, &n, cap); continue; }
 			if (n+1<cap) out[n++] = *p;
 			p++;
 		}
@@ -136,7 +159,11 @@ static const char* read_cell(const char* p, const char* end, char* out, size_t c
 				char sq = *s++;
 				if (!first && n+2<cap) { out[n++] = ','; out[n++] = ' '; }
 				first = 0;
-				while (s<p && *s!=sq) { if (*s=='\\' && s+1<p) s++; if (n+1<cap) out[n++] = *s; s++; }
+				while (s<p && *s!=sq) {
+					if (*s=='\\') { s = js_escape(s, p, out, &n, cap); continue; }
+					if (n+1<cap) out[n++] = *s;
+					s++;
+				}
 			}
 		}
 		out[n] = '\0';
@@ -182,7 +209,10 @@ int bbs_parse_search(const char* html, size_t len, BbsCart* out, int max) {
 			if (p<end && *p==']') { p++; break; }
 			ok = 0; break; // not a row we understand
 		}
-		if (!ok || idx<13) break;
+		if (!ok || idx<13) { // skip to the next row (they start with ['), so one odd row does not end the page
+			while (p<end && !(p[0]=='[' && p+1<end && p[1]=='\'')) p++;
+			continue;
+		}
 		if (c.tid>0 && c.title[0]) out[count++] = c;
 	}
 	return count;
@@ -202,7 +232,7 @@ int bbs_parse_cart_path(const char* html, size_t len, char* path, size_t cap) {
 		while (m+mlen<=e && memcmp(html+m, marker, mlen)) m++;
 		if (m+mlen>e) continue;
 		size_t n = e - m;
-		if (n<20 || n>=cap || n>200 || n<7 || memcmp(html+e-7, ".p8.png", 7)) continue;
+		if (n<20 || n>=cap || n>200 || memcmp(html+e-7, ".p8.png", 7)) continue;
 		int safe = 1;
 		for (size_t k=0; k<n; k++) { unsigned char ch = html[m+k]; if (!(isalnum(ch) || ch=='/' || ch=='.' || ch=='_' || ch=='-')) safe = 0; }
 		if (!safe) continue;
@@ -275,6 +305,7 @@ void bbs_file_name(const char* title, const char* suffix, char* out, size_t cap)
 		unsigned char c = *p;
 		if (c<0x20 || c==0x7F || strchr("/\\:*?\"<>|", c)) c = ' ';
 		if (c==' ') { if (space) continue; space = 1; }
+		else if (c=='.' && n==0) continue; // a leading dot would hide the file from the launcher
 		else space = 0;
 		name[n++] = c;
 	}
@@ -330,7 +361,8 @@ int bbs_job_start(BbsJob* job, const char* url, const char* out_path, int downlo
 	argv[a++] = "--connect-timeout"; argv[a++] = "10";
 	if (download) { argv[a++] = "--speed-limit"; argv[a++] = "1024"; argv[a++] = "--speed-time"; argv[a++] = "30"; }
 	else { argv[a++] = "--max-time"; argv[a++] = "40"; argv[a++] = "--compressed"; }
-	argv[a++] = "-A"; argv[a++] = "MinUIPlus-PicoSearch/1.0 (a handheld cart browser; one request per button press)";
+	argv[a++] = "--max-filesize"; argv[a++] = "8000000"; // a page or a cart: never more than this
+	argv[a++] = "-A"; argv[a++] = "MinUIPlus-PicoSearch/1.0 (a handheld cart browser; one request at a time)";
 	argv[a++] = "-o"; argv[a++] = job->out_path;
 	argv[a++] = "-w"; argv[a++] = "%{http_code}";
 	argv[a++] = "--";
@@ -340,8 +372,10 @@ int bbs_job_start(BbsJob* job, const char* url, const char* out_path, int downlo
 	pid_t pid = fork();
 	if (pid<0) return -1;
 	if (pid==0) {
-		int code = open(job->code_path, O_WRONLY|O_CREAT|O_TRUNC, 0600);
-		int err = open(job->err_path, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+		unlink(job->code_path); // (made fresh: never a leftover, never somebody's link)
+		unlink(job->err_path);
+		int code = open(job->code_path, O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, 0600);
+		int err = open(job->err_path, O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, 0600);
 		int nul = open("/dev/null", O_RDONLY);
 		if (nul>=0) dup2(nul, 0);
 		if (code>=0) dup2(code, 1);

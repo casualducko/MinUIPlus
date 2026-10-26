@@ -13,7 +13,7 @@ Last updated 2026-10-25.
 ## 1. CPU stuck at 1.416 GHz (biggest payoff)
 - The CPU voltage regulator (TCS4525, I2C address 0x1c) never binds to a driver, so `cpufreq` never starts. MinUI's CPU setting does nothing and the battery pays for it.
 - Fix: a device tree change (and maybe a kernel config check) so the regulator binds. Needs a custom image, tested on a spare card.
-- **Cause found 2026-10-25:** Moss's tree declares a TCS4525 at I2C 0x1c, but the unit has a SYR827-class regulator at **0x40**. The fix is a two-line device tree change; details and the test plan are in `MOSS-CPU.md`. **Applied to the device 2026-10-25 and tested (boots, scales 600 to 1992 MHz, sleep/wake fine).** Files and the install script are in `moss/`. The Moss kernel patch for it is written and checked against the pinned kernel source (`moss/0004-...`); no image has been built with it yet. Battery comparison skipped (the user can't test it).
+- **Cause found 2026-10-25:** Moss's tree declares a TCS4525 at I2C 0x1c, but the unit has a SYR827-class regulator at **0x40**. The fix is a two-line device tree change; details and the test plan are in `MOSS-CPU.md`. **Applied to the device 2026-10-25 and tested (boots, scales 408 to 1992 MHz (the menu sits at 600), sleep/wake fine).** Files and the install script are in `moss/`. The Moss kernel patch for it is written and checked against the pinned kernel source (`moss/0004-...`); no image has been built with it yet. Battery comparison skipped (the user can't test it).
 
 ## 2. Two untested patches (`moss/0001`, `moss/0002`)
 - `0001` restart logind when the sleep config changes (only matters on the first boot of a fresh Moss install; sleep and wake already work on this unit).

@@ -2,6 +2,7 @@
 # Build a fake SD card with awkward content. usage: make-card.sh CARD_DIR RES_DIR
 set -e
 CARD=${1:?card dir}; RES=${2:?path to a .system/res folder}
+case "$CARD" in */card|*harness*|*/tmp/*) ;; *) echo "make-card.sh: '$CARD' does not look like a test card folder (it is deleted first): use a path ending in /card"; exit 1 ;; esac
 rm -rf "$CARD"
 mkdir -p "$CARD"/.userdata/macos "$CARD"/.userdata/shared/.minui "$CARD"/.system/res "$CARD"/Roms "$CARD"/Bios "$CARD"/Saves
 cp -R "$RES"/. "$CARD/.system/res/"

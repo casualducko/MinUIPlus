@@ -4272,7 +4272,8 @@ static void Net_reap(void) {
 static void Net_stop(pid_t pid) { // asks it to stop, then insists after a second
 	kill(pid, SIGTERM);
 	for (int i=0; i<20; i++) {
-		if (waitpid(pid, NULL, WNOHANG)==pid) return;
+		pid_t r = waitpid(pid, NULL, WNOHANG);
+		if (r==pid || r<0) return; // collected, or not ours (already collected: never signal a pid that may be somebody else's now)
 		usleep(50000);
 	}
 	kill(pid, SIGKILL);
@@ -4309,7 +4310,7 @@ static int Net_wait(const char* message, pid_t pid, int wait_route, int timeout_
 		else GFX_sync();
 	}
 	if (pid>0 && !exited) {
-		if (result==0 && wait_route) net_pending_pid = pid; // the network is up: wifictl may still be finishing, and cutting it off could leave Wi-Fi half set up
+		if (result==0 && wait_route) { if (net_pending_pid>0) waitpid(net_pending_pid, NULL, 0); net_pending_pid = pid; } // (the one before it is let finish, not cut off) // the network is up: wifictl may still be finishing, and cutting it off could leave Wi-Fi half set up
 		else Net_stop(pid);
 	}
 	GFX_setMode(MODE_MENU);

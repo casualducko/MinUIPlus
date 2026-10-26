@@ -1310,37 +1310,6 @@ static void showSelected(Directory* d, int index) { // selects it and scrolls th
 static void seedRandom(void) {
 	if (!random_state) random_state = (uint32_t)time(NULL) ^ (SDL_GetTicks() * 2654435761u);
 }
-static int pickGameHere(void) { // selects a random game in the open folder, played or not; 1 if there was one
-	Directory* d = top;
-	int count = d->entries->count;
-	if (count<=0) return 0;
-	int* index = malloc(sizeof(int) * count);
-	if (!index) return 0;
-	int n = 0;
-	for (int i=0; i<count; i++) if (((Entry*)d->entries->items[i])->type==ENTRY_ROM) index[n++] = i;
-	seedRandom();
-	int pick = Random_pick(NULL, n, &random_state);
-	int chosen = pick>=0 ? index[pick] : -1;
-	free(index);
-	if (chosen<0) return 0;
-	showSelected(d, chosen);
-	return 1;
-}
-static int isPlainFolder(Entry* entry) { // not Recently Played, not a folder of discs that opens a game
-	char cue[MAX_PATH];
-	return entry->type==ENTRY_DIR && !exactMatch(entry->path, FAUX_RECENT_PATH) && !prefixMatch(COLLECTIONS_PATH, entry->path) && !prefixMatch(SDCARD_PATH "/Tools", entry->path) && !hasCue(entry->path, cue);
-}
-static int visibleCount(char* path) { // roughly how many games a folder holds: its entries that are not hidden
-	int n = 0;
-	DIR* dh = opendir(path);
-	if (!dh) return 0;
-	struct dirent* e;
-	while ((e = readdir(dh))) if (e->d_name[0]!='.' && !suffixMatch(".txt", e->d_name)) n++;
-	closedir(dh);
-	return n;
-}
-// Looks for a random game here, or (at the root, or in a folder of folders) in a random folder. 1 if it
-// found one: the selection, and maybe the open folder, changed. 0 leaves everything as it was.
 // games that have been played, by title (play time is recorded by the emulator): the rest get a dot in the launcher
 static char (*played)[96] = NULL;
 static int played_count = 0;
@@ -1367,6 +1336,42 @@ static int isNew(const Entry* entry) { // nothing recorded yet: nothing to compa
 	Playtime_name(entry->path, name, sizeof(name));
 	for (int i=0; i<played_count; i++) if (!strcmp(played[i], name)) return 0;
 	return 1;
+}
+static int pickGameHere(void) { // selects a random game in the open folder, one never played first if there is one; 1 if there was one
+	Directory* d = top;
+	int count = d->entries->count;
+	if (count<=0) return 0;
+	int* index = malloc(sizeof(int) * count);
+	unsigned char* seen = malloc(count); // 1: played (a game that is new, with its dot, comes first)
+	if (!index || !seen) { free(index); free(seen); return 0; }
+	int n = 0;
+	for (int i=0; i<count; i++) {
+		Entry* entry = d->entries->items[i];
+		if (entry->type!=ENTRY_ROM) continue;
+		seen[n] = !isNew(entry);
+		index[n++] = i;
+	}
+	seedRandom();
+	int pick = Random_pick(seen, n, &random_state);
+	int chosen = pick>=0 ? index[pick] : -1;
+	free(index);
+	free(seen);
+	if (chosen<0) return 0;
+	showSelected(d, chosen);
+	return 1;
+}
+static int isPlainFolder(Entry* entry) { // not Recently Played, not a folder of discs that opens a game
+	char cue[MAX_PATH];
+	return entry->type==ENTRY_DIR && !exactMatch(entry->path, FAUX_RECENT_PATH) && !prefixMatch(COLLECTIONS_PATH, entry->path) && !prefixMatch(SDCARD_PATH "/Tools", entry->path) && !hasCue(entry->path, cue);
+}
+static int visibleCount(char* path) { // roughly how many games a folder holds: its entries that are not hidden
+	int n = 0;
+	DIR* dh = opendir(path);
+	if (!dh) return 0;
+	struct dirent* e;
+	while ((e = readdir(dh))) if (e->d_name[0]!='.' && !suffixMatch(".txt", e->d_name)) n++;
+	closedir(dh);
+	return n;
 }
 // (MIN and MAX in defines.h have no outer parentheses, so they must not be nested or used inside an expression)
 static int clampTop(int start, int count) { // the first row of a window of MAIN_ROW_COUNT rows that doesn't run past the end
@@ -1410,7 +1415,8 @@ static void removeRecent(const char* sd_path) {
 	saveRecents();
 }
 static int canDelete(Entry* entry) {
-	return entry->type==ENTRY_ROM && prefixMatch(ROMS_PATH, entry->path) && !suffixMatch(".m3u", entry->path) && !suffixMatch(".pak", entry->path);
+	return entry->type==ENTRY_ROM && prefixMatch(ROMS_PATH, entry->path) && !suffixMatch(".pak", entry->path)
+		&& !suffixMatch(".m3u", entry->path) && !suffixMatch(".cue", entry->path) && !suffixMatch(".gdi", entry->path); // (a game of several files)
 }
 static int deleteGame(Entry* entry) { // 1 if the file is gone
 	if (!canDelete(entry)) return 0;
@@ -1440,14 +1446,18 @@ static int confirmDelete(Entry* entry, SDL_Surface* screen, int* show_setting) {
 	int dirty = 1, answer = 0, done = 0;
 	char msg[MAX_PATH + 200];
 	if (canDelete(entry)) snprintf(msg, sizeof(msg), "Delete this game?\n\n%s\n\nThe file is removed from the card.\nSaves and save states are kept.", entry->name);
-	else snprintf(msg, sizeof(msg), "This one can't be deleted here.\n\nA game made of several files\n(discs, an .m3u) is deleted\non a computer.");
+	else snprintf(msg, sizeof(msg), "This one can't be deleted here.\n\nA game made of several files\n(discs, .cue, .m3u) is deleted\non a computer.");
 	int can = canDelete(entry);
 	while (!done) {
 		GFX_startFrame();
 		PAD_poll();
 		PWR_update(&dirty, show_setting, NULL, NULL);
 		if (PAD_justPressed(BTN_B) || (!can && PAD_justPressed(BTN_A))) done = 1;
-		else if (can && PAD_justPressed(BTN_A)) { answer = deleteGame(entry); done = 1; if (!answer) { snprintf(msg, sizeof(msg), "Couldn't delete it.\n\nThe card may be read-only."); can = 0; done = 0; dirty = 1; } }
+		else if (can && PAD_justPressed(BTN_A)) {
+			answer = deleteGame(entry);
+			if (answer) done = 1;
+			else { snprintf(msg, sizeof(msg), "Couldn't delete it.\n\nThe card may be read-only."); can = 0; dirty = 1; } // (stay: A or B closes it)
+		}
 		if (dirty) {
 			GFX_clearUI(screen);
 			GFX_blitHardwareGroup(screen, *show_setting);
@@ -1522,7 +1532,7 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 					if (d) { SDL_BlitSurface(d, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), y+(row_h-d->h)/2}); SDL_FreeSurface(d); }
 					continue;
 				}
-				char name[COLLECTION_NAME_MAX*2];
+				char name[256]; // (GFX_truncateText wants 256)
 				GFX_truncateText(font.large, names[first+i], name, w * 6 / 10, SCALE1(BUTTON_PADDING*2));
 				SDL_Surface* n = GFX_renderText(font.large, name, selected ? COLOR_BLACK : COLOR_WHITE);
 				if (n) { SDL_BlitSurface(n, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), y+(row_h-n->h)/2}); SDL_FreeSurface(n); }
@@ -1541,21 +1551,24 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 	}
 	return changed;
 }
-static int jumpToTools(void) { // SELECT: the Tools folder from anywhere
+static int jumpToTools(void) { // SELECT: the Tools folder from anywhere. 1 if it opened; 0 changes nothing (no Tools folder at the top)
+	Directory* root = stack->items[0];
+	int at = -1;
+	for (int i=0; i<root->entries->count && at<0; i++) if (!strcmp(((Entry*)root->entries->items[i])->path, SDCARD_PATH "/Tools/" PLATFORM)) at = i;
+	if (at<0) return 0;
 	while (stack->count>1) closeDirectory();
-	for (int i=0; i<top->entries->count; i++) {
-		Entry* entry = top->entries->items[i];
-		if (strcmp(entry->path, SDCARD_PATH "/Tools/" PLATFORM)) continue;
-		top->selected = i;
-		if (i<top->start || i>=top->end) {
-			top->start = clampTop(i, top->entries->count);
-			top->end = MIN(top->entries->count, top->start + MAIN_ROW_COUNT);
-		}
-		openDirectory(entry->path, 0);
-		return 1;
+	Entry* entry = top->entries->items[at];
+	top->selected = at;
+	if (at<top->start || at>=top->end) {
+		top->start = clampTop(at, top->entries->count);
+		top->end = MIN(top->entries->count, top->start + MAIN_ROW_COUNT);
 	}
-	return 0;
+	openDirectory(entry->path, 0);
+	return 1;
 }
+// Y: a random game from the whole library (a random folder at the root or in a folder of folders, in proportion to what
+// it holds). 1 if it found one: the selection, and maybe the open folder, changed. 0: none anywhere, and the launcher is
+// left at the top (the way this starts is by going there).
 static int jumpToRandomGame(void) {
 	while (stack->count>1) closeDirectory(); // from the top, wherever the cursor was: it picks from the whole library
 	int depth = stack->count;
@@ -1592,7 +1605,7 @@ int main (int argc, char *argv[]) {
 	// unsigned long main_begin = SDL_GetTicks();
 	// unsigned long first_draw = 0;
 	
-	if (autoResume()) return 0; // nothing to do
+	if (autoResume()) { unlink(SWITCH_PATH); return 0; } // (a request left behind must not start a game on some later boot)
 	
 	simple_mode = exists(SIMPLE_MODE_PATH);
 	loadPlayed();
@@ -1646,8 +1659,12 @@ int main (int argc, char *argv[]) {
 		if (rel[0] && exists(sd_path) && prefixMatch(ROMS_PATH, sd_path) && exists(emu_path)) {
 			readyResumePath(sd_path, ENTRY_ROM);
 			should_resume = can_resume;
+			char m3u[MAX_PATH];
+			int several_discs = suffixMatch(".m3u", sd_path) || hasM3u(sd_path, m3u);
 			openRom(sd_path, NULL);
-			if (slot>=0) putInt(RESUME_SLOT_PATH, slot); // (openRom decided on the launcher's own slot: the Switcher knows better)
+			// openRom decided on the launcher's own slot; the Switcher knows which state is newest. A multi-disc game keeps
+			// the launcher's slot when it has one: that is the slot whose disc openRom just chose.
+			if (slot>=0 && !(several_discs && can_resume)) putInt(RESUME_SLOT_PATH, slot);
 		}
 	}
 	

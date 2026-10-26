@@ -1076,13 +1076,11 @@ static int sshOn(void) {
 	on = 0;
 	static const char* files[] = { "/proc/net/tcp", "/proc/net/tcp6" };
 	for (int i=0; i<2 && !on; i++) {
-		FILE* f = fopen(files[i], "r"); // read in pieces: a file in /proc says its size is 0 (allocFile would see nothing)
+		FILE* f = fopen(files[i], "r"); // a line at a time: a file in /proc says its size is 0 (allocFile would see nothing), and a long table must not be cut short
 		if (!f) continue;
-		char text[16384];
-		size_t n = fread(text, 1, sizeof(text)-1, f);
+		char line[256];
+		while (!on && fgets(line, sizeof(line), f)) on = Net_listening(line, 22);
 		fclose(f);
-		text[n] = '\0';
-		on = Net_listening(text, 22);
 	}
 	return on;
 }

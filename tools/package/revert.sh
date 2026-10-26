@@ -6,7 +6,7 @@
 # Files that install.sh only ADDED (new tools, the fallback font) are left in place: delete them by hand.
 set -e
 card=${1:?usage: revert.sh /path/to/the/card}
-backups=$(command ls -dtr "$card"/.system/rgb30/backup-before-fork-* 2>/dev/null || true)
+backups=$(for d in "$card"/.system/rgb30/backup-before-fork-*; do [ -d "$d" ] && printf '%s\n' "$d"; done | sort) # by name: the names are time stamps
 [ -n "$backups" ] || { echo "no backup-before-fork-* folder on $card"; exit 1; }
 seen=$(mktemp)
 trap 'rm -f "$seen"' EXIT
@@ -17,7 +17,7 @@ echo "$backups" | while IFS= read -r backup; do
 		grep -qxF "$rel" "$seen" && continue # an older backup already had it
 		echo "$rel" >> "$seen"
 		mkdir -p "$(dirname "$card/$rel")" # (a folder that was moved into the backup, like the old Power tool)
-		cp "$backup/$rel" "$card/$rel"
+		cp "$backup/$rel" "$card/$rel.new" && mv "$card/$rel.new" "$card/$rel" # (a running program can't be overwritten, but it can be replaced)
 		echo "  restored: $rel"
 	done
 done

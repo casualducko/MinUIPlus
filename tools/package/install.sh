@@ -12,23 +12,36 @@ backup="$card/.system/rgb30/backup-before-fork-$stamp"
 mkdir -p "$backup"
 echo "backing up to $backup"
 
-# only files this package ships AND the card already has are replaced
+# Files this package ships are replaced when the card already has them; the new tools and a few other files
+# (the case list below) are added even when it does not. A copy that fails (card full, read-only) is reported
+# and stops the install before the version note is written.
 cd "$here"
-find .system Tools Emus -type f | while read f; do
+failed=$(mktemp)
+trap 'rm -f "$failed"' EXIT
+copy() { # file from the package, then in place in one step (a running program can't be overwritten, but it can be replaced)
+	if cp "$1" "$card/$1.new" && mv "$card/$1.new" "$card/$1"; then
+		case "$1" in *.elf|*.sh) chmod +x "$card/$1" 2>/dev/null || true ;; esac
+		return 0
+	fi
+	rm -f "$card/$1.new"
+	echo "  FAILED: $1"
+	echo 1 > "$failed"
+	return 1
+}
+find .system Tools Emus -type f | while IFS= read -r f; do
 	case "$f" in
 		Tools/rgb30/Romulus.pak/*|Tools/rgb30/Switcher.pak/*|Tools/rgb30/PicoSearch.pak/*|.system/res/fallback.ttf|.system/res/fallback-OFL.txt|Tools/rgb30/Stats.pak/*|Tools/rgb30/Themes.pak/*|Tools/rgb30/ASCIIArt.pak/*|Tools/rgb30/Info.pak/*|Tools/rgb30/Update.pak/*|Tools/rgb30/Screenshots.pak/*|Tools/rgb30/Settings.pak/*|Tools/rgb30/SSH.pak/*|Tools/rgb30/Wi-Fi.pak/wifi.elf|Tools/rgb30/Wi-Fi.pak/launch-old.sh) # a new tool: added (and replaced next time), nothing to back up the first time
 			mkdir -p "$card/$(dirname "$f")"
 			if [ -f "$card/$f" ]; then mkdir -p "$backup/$(dirname "$f")"; cp -p "$card/$f" "$backup/$f"; fi
-			cp "$f" "$card/$f.new" && mv "$card/$f.new" "$card/$f"; chmod +x "$card/$f" 2>/dev/null || true
-			echo "  added/replaced: $f"
+			copy "$f" && echo "  added/replaced: $f"
 			continue ;;
 	esac
 	[ -f "$card/$f" ] || { echo "  skip (not on the card): $f"; continue; }
 	mkdir -p "$backup/$(dirname "$f")"
 	cp -p "$card/$f" "$backup/$f"
-	cp "$f" "$card/$f.new" && mv "$card/$f.new" "$card/$f" # a running program can't be overwritten in place, but it can be replaced
-	echo "  replaced: $f"
+	copy "$f" && echo "  replaced: $f"
 done
+[ -s "$failed" ] && { echo "some files could not be copied: the install is incomplete (nothing was marked as installed). $backup has what it replaced."; exit 1; }
 # tools that were renamed: the old folder goes into the backup, so the Tools list shows one
 for old in Power:Settings Theme:Themes TitleArt:ASCIIArt; do
 	name=${old%%:*}; now=${old##*:}

@@ -146,12 +146,21 @@ int Update_pathsSafe(const char* listing) {
 			if (p[0]=='/') return 0;
 			for (size_t i=0; i<len; i++) {
 				if (p[i]=='.' && i+1<len && p[i+1]=='.' && (i==0 || p[i-1]=='/') && (i+2==len || p[i+2]=='/')) return 0;
-				if (p[i]=='\0') return 0;
 			}
 		}
 		p += len + (nl ? 1 : 0);
 	}
 	return lines>0;
+}
+int Update_noLinks(const char* listing) { // `tar tv`: each line starts with the entry type, l a symbolic link, h a hard link
+	if (!listing) return 0;
+	for (const char* p = listing; *p; ) {
+		if (*p=='l' || *p=='h') return 0;
+		const char* nl = strchr(p, '\n');
+		if (!nl) break;
+		p = nl + 1;
+	}
+	return 1;
 }
 int Update_repoValid(const char* repo) {
 	if (!repo || !*repo) return 0;

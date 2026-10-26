@@ -247,4 +247,4 @@ int InfoView_poll(void) { // 1 when the Wi-Fi row changed and the screen needs d
 	}
 	return 0;
 }
-const char* InfoView_wifiHint(void) { return (power_pid || wifi_radio_on()) ? (power_pid && power_on ? "WI-FI ON" : "WI-FI OFF") : "WI-FI ON"; }
+const char* InfoView_wifiHint(void) { return power_pid ? "WI-FI..." : wifi_radio_on() ? "WI-FI OFF" : "WI-FI ON"; } // what X will do (a switch in progress: it is still working)

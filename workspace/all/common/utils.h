@@ -13,6 +13,8 @@ int hide(char* file_name);
 void getDisplayName(const char* in_name, char* out_name);
 void getEmuName(const char* in_name, char* out_name);
 void getEmuPath(char* emu_name, char* pak_path);
+int copyFile(const char* from, const char* to); // 0 if the whole file was written; a half-written copy is removed
+void shellQuote(const char* in, char* out, size_t size); // 'it'\''s' (a path that goes into a command line)
 int Emu_isNative(const char* launch_path); // 1 if that emulator pak's launch.sh does not run minarch (the native PICO-8): it never records play time itself, so the launcher notes the start
 
 void normalizeNewline(char* line);

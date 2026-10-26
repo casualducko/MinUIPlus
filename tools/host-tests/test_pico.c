@@ -44,6 +44,10 @@ int main(int argc, char** argv) {
 	const char* torn = "pdat=[ ['1', 7, `Cut off";
 	CHECK(bbs_parse_search(torn, strlen(torn), c, 4)==0, "a page cut in the middle of a row: no row");
 	free(page);
+	const char* esc = "pdat=[ ['1', 7, `Caf\\u00e9\\nDeluxe \\`x\\``,\"t\",1,1,\"2020-01-01 00:00:00\",1,\"a\",\"x\",1,\"y\",5,1,0,7,2,'0',[],0,1,,``,``] ];";
+	CHECK(bbs_parse_search(esc, strlen(esc), c, 4)==1 && !strcmp(c[0].title, "Caf\xc3\xa9\nDeluxe `x`"), "JavaScript escapes: \\u00e9, \\n and \\` in a title");
+	const char* odd_row = "pdat=[ ['1', 7, `One`,\"t\",1,1,\"d\",1,\"a\",\"x\",1,\"y\",5,1,0,7,2,'0',[],0,1,,``,``],\n\t\t['2', {weird:1}, `Two`,\"t\" ],\n\t\t['3', 9, `Three`,\"t\",1,1,\"d\",1,\"a\",\"x\",1,\"y\",5,1,0,7,2,'0',[],0,1,,``,``] ];";
+	CHECK(bbs_parse_search(odd_row, strlen(odd_row), c, 8)==2 && !strcmp(c[0].title, "One") && !strcmp(c[1].title, "Three"), "a row that makes no sense is skipped, the rows after it are kept");
 
 	page = slurp(dir, "bbs_thread.html", &len);
 	char path[256];
@@ -125,6 +129,8 @@ int main(int argc, char** argv) {
 	CHECK(!strcmp(name, "a b c d e f g h i j.p8.png"), "characters a FAT card dislikes become spaces");
 	bbs_file_name("Pico de Pon", "(41282)", name, sizeof(name));
 	CHECK(!strcmp(name, "Pico de Pon (41282).p8.png"), "a suffix goes before the extension");
+	bbs_file_name("...and so on", NULL, name, sizeof(name));
+	CHECK(!strcmp(name, "and so on.p8.png"), "a leading dot would hide the file: it goes");
 	bbs_file_name("...", NULL, name, sizeof(name));
 	CHECK(!strcmp(name, "cart.p8.png"), "nothing left: cart");
 	char longt[400];

@@ -18,6 +18,14 @@ now=$(ssh -n $K root@$ip 'md5sum /flash/rk3566-rgb30-linux.dtb' | cut -d' ' -f1)
 b=$here/backup-$ip-$(date +%Y%m%d-%H%M%S); mkdir -p "$b"
 scp $K root@$ip:/flash/rk3566-rgb30-linux.dtb "$b/" >/dev/null
 scp $K "$src" root@$ip:/tmp/rgb30.dtb.tmp >/dev/null
+sent=$(ssh -n $K root@$ip 'md5sum /tmp/rgb30.dtb.tmp' | cut -d' ' -f1)
+[ "$sent" = "$want" ] || { echo "the file did not arrive whole ($sent): /flash was not touched"; exit 1; } # never swap in a damaged tree
 ssh -n $K root@$ip 'mount -o remount,rw /flash && cp /tmp/rgb30.dtb.tmp /flash/rk3566-rgb30-linux.dtb.new && sync && mv /flash/rk3566-rgb30-linux.dtb.new /flash/rk3566-rgb30-linux.dtb && sync; mount -o remount,ro /flash'
 got=$(ssh -n $K root@$ip 'md5sum /flash/rk3566-rgb30-linux.dtb' | cut -d' ' -f1)
-[ "$got" = "$want" ] && echo "done ($mode); reboot to use it" || { echo "checksum mismatch after writing: $got"; exit 1; }
+if [ "$got" = "$want" ]; then echo "done ($mode); reboot to use it"; exit 0; fi
+echo "checksum mismatch after writing ($got): putting back what was there"
+scp $K "$b/rk3566-rgb30-linux.dtb" root@$ip:/tmp/rgb30.dtb.back >/dev/null
+ssh -n $K root@$ip 'mount -o remount,rw /flash && cp /tmp/rgb30.dtb.back /flash/rk3566-rgb30-linux.dtb.new && sync && mv /flash/rk3566-rgb30-linux.dtb.new /flash/rk3566-rgb30-linux.dtb && sync; mount -o remount,ro /flash'
+back=$(ssh -n $K root@$ip 'md5sum /flash/rk3566-rgb30-linux.dtb' | cut -d' ' -f1)
+[ "$back" = "$now" ] && echo "restored the file that was there" || echo "RESTORING FAILED ($back): the backup copy is in $b; copy it to /flash/rk3566-rgb30-linux.dtb by hand"
+exit 1

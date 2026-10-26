@@ -59,6 +59,10 @@ int main(void) {
 	CHECK(!Update_pathsSafe("a/..\n"), "a trailing ..");
 	CHECK(Update_pathsSafe("a/..b/c...d/.hidden\n"), "dots in names are fine");
 	CHECK(!Update_pathsSafe("") && !Update_pathsSafe(NULL), "an empty listing is not a package");
+	CHECK(Update_noLinks("-rwxr-xr-x  0 u g 1234 Oct 25 22:00 install.sh\ndrwxr-xr-x  0 u g 0 Oct 25 22:00 Tools/\n"), "files and folders only: no links");
+	CHECK(!Update_noLinks("-rw-r--r-- 0 u g 1 Oct 25 22:00 a\nlrwxr-xr-x 0 u g 0 Oct 25 22:00 b -> /\n"), "a symbolic link");
+	CHECK(!Update_noLinks("hrw-r--r-- 0 u g 0 Oct 25 22:00 b link to a\n"), "a hard link");
+	CHECK(!Update_noLinks(NULL), "no listing: not safe");
 
 	CHECK(Update_repoValid("casualducko/MinUIPlus") && Update_repoValid("a-b/c_d.e"), "good repos");
 	CHECK(!Update_repoValid("") && !Update_repoValid("noslash") && !Update_repoValid("a/b/c") && !Update_repoValid("/b") && !Update_repoValid("a/"), "bad shapes");

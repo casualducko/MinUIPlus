@@ -21,16 +21,16 @@
 #include "bbs.h"
 #include "titleart_gen.h"
 
-#ifndef MAX
-#define MAX(a,b) ((a)>(b)?(a):(b))
+#ifndef MIN
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #endif
 
 #define CFG_PATH		USERDATA_PATH "/pico.cfg"			// folder=Roms/Pico-8 (P8-NATIVE)  (optional)
 #define PLAY_NEXT_PATH	"/tmp/pico-play" // the launch script runs this after the tool quits
 #define DOWNLOAD_TMP	USERDATA_PATH "/pico-download.tmp"
-#define MAX_CARTS		(BBS_PAGE_SIZE * 4)
-#define MAX_PAGES		3 // pages of 30 fetched for one search
+#define MAX_PAGES		3 // pages of 30 fetched for one list
+#define MAX_CARTS		(BBS_PAGE_SIZE * MAX_PAGES)
+#define LEDGER_PATH		USERDATA_PATH "/pico-downloaded.txt" // "<thread>\t<file name>" for each cart downloaded
 
 typedef enum { SCR_HOME, SCR_TAGS, SCR_LIST, SCR_OSK } Screen;
 typedef enum { JOB_NONE, JOB_PAGE, JOB_THREAD, JOB_CART } JobKind;
@@ -78,7 +78,6 @@ static uint32_t dl_drawn_at = 0;
 static ModalKind modal = MODAL_NONE;
 static char modal_msg[320];
 static uint32_t modal_until = 0;
-static int confirm_again = 0;	// the confirm is "download it again?" for dl_cart
 
 ///////////////////////////////
 // where the carts go
@@ -119,12 +118,44 @@ static void dest_dir(char* dir, size_t cap) {
 		&& dir_exists(SDCARD_PATH "/Tools/" PLATFORM "/Splore.pak/pico-8");
 	snprintf(dir, cap, "%s/%s", ROMS_PATH, native ? "Pico-8 (P8-NATIVE)" : "Pico-8 (P8)");
 }
-static int is_saved(const BbsCart* c) {
-	char dir[MAX_PATH], name[256], path[MAX_PATH+256];
-	dest_dir(dir, sizeof(dir));
+// Is this cart on the card? Carts have the same titles (there are several "Celeste"), so the thread number is what
+// counts: the ledger says which file came from which thread. A file named for the title that no ledger line claims
+// for another thread (one downloaded before the ledger existed) counts too.
+static int is_saved(const BbsCart* c, const char* ledger, const char* dir) {
+	char file[256], path[MAX_PATH+256], name[256];
 	bbs_file_name(c->title, NULL, name, sizeof(name));
+	int claimed_by_other = 0;
+	for (const char* line = ledger; line && *line; ) {
+		const char* end = strchr(line, '\n');
+		size_t n = end ? (size_t)(end - line) : strlen(line);
+		long tid = atol(line);
+		const char* tab = memchr(line, '\t', n);
+		if (tab && tid>0) {
+			snprintf(file, sizeof(file), "%.*s", (int)(n - (tab+1-line)), tab+1);
+			if (tid==c->tid) {
+				snprintf(path, sizeof(path), "%s/%s", dir, file);
+				if (exists(path)) return 1;
+			}
+			else if (!strcmp(file, name)) claimed_by_other = 1;
+		}
+		line += n + (end ? 1 : 0);
+	}
+	if (claimed_by_other) return 0;
 	snprintf(path, sizeof(path), "%s/%s", dir, name);
 	return exists(path);
+}
+static void refresh_saved(void) { // once per page and download, not on every redraw
+	char dir[MAX_PATH];
+	dest_dir(dir, sizeof(dir));
+	char* ledger = allocFile(LEDGER_PATH);
+	for (int i=0; i<cart_count; i++) carts[i].saved = is_saved(&carts[i], ledger ? ledger : "", dir);
+	free(ledger);
+}
+static void ledger_add(long tid, const char* file) {
+	FILE* f = fopen(LEDGER_PATH, "a");
+	if (!f) return;
+	fprintf(f, "%ld\t%s\n", tid, file);
+	fclose(f);
 }
 
 ///////////////////////////////
@@ -133,24 +164,14 @@ static int is_saved(const BbsCart* c) {
 static char play_cmd[MAX_PATH*2+64];
 static char play_rom[MAX_PATH];
 static int play_native = 0; // the emulator does not record play time itself
-static void shell_quote(const char* in, char* out, size_t size) { // 'it'\''s'
-	size_t n = 0;
-	out[n++] = '\'';
-	for (; *in && n+5<size; in++) {
-		if (*in=='\'') { memcpy(out+n, "'\\''", 4); n += 4; }
-		else out[n++] = *in;
-	}
-	out[n++] = '\'';
-	out[n] = '\0';
-}
 static int make_play_cmd(const char* rom_path) { // 1 if the folder has an emulator on the card
 	char emu_name[MAX_PATH], emu_path[MAX_PATH];
 	getEmuName(rom_path, emu_name);
 	getEmuPath(emu_name, emu_path);
 	if (!emu_path[0] || !exists(emu_path)) return 0;
 	char a[MAX_PATH*2], b[MAX_PATH*2];
-	shell_quote(emu_path, a, sizeof(a));
-	shell_quote(rom_path, b, sizeof(b));
+	shellQuote(emu_path, a, sizeof(a));
+	shellQuote(rom_path, b, sizeof(b));
 	snprintf(play_cmd, sizeof(play_cmd), "%s %s\n", a, b);
 	snprintf(play_rom, sizeof(play_rom), "%s", rom_path);
 	play_native = Emu_isNative(emu_path);
@@ -273,13 +294,13 @@ static void new_search(void) {
 }
 static void finish_page(void) {
 	const char* err = bbs_job_error(&job);
-	if (err) { page_failed = 1; exhausted = 1; if (cart_count==0) say(err, 0); return; }
+	if (err) { page_failed = 1; say(err, cart_count ? 2500 : 0); return; } // (a later page that fails can be asked for again with A)
 	size_t len = 0;
 	char* body = slurp(list_tmp, &len);
 	BbsCart* got = malloc(sizeof(BbsCart) * BBS_PAGE_SIZE * 2);
 	int n = (body && got) ? bbs_parse_search(body, len, got, BBS_PAGE_SIZE * 2) : -1;
 	free(body);
-	if (n<0) { free(got); page_failed = 1; exhausted = 1; if (cart_count==0) say("The BBS page made no sense", 0); return; }
+	if (n<0) { free(got); page_failed = 1; say("The BBS page made no sense", cart_count ? 2500 : 0); return; }
 	char keep[16] = "";
 	if (sel>=0 && sel<cart_count) snprintf(keep, sizeof(keep), "%s", carts[sel].pid);
 	for (int i=0; i<n && cart_count<MAX_CARTS; i++) {
@@ -290,6 +311,7 @@ static void finish_page(void) {
 	free(got);
 	bbs_sort(carts, cart_count, query, sort_mode);
 	if (keep[0]) for (int i=0; i<cart_count; i++) if (!strcmp(carts[i].pid, keep)) { sel = i; break; }
+	refresh_saved();
 	pages_loaded++;
 	if (n<BBS_PAGE_SIZE || pages_loaded>=MAX_PAGES || cart_count>=MAX_CARTS) exhausted = 1;
 	if (!list_is_search && browse_kind==BBS_BROWSE_RANDOM) exhausted = 1; // a shuffle is one page; Y for another
@@ -298,33 +320,19 @@ static void finish_page(void) {
 static void start_cart_download(void) { // the thread page said where the cart is
 	char url[512];
 	bbs_cart_url(url, sizeof(url), dl_path);
-	if (bbs_job_start(&job, url, DOWNLOAD_TMP, 1)) { say("Couldn't start curl", 0); return; }
+	if (bbs_job_start(&job, url, DOWNLOAD_TMP, 1)) { PWR_enableAutosleep(); say("Couldn't start curl", 0); return; }
 	job_kind = JOB_CART;
-	PWR_disableAutosleep();
 	dirty = 1;
 }
 static void finish_thread(void) {
 	const char* err = bbs_job_error(&job);
-	if (err) { say(err, 0); return; }
+	if (err) { PWR_enableAutosleep(); say(err, 0); return; }
 	size_t len = 0;
 	char* body = slurp(list_tmp, &len);
 	int ok = body && bbs_parse_cart_path(body, len, dl_path, sizeof(dl_path))==0;
 	free(body);
-	if (!ok) { say("That post has no cart file", 0); return; }
+	if (!ok) { PWR_enableAutosleep(); say("That post has no cart file", 0); return; }
 	start_cart_download();
-}
-static int copy_file(const char* from, const char* to) {
-	FILE* in = fopen(from, "rb");
-	if (!in) return -1;
-	FILE* out = fopen(to, "wb");
-	if (!out) { fclose(in); return -1; }
-	char buf[16384];
-	size_t n;
-	int bad = 0;
-	while ((n = fread(buf, 1, sizeof(buf), in))>0) if (fwrite(buf, 1, n, out)!=n) { bad = 1; break; }
-	fclose(in);
-	if (fclose(out)) bad = 1;
-	return bad ? -1 : 0;
 }
 static void finish_cart(void) {
 	const char* err = bbs_job_error(&job);
@@ -347,10 +355,12 @@ static void finish_cart(void) {
 	if (rename(DOWNLOAD_TMP, path)) {
 		char part[MAX_PATH+270];
 		snprintf(part, sizeof(part), "%s/.pico-download.part", dir);
-		if (copy_file(DOWNLOAD_TMP, part) || rename(part, path)) { remove(part); unlink(DOWNLOAD_TMP); say("Couldn't save the file (card full?)", 0); return; }
+		if (copyFile(DOWNLOAD_TMP, part) || rename(part, path)) { remove(part); unlink(DOWNLOAD_TMP); say("Couldn't save the file (card full?)", 0); return; }
 		unlink(DOWNLOAD_TMP);
 	}
 	sync();
+	ledger_add(dl_cart.tid, name);
+	refresh_saved();
 	if (TAGen_showArt()) TAGen_forRom(path); // the new cart gets its title picture at once (see Tools > ASCIIArt)
 	const char* folder = strrchr(dir, '/');
 	char place[128];
@@ -369,7 +379,7 @@ static void finish_cart(void) {
 }
 
 static void start_download(const BbsCart* c) {
-	dl_cart = *c;
+	if (c!=&dl_cart) dl_cart = *c;
 	char url[512];
 	bbs_thread_url(url, sizeof(url), c->tid);
 	stop_job();
@@ -452,16 +462,15 @@ static void draw_list(int ow) {
 	}
 	else {
 		int rows = cart_rows();
-		int extra = (!exhausted && !page_failed) ? 1 : 0; // a last row while more is loading
+		int extra = exhausted ? 0 : 1; // a last row: more is loading, or the next page failed (A tries again)
 		for (int j=0; j<rows && scroll+j<cart_count+extra; j++) {
 			int i = scroll+j;
-			if (i>=cart_count) { draw_row(j, 0, "Loading more...", NULL, 1); continue; }
+			if (i>=cart_count) { draw_row(j, i==sel, page_failed ? "Couldn't load more. Press A to retry" : "Loading more...", NULL, !page_failed); continue; }
 			BbsCart* c = &carts[i];
 			char right[80];
-			int saved = is_saved(c);
-			if (saved) snprintf(right, sizeof(right), "SAVED");
+			if (c->saved) snprintf(right, sizeof(right), "SAVED");
 			else snprintf(right, sizeof(right), "*%d", c->stars);
-			draw_row(j, i==sel, c->title, right, saved && i!=sel);
+			draw_row(j, i==sel, c->title, right, c->saved && i!=sel);
 		}
 		if (sel>=0 && sel<cart_count) { // under the list: the selected cart's tags, then who made it and when
 			BbsCart* c = &carts[sel];
@@ -580,6 +589,7 @@ static int moved(int* s, int count, int step) {
 
 static int net_wait_pending = 0; // a search is waiting for the network
 static void begin_load(void) { // the list described by list_is_search, query, browse_kind and browse_tag (waits for the network if there is none yet)
+	stop_job();
 	if (!net_managed() || network_ready()) { net_wait_pending = 0; new_search(); return; }
 	cart_count = 0;
 	cur_screen = SCR_LIST;
@@ -630,7 +640,7 @@ static void handle_modal_input(void) {
 		dirty = 1;
 		return;
 	}
-	if (PAD_justPressed(BTN_A)) { modal = MODAL_NONE; if (confirm_again) start_download(&dl_cart); dirty = 1; }
+	if (PAD_justPressed(BTN_A)) { modal = MODAL_NONE; start_download(&dl_cart); dirty = 1; } // (the only confirm is: another copy of dl_cart?)
 	else if (PAD_justPressed(BTN_B)) { modal = MODAL_NONE; dirty = 1; }
 }
 
@@ -646,10 +656,10 @@ static void handle_input(void) {
 		if (PAD_justRepeated(BTN_DPAD_UP)) { moved(&home_sel, HOME_ROWS, -1); dirty = 1; }
 		else if (PAD_justRepeated(BTN_DPAD_DOWN)) { moved(&home_sel, HOME_ROWS, 1); dirty = 1; }
 		else if (PAD_justPressed(BTN_A)) {
-			static const BbsBrowse kinds[] = { BBS_BROWSE_FEATURED, BBS_BROWSE_FEATURED, BBS_BROWSE_POPULAR, BBS_BROWSE_NEWEST, BBS_BROWSE_RANDOM };
+			static const BbsBrowse kinds[] = { BBS_BROWSE_FEATURED, BBS_BROWSE_POPULAR, BBS_BROWSE_NEWEST, BBS_BROWSE_RANDOM }; // rows 1 to 4
 			if (home_sel==0) { osk_x = osk_y = 0; cur_screen = SCR_OSK; }
 			else if (home_sel==HOME_ROWS-1) cur_screen = SCR_TAGS;
-			else { list_is_search = 0; browse_kind = kinds[home_sel]; browse_tag[0] = '\0'; list_back = SCR_HOME; begin_load(); }
+			else { list_is_search = 0; browse_kind = kinds[home_sel-1]; browse_tag[0] = '\0'; list_back = SCR_HOME; begin_load(); }
 			dirty = 1;
 		}
 		return;
@@ -698,6 +708,7 @@ static void handle_input(void) {
 		return;
 	}
 	if (PAD_justPressed(BTN_X) || PAD_justPressed(BTN_MENU)) { // MENU is the Fn button on this device
+		stop_job(); net_state = NET_READY; net_wait_pending = 0; // (nothing may start the old search behind the keyboard)
 		snprintf(osk_text, sizeof(osk_text), "%s", query);
 		osk_x = osk_y = 0;
 		cur_screen = SCR_OSK;
@@ -712,7 +723,7 @@ static void handle_input(void) {
 		sel = scroll = 0; // the top of the new order is the point of changing it
 		dirty = 1;
 	}
-	int extra = (!exhausted && !page_failed) ? 1 : 0;
+	int extra = exhausted ? 0 : 1;
 	int count = cart_count + extra;
 	if (count>0) {
 		if (PAD_justRepeated(BTN_DPAD_UP)) { moved(&sel, count, -1); dirty = 1; }
@@ -722,14 +733,13 @@ static void handle_input(void) {
 		keep_visible(&sel, &scroll, count, cart_rows());
 	}
 	if (PAD_justPressed(BTN_A)) {
-		if (cart_count==0 || sel>=cart_count) {
-			if (job_kind==JOB_NONE && (page_failed || cart_count==0) && net_state==NET_READY) { page_failed = 0; if (pages_loaded==0) new_search(); else load_next_page(); }
+		if (cart_count==0 || sel>=cart_count) { // nothing here, or the "more" row: A retries a page that failed
+			if (job_kind==JOB_NONE && page_failed && net_state==NET_READY) { page_failed = 0; if (pages_loaded==0) new_search(); else load_next_page(); }
 		}
-		else if (is_saved(&carts[sel])) {
+		else if (carts[sel].saved) {
 			dl_cart = carts[sel];
-			snprintf(modal_msg, sizeof(modal_msg), "You already have this one.\nDownload it again?");
+			snprintf(modal_msg, sizeof(modal_msg), "You already have this one.\nGet another copy?");
 			modal = MODAL_CONFIRM;
-			confirm_again = 1;
 		}
 		else start_download(&carts[sel]);
 		dirty = 1;
@@ -775,10 +785,10 @@ int main(int argc, char* argv[]) {
 		if (job_kind!=JOB_NONE && bbs_job_poll(&job)) {
 			JobKind kind = job_kind;
 			job_kind = JOB_NONE;
+			bbs_job_cleanup(&job); // before the handler: finish_thread starts the cart's job, whose files these would be
 			if (kind==JOB_PAGE) finish_page();
 			else if (kind==JOB_THREAD) finish_thread();
 			else if (kind==JOB_CART) finish_cart();
-			bbs_job_cleanup(&job);
 			dirty = 1;
 		}
 		// the rest of the search is fetched in the background while the list is being read

@@ -200,7 +200,7 @@ int main(int argc, char* argv[]) {
 	int quit = 0, dirty = 1, show_setting = 0;
 	int state = ST_HOME;
 	Job* jobs = NULL;
-	int job_count = 0, job_done = 0, job_failed = 0;
+	int job_count = 0, job_done = 0, job_failed = 0, job_skipped = 0;
 	char note[160] = "";
 
 	while (!quit) {
@@ -226,7 +226,7 @@ int main(int argc, char* argv[]) {
 				int redo = PAD_justPressed(BTN_X); // X: every game without art, and this tool's tiles again; A: only the games without art
 				free(jobs);
 				jobs = calloc(MAX_MADE + MAX_GAMES, sizeof(Job));
-				job_count = job_done = job_failed = 0;
+				job_count = job_done = job_failed = job_skipped = 0;
 				if (jobs) {
 					for (int i=0; i<game_count; i++) {
 						if (games[i].has_art) continue;
@@ -259,7 +259,7 @@ int main(int argc, char* argv[]) {
 				int cancelled = job_done<job_count;
 				saveMade();
 				PWR_enableAutosleep();
-				int made_ok = job_done - job_failed;
+				int made_ok = job_done - job_failed - job_skipped;
 				snprintf(note, sizeof(note), "%s %i tile%s.", cancelled ? "Stopped after" : "Made", made_ok, made_ok==1 ? "" : "s");
 				if (job_failed) snprintf(note + strlen(note), sizeof(note) - strlen(note), "\n%i failed.", job_failed);
 				state = ST_DONE;
@@ -276,7 +276,7 @@ int main(int argc, char* argv[]) {
 				TA_badge(j->folder, badge, sizeof(badge));
 				int skip = exists(j->art) && madeIndex(j->art)<0; // a picture that appeared since the scan is somebody's: left alone
 				int ok = skip ? 0 : TAGen_write(j->file, badge, j->art)==0;
-				if (skip) {}
+				if (skip) job_skipped++; // not made, and not a failure
 				else if (ok) {
 					long mt = fileMtime(j->art);
 					int mi = madeIndex(j->art);

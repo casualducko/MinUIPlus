@@ -1,6 +1,6 @@
 # CPU frequency scaling on the RGB20SX (findings, 2026-10-25)
 
-**Status: cause found, fix written, nothing changed on the device.** Testing needs a change to TF1, which waits for an explicit go-ahead.
+**Status: fixed and tested on the device (2026-10-25).** The unit has a SYR827 regulator at 0x40, not the TCS4525 at 0x1c the RGB30 device tree names; the patched device tree is on `/flash` and `moss/` has the files and the script (`moss/apply-dtb.sh <ip> [revert]`). A Moss update would put the old tree back until `moss/0004` is built into an image.
 
 ## What is wrong
 - The CPU stays at 1.416 GHz: `/sys/devices/system/cpu/cpu0/cpufreq` does not exist.
@@ -48,8 +48,8 @@ Change the `vdd_cpu` node in the device tree (everything else stays, including t
 
 ## Log
 - 2026-10-25 19:39: full copy of `/flash` saved to `~/powkiddy-rgb20sx/backups/tf1-flash-20261025/` (11 files, 220 MB, md5 list beside it, all verified).
-- 2026-10-25 ~19:45: `rgb20sx-syr827.dtb` written over `/flash/rk3566-rgb30-linux.dtb` over SSH (remount rw, copy, sync, remount ro; md5 `a9fc83cf...` matches). The device was not rebooted by me; the result is unknown.
-- Roll back over SSH: `~/powkiddy-rgb20sx/tf1/revert-dtb.sh <device ip>` (md5 of the original: `5afafbc4c9980778b9735a38f62685fb`). If the unit will not boot: TF1 in a card reader, copy `orig-rgb30.dtb` (or the backup's `rk3566-rgb30-linux.dtb`) over that file on the first partition.
-- 2026-10-25 ~19:55: rebooted with the new dtb. **It works.** `dmesg`: `fan53555-regulator 0-0040: FAN53555 Option[8] Rev[1] Detected!`, `vdd_cpu: 712 <--> 1387 mV at 1000 mV`. `/sys/devices/system/cpu/cpu0/cpufreq` now exists (driver `cpufreq-dt`, steps 408/600/816/1104/1416/1608/1800/1992 MHz). MinUI's own code already drives it: the launcher menu sits at 600 MHz (`scaling_setspeed`, governor `userspace`), idle 43.7 C, `vdd_cpu` 0.825 V. Games: menu 600, power-save 1104, normal 1608, performance 1992 MHz (see `PLAT_setCPUSpeed`). Still to check: clocks and temperature during a heavy game, sleep/wake.
 - 2026-10-25 19:43-19:47: heavy-game test (about 3.5 minutes in minarch). Log sampled every ~4 s over SSH: **1992 MHz at 1.150 V throughout the game, 600 MHz at 0.825 V in the menu** (voltage follows the clock); temperature 45 C at start, **51.9 C maximum**, steady. No crash. (The game ran at the top step, so that game's CPU Speed option was Performance; the default is Normal = 1608 MHz.) Still to check: sleep/wake, battery drain against the old fixed clock, and a lighter game on Power Save.
+- 2026-10-25 ~19:45: `rgb20sx-syr827.dtb` written over `/flash/rk3566-rgb30-linux.dtb` over SSH (remount rw, copy, sync, remount ro; md5 `a9fc83cf...` matches). The device was not rebooted by me; the result is unknown.
 - 2026-10-25 19:50: sleep and wake tested by the user: works. After wake: uptime 9 min (no reboot), `vdd_cpu` 0.825 V, 600 MHz, governor `userspace`, no regulator errors in `dmesg`. (The kernel log has no suspend lines at all, since boot runs at `loglevel=0`, so this does not show whether it is a full suspend or a screen-off sleep.)
+- 2026-10-25 ~19:55: rebooted with the new dtb. **It works.** `dmesg`: `fan53555-regulator 0-0040: FAN53555 Option[8] Rev[1] Detected!`, `vdd_cpu: 712 <--> 1387 mV at 1000 mV`. `/sys/devices/system/cpu/cpu0/cpufreq` now exists (driver `cpufreq-dt`, steps 408/600/816/1104/1416/1608/1800/1992 MHz). MinUI's own code already drives it: the launcher menu sits at 600 MHz (`scaling_setspeed`, governor `userspace`), idle 43.7 C, `vdd_cpu` 0.825 V. Games: menu 600, power-save 1104, normal 1608, performance 1992 MHz (see `PLAT_setCPUSpeed`). Still to check: clocks and temperature during a heavy game, sleep/wake.
+- Roll back over SSH: `moss/apply-dtb.sh <device ip> revert` (md5 of the original: `5afafbc4c9980778b9735a38f62685fb`). If the unit will not boot: TF1 in a card reader, copy `orig-rgb30.dtb` (or the backup's `rk3566-rgb30-linux.dtb`) over that file on the first partition.

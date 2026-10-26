@@ -17,6 +17,7 @@ typedef struct {
 	int stars;
 	char tags[128];		// "rpg, earthbound, shooter"
 	int order;			// where it came in the listing (set by the caller, for "as listed")
+	int saved;			// the cart is on the card (set by the caller)
 } BbsCart;
 
 // The base is https://www.lexaloffle.com unless PICO_BBS_BASE says otherwise (tests). Both build into out.

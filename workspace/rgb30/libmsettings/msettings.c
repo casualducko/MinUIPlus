@@ -71,15 +71,33 @@ int getInt(char* path) {
 }
 
 
+static void UsePrivateDefaults(void) { // settings is a malloc'd copy of the defaults (see settings_private)
+	settings = malloc(shm_size);
+	memcpy(settings, &DefaultSettings, shm_size);
+	settings_private = 1;
+}
+static void LoadSavedSettings(void) { // into the shared memory the host just made
+	int fd = open(SettingsPath, O_RDONLY);
+	if (fd>=0) {
+		ssize_t got = read(fd, settings, shm_size);
+		// TODO: use settings->version for future proofing?
+		close(fd);
+		if (got!=shm_size) memcpy(settings, &DefaultSettings, shm_size); // cut short, don't trust half of it
+		SanitizeSettings(settings);
+	}
+	else memcpy(settings, &DefaultSettings, shm_size); // load defaults
+	// these shouldn't be persisted
+	// settings->jack = 0;
+	// settings->hdmi = 0;
+}
+
 void InitSettings(void) {	
 	sprintf(SettingsPath, "%s/msettings.bin", getenv("USERDATA_PATH"));
 	
 	shm_fd = shm_open(SHM_KEY, O_RDWR | O_CREAT | O_EXCL, 0644); // see if it exists
 	if (shm_fd==-1 && errno!=EEXIST) { // the shared memory can't be had at all: private defaults, so nothing dereferences a failed mapping
 		puts("Settings: no shared memory, using defaults");
-		settings = malloc(shm_size);
-		memcpy(settings, &DefaultSettings, shm_size);
-		settings_private = 1;
+		UsePrivateDefaults();
 	}
 	else if (shm_fd==-1) { // already exists
 		puts("Settings client");
@@ -91,34 +109,25 @@ void InitSettings(void) {
 		if (shm_fd!=-1 && fstat(shm_fd, &st)==0 && st.st_size>=shm_size) settings = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
 		if (settings==MAP_FAILED) {
 			puts("Settings: the shared memory is not usable, using defaults");
-			settings = malloc(shm_size);
-			memcpy(settings, &DefaultSettings, shm_size);
-			settings_private = 1;
+			if (shm_fd!=-1) { close(shm_fd); shm_fd = -1; }
+			UsePrivateDefaults();
 		}
 	}
 	else { // host
 		puts("Settings host"); // should always be keymon
 		is_host = 1;
 		// we created it so set initial size and populate
-		ftruncate(shm_fd, shm_size);
-		settings = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-		
-		int fd = open(SettingsPath, O_RDONLY);
-		if (fd>=0) {
-			ssize_t got = read(fd, settings, shm_size);
-			// TODO: use settings->version for future proofing?
-			close(fd);
-			if (got!=shm_size) memcpy(settings, &DefaultSettings, shm_size); // cut short, don't trust half of it
-			SanitizeSettings(settings);
+		settings = MAP_FAILED;
+		if (ftruncate(shm_fd, shm_size)==0) settings = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+		if (settings==MAP_FAILED) { // not sized or mapped: nobody can share it, and a half-made segment would make clients wait
+			puts("Settings: can't set up the shared memory, using defaults");
+			close(shm_fd);
+			shm_fd = -1;
+			shm_unlink(SHM_KEY);
+			is_host = 0;
+			UsePrivateDefaults();
 		}
-		else {
-			// load defaults
-			memcpy(settings, &DefaultSettings, shm_size);
-		}
-		
-		// these shouldn't be persisted
-		// settings->jack = 0;
-		// settings->hdmi = 0;
+		else LoadSavedSettings();
 	}
 	
 	int jack = getInt(JACK_STATE_PATH);
@@ -138,6 +147,7 @@ void QuitSettings(void) {
 	if (is_host) shm_unlink(SHM_KEY);
 }
 static inline void SaveSettings(void) {
+	if (settings_private) return; // the defaults of a client that could not share: never written over the saved settings
 	int fd = open(SettingsPath, O_CREAT|O_WRONLY, 0644);
 	if (fd>=0) {
 		write(fd, settings, shm_size);

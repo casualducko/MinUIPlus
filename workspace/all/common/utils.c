@@ -819,3 +819,34 @@ int Collection_choices(const char* dir, char names[][COLLECTION_NAME_MAX], int m
 	return n;
 }
 // end of the collections code
+
+// Copying and quoting for the tools that download things (Romulus, PicoSearch)
+int copyFile(const char* from, const char* to) { // 0 if the whole file was written; a half-written copy is removed
+	FILE* in = fopen(from, "rb");
+	if (!in) return -1;
+	FILE* out = fopen(to, "wb");
+	if (!out) { fclose(in); return -1; }
+	static char buf[64*1024];
+	size_t n;
+	int ok = 1;
+	while ((n = fread(buf, 1, sizeof(buf), in))>0) {
+		if (fwrite(buf, 1, n, out)!=n) { ok = 0; break; }
+	}
+	if (ferror(in)) ok = 0; // a read error is not the end of the file
+	fclose(in);
+	if (fclose(out)!=0) ok = 0;
+	if (!ok) remove(to);
+	return ok ? 0 : -1;
+}
+void shellQuote(const char* in, char* out, size_t size) { // 'it'\''s': for a path that goes into a command line
+	size_t n = 0;
+	if (size<3) { if (size) out[0] = '\0'; return; }
+	out[n++] = '\'';
+	for (; *in && n+5<size; in++) {
+		if (*in=='\'') { memcpy(out+n, "'\\''", 4); n += 4; }
+		else out[n++] = *in;
+	}
+	out[n++] = '\'';
+	out[n] = '\0';
+}
+// end of the copy and quote code

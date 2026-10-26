@@ -40,6 +40,11 @@ has_route() { ip route 2>/dev/null | grep -q '^default'; } # by whatever interfa
 		# every key in the file (one per line), each added once
 		while IFS= read -r KEY; do
 			[ -n "$KEY" ] || continue
+			# a line that is not a public key (a private key pasted by mistake, a comment) is not installed: passwords are switched off below
+			if command -v ssh-keygen >/dev/null 2>&1 && ! printf '%s\n' "$KEY" | ssh-keygen -l -f /dev/stdin >/dev/null 2>&1; then
+				echo "skipped a line that is not a valid public key"
+				continue
+			fi
 			grep -qxF "$KEY" /storage/.ssh/authorized_keys || echo "$KEY" >> /storage/.ssh/authorized_keys
 		done < ./authorized_key.pub
 		chmod 600 /storage/.ssh/authorized_keys

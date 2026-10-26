@@ -23,7 +23,8 @@ int SW_dropRecent(const char* text, const char* path, char* out, size_t cap) {
 	for (const char* line = text; *line; ) {
 		const char* end = strchr(line, '\n');
 		size_t n = end ? (size_t)(end - line) : strlen(line);
-		int match = n>=plen && !strncmp(line, path, plen) && (n==plen || line[plen]=='\t' || line[plen]=='\r');
+		int match = n>=plen && !strncmp(line, path, plen);
+		for (size_t k=plen; match && k<n && line[k]!='\t'; k++) if (line[k]!=' ' && line[k]!='\r') match = 0; // only spaces or a CR may follow (the parser trims them too)
 		if (!match && n>0) {
 			if (len + n + 2 > cap) break;
 			memcpy(out+len, line, n);

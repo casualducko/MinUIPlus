@@ -33,6 +33,7 @@ int ClockNet_capture(char* const argv[], char* out, size_t cap, int timeout_ms, 
 	pid_t pid = fork();
 	if (pid<0) { close(fds[0]); close(fds[1]); return -1; }
 	if (pid==0) {
+		setpgid(0, 0); // its own group: a cancel stops what the shell started too (tar, sha256sum), not only the shell
 		int nul = open("/dev/null", O_RDWR);
 		if (nul>=0) { dup2(nul, 0); dup2(nul, 2); }
 		dup2(fds[1], 1);
@@ -58,7 +59,7 @@ int ClockNet_capture(char* const argv[], char* out, size_t cap, int timeout_ms, 
 		}
 	}
 	close(fds[0]);
-	if (result!=0) kill(pid, SIGKILL);
+	if (result!=0) { kill(-pid, SIGKILL); kill(pid, SIGKILL); } // the group, and the child itself in case it had not made its own group yet
 	waitpid(pid, NULL, 0);
 	return result;
 }
@@ -89,7 +90,7 @@ int ClockNet_wifiUp(const char** error, ClockNet_tick tick, void* ctx) {
 			}
 			usleep(50000);
 		}
-		// the route is up; wifictl may still be finishing: it is left to, and collected on the next call or when the tool ends
+		// the route is up; wifictl may still be finishing: it is left to (collected here if it is already done, otherwise by init when the tool ends)
 		if (pid>0 && !done) waitpid(pid, NULL, WNOHANG);
 	}
 	return 0;
