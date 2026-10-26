@@ -171,9 +171,10 @@ static const Glyph* glyphFor(uint32_t cp) {
 	if (cp==FILL_BOTH || cp==FILL_TOP || cp==FILL_BOTTOM) {
 		for (int y=0; y<CELL_H; y++) for (int x=0; x<CELL_W; x++) {
 			int on = 0;
-			if (cp==FILL_BOTH) on = ((x==1 || x==4) && y>=1 && y<=10) || ((x>=1 && x<=4) && (y==5 || y==6));
-			else if (cp==FILL_TOP) on = (x==2 || x==3) && y>=1 && y<=4;
-			else on = (x==2 || x==3) && y>=9 && y<=10;
+			int bar = x<=1 || x>=4; // an H: two bars (2 px) and a crossbar; the halves are its upper and lower parts
+			if (cp==FILL_BOTH) on = bar || y==5 || y==6;
+			else if (cp==FILL_TOP) on = (bar && y<=5) || y==4 || y==5;
+			else on = (bar && y>=6) || y==6 || y==7;
 			gl->cov[y*CELL_W*2 + x] = on ? 255 : 0;
 		}
 		return gl;

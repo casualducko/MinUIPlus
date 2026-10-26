@@ -29,7 +29,7 @@ games = {
  "SNES (SFC)": ["Mega Man X.sfc", "Legend of Zelda - 18 Hours Past (v1.12).sfc", "Illusion of Gaia Retranslated (v1.1).sfc", "Legend of Zelda, The (USA).sfc"],
  "GBC (GBC)": ["Dragon's Lair.gbc", "QIX Adventure.gbc", "Super Mario Land 2 DX - 6 Golden Coins.gb", "Pocket Bomberman.gbc", "Donkey Kong.gb"],
  "Playstation (PS)": ["Castlevania - Symphony of the Night.chd"],
- "Nintendo Entertainment System (FC)": ["Mega Man (USA).nes"],
+ "Nintendo Entertainment System (FC)": ["Mega Man (USA).nes", "Tecmo Super Bowl 2024.nes"],
 }
 for folder, files in games.items():
     d = os.path.join(card, "Roms", folder)
