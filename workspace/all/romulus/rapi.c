@@ -390,7 +390,7 @@ int rapi_parse_roms(const char* body, size_t len, RRomList* list, long* total, i
 	if (!root || root->type!=J_OBJ) { json_free(root); return -1; }
 	JVal* roms = json_get(root, "roms");
 	if (!roms || roms->type!=J_ARR) { json_free(root); return -1; }
-	if (total) *total = (long)json_int(root, "total", 0);
+	if (total) *total = (long)json_int(root, "total", *total); // (absent: keep what the caller had)
 	if (raw) *raw = roms->count;
 	int added = 0;
 	for (int i=0; i<roms->count; i++) {

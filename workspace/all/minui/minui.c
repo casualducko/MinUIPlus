@@ -2007,7 +2007,6 @@ int main (int argc, char *argv[]) {
 				tmp[0] = '\0';
 				
 				sprintf(res_path, "%s/.res/%s.png", res_root, res_name);
-				LOG_info("res_path: %s\n", res_path);
 				SDL_Surface* thumb = NULL;
 				if (art_on) {
 					if (strcmp(thumb_path, res_path)) { // a different picture: load it (a file that isn't a picture is no picture)
