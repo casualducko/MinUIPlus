@@ -499,6 +499,7 @@ static int hasM3u(char* rom_path, char* m3u_path) { // NOTE: rom_path not dir_pa
 static int hasRecents(void) {
 	LOG_info("hasRecents %s\n", RECENT_PATH);
 	int has = 0;
+	while (recents->count) Recent_free(Array_pop(recents)); // read again from the file: a second call (the root is rebuilt after a collection changes) must not add every game a second time
 	
 	Array* parent_paths = Array_new();
 	if (exists(CHANGE_DISC_PATH)) {
@@ -539,7 +540,7 @@ static int hasRecents(void) {
 			
 			char sd_path[MAX_PATH];
 			snprintf(sd_path, sizeof(sd_path), "%s%s", SDCARD_PATH, path); // path might come from a file, a too long one just won't exist
-			if (exists(sd_path)) {
+			if (exists(sd_path) && RecentArray_indexOf(recents, path)==-1) { // (a game twice in the file, from the old repeat, is kept once)
 				if (recents->count<MAX_RECENTS) {
 					// this logic replaces an existing disc from a multi-disc game with the last used
 					char m3u_path[MAX_PATH];
