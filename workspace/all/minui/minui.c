@@ -1605,7 +1605,7 @@ int main (int argc, char *argv[]) {
 	// unsigned long main_begin = SDL_GetTicks();
 	// unsigned long first_draw = 0;
 	
-	if (autoResume()) { unlink(SWITCH_PATH); unlink(SWITCHER_REQUEST_PATH); return 0; } // (a request left behind must not start a game on some later boot)
+	if (autoResume()) { unlink(SWITCH_PATH); unlink(SWITCHER_REQUEST_PATH); unlink(SWITCHER_BACK_PATH); return 0; } // (a request left behind must not start a game on some later boot)
 	
 	simple_mode = exists(SIMPLE_MODE_PATH);
 	loadPlayed();
@@ -1644,6 +1644,20 @@ int main (int argc, char *argv[]) {
 	int show_setting = 0; // 1=brightness,2=volume
 	int was_online = PLAT_isOnline();
 	
+	// Fn twice in a game left the game in SWITCHER_REQUEST_PATH: the Switcher is opened below, and the game is kept in
+	// SWITCHER_BACK_PATH. When the launcher starts again and the Switcher chose nothing (B), the game is resumed.
+	char back_game[MAX_PATH+16] = "";
+	int switcher_requested = exists(SWITCHER_REQUEST_PATH);
+	if (switcher_requested) {
+		getFile(SWITCHER_REQUEST_PATH, back_game, sizeof(back_game));
+		unlink(SWITCHER_REQUEST_PATH);
+		if (back_game[0]=='/') putFile(SWITCHER_BACK_PATH, back_game);
+	}
+	else if (exists(SWITCHER_BACK_PATH)) {
+		if (!exists(SWITCH_PATH)) rename(SWITCHER_BACK_PATH, SWITCH_PATH); // nothing was chosen: back to the game
+		else unlink(SWITCHER_BACK_PATH);
+	}
+	
 	if (exists(SWITCH_PATH)) { // Tools > Switcher picked a game: open it like a press of X (Resume) or A on it
 		char rel[MAX_PATH] = "";
 		getFile(SWITCH_PATH, rel, sizeof(rel));
@@ -1668,8 +1682,7 @@ int main (int argc, char *argv[]) {
 		}
 	}
 	
-	if (exists(SWITCHER_REQUEST_PATH)) { // Fn twice in a game: minarch saved the game and left this; on to the switcher
-		unlink(SWITCHER_REQUEST_PATH);
+	if (switcher_requested) { // Fn twice in a game: minarch saved the game; on to the switcher
 		char switcher[MAX_PATH];
 		snprintf(switcher, sizeof(switcher), "%s/Tools/%s/Switcher.pak", SDCARD_PATH, PLATFORM);
 		if (exists(switcher)) openPak(switcher);

@@ -230,7 +230,7 @@ void InfoView_draw(SDL_Surface* screen, int first, int ow) {
 void InfoView_toggleWifi(void) {
 	if (power_pid) return;
 	power_on = !wifi_radio_on();
-	char* enable[] = { "wifictl", "enable", NULL };
+	char* enable[] = { "wifiup", NULL }; // wifictl enable, then the other saved networks if that one is out of range
 	char* disable[] = { "wifictl", "disable", NULL };
 	power_pid = wifi_spawn(power_on ? enable : disable);
 	power_at = SDL_GetTicks();
@@ -239,7 +239,7 @@ void InfoView_toggleWifi(void) {
 }
 int InfoView_poll(void) { // 1 when the Wi-Fi row changed and the screen needs drawing again
 	if (!power_pid) return 0;
-	if (wifi_reap(power_pid, NULL) || SDL_GetTicks() - power_at > 40000) {
+	if (wifi_reap(power_pid, NULL) || SDL_GetTicks() - power_at > 60000) {
 		power_pid = 0;
 		wifi_at = 0;
 		InfoView_gather();

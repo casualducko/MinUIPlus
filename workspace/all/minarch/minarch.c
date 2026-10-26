@@ -4347,8 +4347,8 @@ static int Cheats_download(void) { // 1 if a cheat file was saved and loaded; sa
 	}
 	
 	if (!Net_hasRoute()) {
-		pid_t pid = Net_spawn((char*[]){ "wifictl", "enable", NULL });
-		int r = Net_wait("Connecting to Wi-Fi", pid, 1, 40);
+		pid_t pid = Net_spawn((char*[]){ "wifiup", NULL }); // wifictl enable, then the other saved networks
+		int r = Net_wait("Connecting to Wi-Fi", pid, 1, 50);
 		if (r==-2) return 0;
 		if (!Net_hasRoute()) {
 			Menu_message("Couldn't connect to Wi-Fi.\n\nSet it up in Tools > Wi-Fi\nand try again.", okay);
@@ -5159,7 +5159,11 @@ static void Menu_loop(void) {
 		if (fn_tapped && now-menu_opened_at<SWITCHER_DOUBLE_TAP_MS && Menu_switcherAvailable()) { // Fn twice: save and go to the game switcher
 			State_autosave(); // always (whatever "Auto-save on quit" says): the Switcher resumes from this
 			Menu_saveAutoPreview();
-			putFile(SWITCHER_REQUEST_PATH, "1");
+			{ // the game and its slot, so that backing out of the Switcher comes back to it
+				char back[MAX_PATH+16];
+				snprintf(back, sizeof(back), "%s\t%d", game.path + strlen(SDCARD_PATH), AUTO_RESUME_SLOT);
+				putFile(SWITCHER_REQUEST_PATH, back);
+			}
 			status = STATUS_QUIT;
 			show_menu = 0;
 			quit = 1;

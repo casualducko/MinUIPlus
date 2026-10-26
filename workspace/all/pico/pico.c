@@ -223,7 +223,7 @@ static void stop_job(void) {
 ///////////////////////////////
 // the network (as in the Romulus tool: switch Wi-Fi on if it is off, then wait for an address)
 
-#define WIFI_TIMEOUT_MS 30000
+#define WIFI_TIMEOUT_MS 45000
 #define NET_RETRIES 3
 typedef enum { NET_READY, NET_ENABLING, NET_WAITING } NetState;
 static NetState net_state = NET_READY;
@@ -257,7 +257,7 @@ static int network_ready(void) { // a default route, by whatever interface
 }
 static void start_wifictl(void) {
 	const char* cmd = getenv("PICO_WIFICTL");
-	if (!cmd || !*cmd) cmd = "wifictl";
+	if (!cmd || !*cmd) cmd = "wifiup"; // wifictl enable, then the other saved networks
 	pid_t pid = fork();
 	if (pid==0) {
 		int nul = open("/dev/null", O_RDWR);
