@@ -16,7 +16,7 @@ echo "backing up to $backup"
 cd "$here"
 find .system Tools Emus -type f | while read f; do
 	case "$f" in
-		Tools/rgb30/Romulus.pak/*|.system/res/fallback.ttf|.system/res/fallback-OFL.txt|Tools/rgb30/Stats.pak/*|Tools/rgb30/Themes.pak/*|Tools/rgb30/ASCIIArt.pak/*|Tools/rgb30/Info.pak/*|Tools/rgb30/Update.pak/*|Tools/rgb30/Screenshots.pak/*|Tools/rgb30/Settings.pak/*|Tools/rgb30/SSH.pak/*|Tools/rgb30/Wi-Fi.pak/wifi.elf|Tools/rgb30/Wi-Fi.pak/launch-old.sh) # a new tool: added (and replaced next time), nothing to back up the first time
+		Tools/rgb30/Romulus.pak/*|Tools/rgb30/PicoSearch.pak/*|.system/res/fallback.ttf|.system/res/fallback-OFL.txt|Tools/rgb30/Stats.pak/*|Tools/rgb30/Themes.pak/*|Tools/rgb30/ASCIIArt.pak/*|Tools/rgb30/Info.pak/*|Tools/rgb30/Update.pak/*|Tools/rgb30/Screenshots.pak/*|Tools/rgb30/Settings.pak/*|Tools/rgb30/SSH.pak/*|Tools/rgb30/Wi-Fi.pak/wifi.elf|Tools/rgb30/Wi-Fi.pak/launch-old.sh) # a new tool: added (and replaced next time), nothing to back up the first time
 			mkdir -p "$card/$(dirname "$f")"
 			if [ -f "$card/$f" ]; then mkdir -p "$backup/$(dirname "$f")"; cp -p "$card/$f" "$backup/$f"; fi
 			cp "$f" "$card/$f.new" && mv "$card/$f.new" "$card/$f"; chmod +x "$card/$f" 2>/dev/null || true

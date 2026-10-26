@@ -23,6 +23,7 @@ all:
 	cd ./all/clock/ && make
 	cd ./all/minput/ && make
 	cd ./all/romulus/ && make
+	cd ./all/pico/ && make
 	cd ./all/power/ && make
 	cd ./all/stats/ && make
 	cd ./all/theme/ && make
@@ -44,6 +45,7 @@ clean:
 	cd ./all/clock/ && make clean
 	cd ./all/minput/ && make clean
 	cd ./all/romulus/ && make clean
+	cd ./all/pico/ && make clean
 	cd ./all/power/ && make clean
 	cd ./all/stats/ && make clean
 	cd ./all/theme/ && make clean

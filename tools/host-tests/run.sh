@@ -97,6 +97,21 @@ $CC $FLAGS -I"$all/romulus" -o "$out/test_romulus" "$here/test_romulus.c" "$all/
 if ! ROM_ZIPS="$out/zips" ROM_PORT="$port" ROM_TOKEN="$tok" "$out/test_romulus"; then failed=1; echo "   ^ FAILED: romulus"; fi
 kill $mock 2>/dev/null; wait $mock 2>/dev/null || true
 
+# the Pico Search tool: the BBS listing and thread pages, ranking, file names, and the curl job against a mock BBS
+echo "== pico"
+rm -f "$out/mock-bbs.log"
+python3 "$here/mock_bbs.py" > "$out/mock-bbs.log" 2>&1 &
+mockbbs=$!
+bport=
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+	bport=$(sed -n 's/^PORT //p' "$out/mock-bbs.log" 2>/dev/null | head -1)
+	[ -n "$bport" ] && break
+	sleep 0.25
+done
+$CC $FLAGS -I"$all/pico" -o "$out/test_pico" "$here/test_pico.c" "$all/pico/bbs.c"
+if ! PICO_PORT="$bport" "$out/test_pico" "$here"; then failed=1; echo "   ^ FAILED: pico"; fi
+kill $mockbbs 2>/dev/null; wait $mockbbs 2>/dev/null || true
+
 # the Wi-Fi tool: parsing iw output, the saved networks file, running commands
 echo "== wifi"
 $CC $FLAGS -I"$all/wifi" -o "$out/test_wifi" "$here/test_wifi.c" "$all/wifi/wifi_core.c"

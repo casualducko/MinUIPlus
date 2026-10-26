@@ -8,7 +8,7 @@ const ENC = new TextEncoder();
 
 // files install.sh adds even when the card doesn't have them yet (new tools), everything else is only replaced
 const NEW_FILE = [
-	/^Tools\/rgb30\/(Romulus|Stats|Themes|ASCIIArt|Info|Update|Screenshots|Settings|SSH)\.pak\//,
+	/^Tools\/rgb30\/(Romulus|PicoSearch|Stats|Themes|ASCIIArt|Info|Update|Screenshots|Settings|SSH)\.pak\//,
 	/^\.system\/res\/fallback(\.ttf|-OFL\.txt)$/,
 	/^Tools\/rgb30\/Wi-Fi\.pak\/(wifi\.elf|launch-old\.sh)$/,
 ];
