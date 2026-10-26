@@ -1576,7 +1576,12 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 		else if (PAD_justRepeated(BTN_DOWN)) { sel = (sel + 1) % rows; dirty = 1; message[0] = '\0'; }
 		else if (PAD_justPressed(BTN_A) && sel==count) { // New collection: the game goes straight into it
 			char fresh[COLLECTION_NAME_MAX];
-			if (askCollectionName(screen, show_setting, fresh, sizeof(fresh)) && !strchr(fresh, '/')) {
+			int named = askCollectionName(screen, show_setting, fresh, sizeof(fresh)) && !strchr(fresh, '/');
+			if (named && (fresh[0]=='.' || !strcasecmp(fresh, "map") || count>=COLLECTION_MAX)) { // (the launcher hides those: the game would go somewhere nobody can see)
+				snprintf(message, sizeof(message), "Pick another name");
+				named = 0;
+			}
+			if (named) {
 				char file[MAX_PATH];
 				snprintf(file, sizeof(file), "%s/%s.txt", COLLECTIONS_PATH, fresh);
 				if (Collection_set(file, rel, 1)==0) { changed = 1; quit = 1; }
@@ -1737,7 +1742,11 @@ int main (int argc, char *argv[]) {
 	if (switcher_requested) {
 		getFile(SWITCHER_REQUEST_PATH, back_game, sizeof(back_game));
 		unlink(SWITCHER_REQUEST_PATH);
-		if (back_game[0]=='/') putFile(SWITCHER_BACK_PATH, back_game);
+		{ // (only when the Switcher is there to open: a back file with nothing opened would resume the game on some later start)
+			char switcher_launch[MAX_PATH];
+			snprintf(switcher_launch, sizeof(switcher_launch), "%s/Tools/%s/Switcher.pak/launch.sh", SDCARD_PATH, PLATFORM);
+			if (back_game[0]=='/' && exists(switcher_launch)) putFile(SWITCHER_BACK_PATH, back_game);
+		}
 	}
 	else if (exists(SWITCHER_BACK_PATH)) {
 		if (!exists(SWITCH_PATH)) rename(SWITCHER_BACK_PATH, SWITCH_PATH); // nothing was chosen: back to the game
@@ -1771,7 +1780,9 @@ int main (int argc, char *argv[]) {
 	if (switcher_requested) { // Fn twice in a game: minarch saved the game; on to the switcher
 		char switcher[MAX_PATH];
 		snprintf(switcher, sizeof(switcher), "%s/Tools/%s/Switcher.pak", SDCARD_PATH, PLATFORM);
-		if (exists(switcher)) openPak(switcher);
+		char switcher_launch[MAX_PATH];
+		snprintf(switcher_launch, sizeof(switcher_launch), "%s/launch.sh", switcher);
+		if (exists(switcher_launch)) openPak(switcher);
 	}
 	
 	// LOG_info("- loop start: %lu\n", SDL_GetTicks() - main_begin);

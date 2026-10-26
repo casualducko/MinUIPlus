@@ -24,6 +24,10 @@ wait_route() { # seconds
 PREV_SSID=$(get_setting wifi.ssid 2>/dev/null)
 PREV_KEY=$(get_setting wifi.key 2>/dev/null)
 if [ -n "$PREV_SSID" ]; then say "Connecting to" "$PREV_SSID..."; else say "Turning Wi-Fi on..."; fi
+# killed half way through trying another network (a caller gave up): the set-up network goes back as it was
+restore() { set_setting wifi.ssid "$PREV_SSID" >/dev/null 2>&1; set_setting wifi.key "$PREV_KEY" >/dev/null 2>&1; }
+SWITCHED=
+trap '[ -n "$SWITCHED" ] && restore; exit 1' TERM INT HUP
 wifictl enable &
 wait_route "$FIRST" && exit 0
 [ -f "$SAVED" ] || exit 1
@@ -36,6 +40,12 @@ connmanctl scan wifi >/dev/null 2>&1
 sleep 3
 SEEN=$(iw dev wlan0 scan dump 2>/dev/null | sed -n 's/^[[:space:]]*SSID: //p')
 
+# the set-up network is in range, only slow (a router that takes 15 s): give it the time it used to have before moving on
+if [ -n "$PREV_SSID" ] && printf '%s\n' "$SEEN" | grep -qxF -- "$PREV_SSID"; then
+	say "Still connecting to" "$PREV_SSID..."
+	wait_route "${WIFIUP_SLOW_WAIT:-25}" && exit 0
+fi
+
 unescape() { printf '%s' "$1" | sed -e "s/\\\\\\\\/$BS/g" -e "s/\\\\t/$TAB/g" -e "s/$BS/\\\\/g"; }
 
 tried=0
@@ -47,6 +57,7 @@ while IFS="$TAB" read -r NAME PASS; do
 	if [ -n "$SEEN" ] && ! printf '%s\n' "$SEEN" | grep -qxF -- "$NAME"; then continue; fi
 	tried=1
 	say "Trying" "$NAME..."
+	SWITCHED=1
 	set_setting wifi.ssid "$NAME" >/dev/null 2>&1
 	set_setting wifi.key "$PASS" >/dev/null 2>&1
 	if [ -n "$PASS" ]; then wifictl enable "$NAME" "$PASS" & else wifictl enable "$NAME" & fi
@@ -54,6 +65,5 @@ while IFS="$TAB" read -r NAME PASS; do
 done < "$SAVED"
 
 # nothing worked: the set-up network stays as it was
-set_setting wifi.ssid "$PREV_SSID" >/dev/null 2>&1
-set_setting wifi.key "$PREV_KEY" >/dev/null 2>&1
+restore
 exit 1

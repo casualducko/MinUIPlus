@@ -1168,6 +1168,7 @@ static const int auto_khz[] = { 408000, 600000, 816000, 1104000, 1416000, 160800
 #define AUTO_FLOOR_PLAYS 10
 static int auto_on = 0;
 static int auto_step = AUTO_START_STEP, auto_floor = -1, auto_plays = 0;
+static int auto_hold = -1; // this session only: the step that stuttered in the middle of play (no trial goes down to it again)
 static int auto_trial = 0, auto_trial_misses = 0;
 static uint32_t auto_trial_end = 0, auto_clean_since = 0, auto_tick = 0;
 static int auto_tick_misses = 0, auto_total_misses = 0;
@@ -1200,11 +1201,12 @@ static void Auto_load(void) {
 }
 static void Auto_apply(void) { PLAT_setCPUFreq(auto_khz[fast_forward ? AUTO_STEPS-1 : auto_step]); }
 static void Auto_restart(uint32_t now) { // after the menu, sleep or a stretch that wasn't the game
-	auto_trial = 0; auto_trial_misses = 0; auto_tick = now; auto_tick_misses = 0; auto_clean_since = now;
+	if (auto_trial) auto_trial_end = now + AUTO_TRIAL_MS; // a trial under way starts its time again: it is judged on play, not on the wait
+	auto_trial_misses = 0; auto_tick = now; auto_tick_misses = 0; auto_clean_since = now;
 }
 // One trip round the main loop that took `period` ms, `budget` being a frame.
 static void Auto_frame(uint32_t period, uint32_t budget, uint32_t now) {
-	if (!auto_on || fast_forward) { auto_clean_since = now; return; }
+	if (!auto_on || fast_forward) { auto_clean_since = now; if (auto_trial) auto_trial_end = now + AUTO_TRIAL_MS; return; }
 	if (period>250) { Auto_restart(now); return; } // not the game
 	int missed = period > budget + budget/2;
 	if (missed) { auto_tick_misses++; auto_trial_misses++; auto_total_misses++; auto_clean_since = now; }
@@ -1215,7 +1217,8 @@ static void Auto_frame(uint32_t period, uint32_t budget, uint32_t now) {
 		auto_tick = now; auto_tick_misses = 0;
 	}
 	if (raise && auto_step<AUTO_STEPS-1) {
-		if (auto_floor<auto_step) { auto_floor = auto_step; auto_plays = 0; }
+		if (auto_trial) { if (auto_floor<auto_step) { auto_floor = auto_step; auto_plays = 0; } } // a failed trial: remembered for 10 plays
+		else if (auto_hold<auto_step) auto_hold = auto_step; // a stutter in steady play: not below this for now
 		auto_step++;
 		LOG_info("cpu auto: frames missed, up to %d MHz\n", auto_khz[auto_step]/1000);
 		Auto_apply(); Auto_save();
@@ -1228,7 +1231,7 @@ static void Auto_frame(uint32_t period, uint32_t budget, uint32_t now) {
 		Auto_save();
 		auto_clean_since = now;
 	}
-	else if (!auto_trial && auto_step>0 && auto_step-1>auto_floor && now - auto_clean_since >= AUTO_CLEAN_MS) {
+	else if (!auto_trial && auto_step>0 && auto_step-1>auto_floor && auto_step-1>auto_hold && now - auto_clean_since >= AUTO_CLEAN_MS) {
 		auto_step--;
 		auto_trial = 1; auto_trial_misses = 0; auto_trial_end = now + AUTO_TRIAL_MS;
 		LOG_info("cpu auto: trying %d MHz\n", auto_khz[auto_step]/1000);
@@ -1249,7 +1252,8 @@ static void setOverclock(int i) {
 		case 2: PWR_setCPUSpeed(CPU_SPEED_PERFORMANCE); break;
 #ifdef HAS_CPU_AUTO
 		case 3:
-			if (!auto_on) { auto_on = 1; Auto_load(); Auto_restart(SDL_GetTicks()); }
+			if (!auto_on) { auto_on = 1; Auto_load(); }
+			Auto_restart(SDL_GetTicks()); // (every return from the menu or sleep comes through here)
 			Auto_apply();
 			break;
 #endif
@@ -5807,7 +5811,10 @@ int main(int argc , char* argv[]) {
 	{
 		char text[16] = "";
 		getFile(AUTOSAVE_ROLL_PATH, text, sizeof(text));
-		if (text[0]) { long m = strtol(text, NULL, 10); if (m>=0 && m<=60) roll_every_ms = (uint64_t)m * 60000; }
+		char* end = NULL;
+		long m = text[0] ? strtol(text, &end, 10) : -1;
+		while (end && (*end==' ' || *end=='\n' || *end=='\r')) end++;
+		if (text[0] && end!=text && end && !*end && m>=0 && m<=60 && (m==0 || m>=1)) roll_every_ms = (uint64_t)m * 60000; // (anything else: the 5 minutes the Settings tool shows)
 		roll_at_ms = play_ms + roll_every_ms;
 	}
 	
@@ -5830,15 +5837,13 @@ int main(int argc , char* argv[]) {
 		ft_skip = 0;
 		ft_last = ft_now;
 		if (play_ms/1000 - play_saved_s >= 300) PlayStats_flush(0);
-		if (roll_every_ms && play_ms>=roll_at_ms) {
+		if (roll_every_ms && play_ms>=roll_at_ms && !thread_video && !fast_forward && !show_menu) { // (when it can't run it stays due and goes at the next chance)
 			roll_at_ms = play_ms + roll_every_ms;
-			if (!thread_video && !fast_forward && !ft_skip && !show_menu) {
-				uint32_t t0 = SDL_GetTicks();
-				State_autosave();
-				Menu_saveAutoPreview(1);
-				LOG_info("auto-save while playing: %ums\n", SDL_GetTicks()-t0);
-				ft_skip = 1; // (the save is not a slow frame)
-			}
+			uint32_t t0 = SDL_GetTicks();
+			State_autosave();
+			Menu_saveAutoPreview(1);
+			LOG_info("auto-save while playing: %ums\n", SDL_GetTicks()-t0);
+			ft_skip = 1; // (the save is not a slow frame)
 		}
 		if (ft_now - ft_logged >= 5000) {
 			LOG_info("frames: %u in %ums, slowest %ums (core %ums), over 25ms: %u, over 50ms: %u, over 100ms: %u\n", ft_frames, ft_now-ft_logged, ft_max, ft_run_max, ft_over25, ft_over50, ft_over100);
