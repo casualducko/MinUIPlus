@@ -13,6 +13,10 @@ static float fat(const char* line, void* ctx) { (void)ctx; return 1.2f * strlen(
 int main(void) {
 	CHECK(!strcmp(title("Legend of Zelda, The (USA) (Rev 1).sfc"), "The Legend of Zelda"), "tags dropped, \", The\" moved to the front");
 	CHECK(!strcmp(title("Apotris.gba"), "Apotris"), "extension dropped");
+	CHECK(!strcmp(title("Celeste Classic.p8.png"), "Celeste Classic"), "a PICO-8 cart loses .p8.png, not just .png");
+	CHECK(!strcmp(title("Celeste.P8.PNG"), "Celeste"), "...in any case");
+	CHECK(!strcmp(title("Photo.png"), "Photo"), "a plain .png is still just an extension");
+	CHECK(!strcmp(title("Cart v2.p8 (1).p8.png"), "Cart v2.p8"), "a title that has .p8 inside keeps it when tags follow");
 	CHECK(!strcmp(title("Super Mario Bros. (World).nes"), "Super Mario Bros."), "a dot in the title stays");
 	CHECK(!strcmp(title("Mr. Do!.nes"), "Mr. Do!"), "only the real extension goes");
 	CHECK(!strcmp(title("Dr. Mario"), "Dr. Mario"), "no extension, a dot and a space");

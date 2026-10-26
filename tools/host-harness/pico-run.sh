@@ -31,7 +31,7 @@ for i in $(seq 1 20); do port=$(sed -n 's/^PORT //p' "$WORK/mock-bbs.log" | head
 export PICO_BBS_BASE="http://127.0.0.1:$port"
 
 cd "$repo/workspace/all/pico"
-clang pico.c bbs.c ../common/scaler.c ../common/utils.c ../common/api.c "$WORK/platform/platform.c" \
+clang pico.c bbs.c ../titleart/titleart_core.c ../titleart/titleart_gen.c -I../titleart ../common/scaler.c ../common/utils.c ../common/api.c "$WORK/platform/platform.c" \
 	-o "$WORK/pico" -I. -I../common -I"$WORK/platform" -I/opt/homebrew/include -L/opt/homebrew/lib \
 	-DPLATFORM=\"macos\" -DUSE_SDL2 -Wno-builtin-macro-redefined -U__ARM_ARCH -D__ARM_ARCH=4 \
 	-O1 -g -std=gnu99 -fno-common -Wall -Wno-unused-function -Wno-tautological-constant-out-of-range-compare \

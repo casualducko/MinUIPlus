@@ -3,7 +3,7 @@
 Tiles are 360 x 360 PNGs (a cartridge front) made by `workspace/all/titleart/titleart_gen.c` (layout and wrapping logic in `titleart_core.c`, tested on the Mac by `tools/host-tests/test_titleart*.c`). The launcher draws them in the game list; the ASCIIArt tool, Romulus (a game just downloaded) and the boot pass all use the same generator.
 
 ## The pipeline
-1. **Title**: the file name without tags and extension (`Legend of Zelda, The (USA).sfc` is `The Legend of Zelda`), split at ` - ` or `: ` into a main title and a subtitle.
+1. **Title**: the file name without tags and extension (a PICO-8 cart, `name.p8.png`, loses both; the tool lists `.p8.png` files as games although other `.png` files are art and skipped; PicoSearch makes a tile for each cart it downloads) (`Legend of Zelda, The (USA).sfc` is `The Legend of Zelda`), split at ` - ` or `: ` into a main title and a subtitle.
 2. **Layout** (`TA_layout`): the main title is wrapped onto up to 4 lines and the letter height (in 12 px rows) chosen so the whole title fits in 50 columns x 22 rows. The widths come from rendering each line in the big font (`rasterLine`, 96 px) and measuring it; `CONDENSE` (0.9) makes the letters a little narrower than the font's own shape so long words get taller letters.
 3. **Raster to a grid**: each line's coverage is shrunk with a box filter (`shrink`) onto the grid the look needs.
 4. **Look** (below).

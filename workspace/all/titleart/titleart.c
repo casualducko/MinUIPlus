@@ -39,6 +39,8 @@ static int isGameFile(const char* name) {
 	if (name[0]=='.') return 0;
 	const char* dot = strrchr(name, '.');
 	if (!dot || !dot[1]) return 0; // no extension, not a game
+	size_t n = strlen(name);
+	if (n>7 && !strcasecmp(name+n-7, ".p8.png")) return 1; // a PICO-8 cart is a picture too
 	static const char* skip[] = {"png","jpg","jpeg","bmp","gif","txt","cfg","sav","srm","bak","xml","db","dat","log","pdf","cht","ini","sh","st","state","rtc",NULL};
 	for (int i=0; skip[i]; i++) if (!strcasecmp(dot+1, skip[i])) return 0;
 	if (!strncasecmp(dot+1, "st", 2) && isdigit((unsigned char)dot[3])) return 0; // save states: .st0

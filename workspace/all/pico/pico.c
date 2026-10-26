@@ -19,6 +19,7 @@
 #include "api.h"
 #include "utils.h"
 #include "bbs.h"
+#include "titleart_gen.h"
 
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -340,6 +341,7 @@ static void finish_cart(void) {
 		unlink(DOWNLOAD_TMP);
 	}
 	sync();
+	if (TAGen_showArt()) TAGen_forRom(path); // the new cart gets its title picture at once (see Tools > ASCIIArt)
 	const char* folder = strrchr(dir, '/');
 	char place[128];
 	snprintf(place, sizeof(place), "%s", folder ? folder+1 : dir);
@@ -711,6 +713,7 @@ int main(int argc, char* argv[]) {
 
 	stop_job();
 	unlink(list_tmp);
+	TAGen_close();
 	QuitSettings();
 	PWR_quit();
 	PAD_quit();

@@ -19,7 +19,12 @@ void TA_title(const char* name, char* out, int size) {
 	if (cut) *cut = '\0'; // the tags, and the extension after them
 	else {
 		char* dot = strrchr(t, '.');
-		if (dot && ta_isExt(dot+1)) *dot = '\0';
+		if (dot && ta_isExt(dot+1)) {
+			int png = !strcasecmp(dot, ".png");
+			*dot = '\0';
+			char* p8 = strrchr(t, '.'); // a PICO-8 cart is name.p8.png: both go
+			if (png && p8 && !strcasecmp(p8, ".p8")) *p8 = '\0';
+		}
 	}
 	int len = strlen(t);
 	while (len>0 && isspace((unsigned char)t[len-1])) t[--len] = '\0';
