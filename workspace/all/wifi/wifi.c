@@ -139,6 +139,10 @@ static void op_finish(void) {
 }
 static void op_cancel(void) {
 	if (op_pid>0) { wifi_kill(op_pid); int st; wifi_reap(op_pid, &st); }
+	if (op==OP_POWER && op_power_on && op_phase>=5) { // stopped while trying another saved network: the set-up one stays as it was
+		set_setting_value("wifi.ssid", prev_ssid);
+		set_setting_value("wifi.key", prev_pass);
+	}
 	op_finish();
 }
 
@@ -261,27 +265,99 @@ static void step_connect(uint32_t now) {
 	}
 }
 
+// Wi-Fi on: wifictl brings up the one network that is set up. If that one doesn't connect (it is out of range, say,
+// because the unit is at work and not at home), the other saved networks that are in range are tried in turn.
+#define POWER_FIRST_WAIT_MS 12000 // the set-up network gets this long
+#define POWER_NEXT_WAIT_MS 15000 // each other saved network gets this long
+static int cand[WIFI_MAX_NETS], cand_n = 0, cand_i = 0;
+
+static void power_try_next(uint32_t now) {
+	if (cand_i>=cand_n) { // none worked: put the settings back as they were
+		set_setting_value("wifi.ssid", prev_ssid);
+		set_setting_value("wifi.key", prev_pass);
+		op_finish();
+		say("Wi-Fi is on, but it hasn't\nconnected. Pick a network\nfrom Networks nearby.", 0);
+		return;
+	}
+	WifiSaved* w = &saved[cand[cand_i++]];
+	snprintf(op_ssid, sizeof(op_ssid), "%s", w->ssid);
+	snprintf(op_pass, sizeof(op_pass), "%s", w->pass);
+	snprintf(op_text, sizeof(op_text), "Trying %s...", op_ssid);
+	set_setting_value("wifi.ssid", op_ssid);
+	set_setting_value("wifi.key", op_pass);
+	char* with_pass[] = { "wifictl", "enable", op_ssid, op_pass, NULL };
+	char* open[] = { "wifictl", "enable", op_ssid, NULL };
+	op_pid = wifi_spawn(op_pass[0] ? with_pass : open);
+	op_phase = 5; op_phase_at = now;
+}
+
 static void step_power(uint32_t now) {
 	if (op_phase==0) {
-		if (op_power_on) {
-			char* argv[] = { "wifictl", "enable", NULL };
-			op_pid = wifi_spawn(argv);
-		}
-		else {
-			char* argv[] = { "wifictl", "disable", NULL };
-			op_pid = wifi_spawn(argv);
-		}
+		char* on[] = { "wifictl", "enable", NULL };
+		char* off[] = { "wifictl", "disable", NULL };
+		get_setting_value("wifi.ssid", prev_ssid, sizeof(prev_ssid));
+		get_setting_value("wifi.key", prev_pass, sizeof(prev_pass));
+		op_pid = wifi_spawn(op_power_on ? on : off);
 		op_phase = 1; op_phase_at = now;
 		return;
 	}
-	if (op_phase==1 && wifi_reap(op_pid, NULL)) { op_pid = 0; op_phase = 2; op_phase_at = now; }
-	if (op_phase==2 || now-op_started>40000) {
-		if (!op_power_on) { op_finish(); return; }
-		static uint32_t last_check = 0;
-		if (now-last_check<1000 && now-op_started<=40000) return;
-		last_check = now;
-		if (wifi_has_route()) { op_finish(); return; }
-		if (now-op_started>30000) { op_finish(); say("Wi-Fi is on, but it hasn't\nconnected. Pick a network\nfrom Networks nearby.", 0); }
+	if (op_phase==1) {
+		if (wifi_reap(op_pid, NULL)) { op_pid = 0; op_phase = 2; op_phase_at = now; }
+		else if (now-op_started>40000) { wifi_kill(op_pid); op_pid = 0; op_phase = 2; op_phase_at = now; }
+		return;
+	}
+	if (!op_power_on) { op_finish(); return; }
+	static uint32_t last_check = 0;
+	if (op_phase==2 || op_phase==7) { // waiting for a route
+		if (now-last_check>=1000) {
+			last_check = now;
+			if (wifi_has_route()) {
+				if (op_phase==7) { // one of the others: it is the set-up network now
+					saved_count = wifi_saved_put(saved, saved_count, WIFI_MAX_NETS, op_ssid, op_pass);
+					save_list();
+					char ip[48] = "", msg[320];
+					wifi_ip_address(ip, sizeof(ip));
+					snprintf(msg, sizeof(msg), "Connected to\n%s\n%s", op_ssid, ip);
+					op_finish();
+					say(msg, 3500);
+				}
+				else op_finish();
+				return;
+			}
+		}
+		if (op_phase==2 && now-op_phase_at>POWER_FIRST_WAIT_MS) {
+			if (saved_count<2) { op_finish(); say("Wi-Fi is on, but it hasn't\nconnected. Pick a network\nfrom Networks nearby.", 0); return; }
+			snprintf(op_text, sizeof(op_text), "Looking for your\nother networks...");
+			char* scan[] = { "connmanctl", "scan", "wifi", NULL };
+			op_pid = wifi_spawn(scan);
+			op_phase = 3; op_phase_at = now;
+		}
+		else if (op_phase==7 && now-op_phase_at>POWER_NEXT_WAIT_MS) power_try_next(now);
+		return;
+	}
+	if (op_phase==3) {
+		if (wifi_reap(op_pid, NULL) || now-op_phase_at>10000) { if (now-op_phase_at>10000) wifi_kill(op_pid); op_pid = 0; op_phase = 4; op_phase_at = now; }
+		return;
+	}
+	if (op_phase==4) {
+		if (now-op_phase_at<1500) return; // let the results come in
+		static char text[65536];
+		char* dump[] = { "iw", "dev", "wlan0", "scan", "dump", NULL };
+		net_count = 0;
+		if (wifi_run(dump, text, sizeof(text), 6000)==0) net_count = wifi_parse_scan(text, nets, WIFI_MAX_NETS);
+		cand_n = cand_i = 0;
+		for (int i=0; i<saved_count; i++) { // in range, and not the one that has just been tried
+			if (!strcmp(saved[i].ssid, prev_ssid)) continue;
+			for (int k=0; k<net_count; k++) if (!strcmp(nets[k].ssid, saved[i].ssid)) { cand[cand_n++] = i; break; }
+		}
+		power_try_next(now);
+		return;
+	}
+	if (op_phase==5) { // the command for this one is running
+		if (wifi_reap(op_pid, NULL) || now-op_phase_at>POWER_NEXT_WAIT_MS) {
+			if (op_pid>0 && now-op_phase_at>POWER_NEXT_WAIT_MS) wifi_kill(op_pid);
+			op_pid = 0; op_phase = 7; op_phase_at = now;
+		}
 	}
 }
 
