@@ -66,7 +66,7 @@ int ClockNet_capture(char* const argv[], char* out, size_t cap, int timeout_ms, 
 int ClockNet_wifiUp(const char** error, ClockNet_tick tick, void* ctx) {
 	if (!hasRoute()) {
 		const char* cmd = getenv("CLOCK_WIFICTL");
-		if (!cmd || !*cmd) cmd = "wifictl";
+		if (!cmd || !*cmd) cmd = "wifiup"; // wifictl enable, then the other saved networks
 		pid_t pid = fork();
 		if (pid==0) {
 			int nul = open("/dev/null", O_RDWR);
@@ -76,7 +76,7 @@ int ClockNet_wifiUp(const char** error, ClockNet_tick tick, void* ctx) {
 			_exit(127);
 		}
 		const char* t = getenv("CLOCK_WIFI_TIMEOUT_MS");
-		uint64_t limit = (t && *t) ? (uint64_t)atoll(t) : 30000;
+		uint64_t limit = (t && *t) ? (uint64_t)atoll(t) : 45000;
 		uint64_t start = nowMs();
 		int done = 0; // wifictl has exited (and was collected)
 		while (!hasRoute()) {

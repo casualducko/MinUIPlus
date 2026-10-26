@@ -181,7 +181,7 @@ static void stop_job(void) {
 // The network. On the device Wi-Fi may be off (wlan0 down or not there at all), and "link up"
 // is not yet "has an address": check first, switch it on if it isn't, then wait for both.
 // The paths and the command can be overridden for tests (ROMULUS_NET_DIR, ROMULUS_ROUTE_FILE, ROMULUS_WIFICTL).
-#define WIFI_TIMEOUT_MS 30000
+#define WIFI_TIMEOUT_MS 45000
 #define NET_RETRIES 3 // quiet retries of the first request after we switched Wi-Fi on (DNS is often last)
 typedef enum { NET_READY, NET_ENABLING, NET_WAITING } NetState;
 static NetState net_state = NET_READY;
@@ -218,7 +218,7 @@ static int has_default_route(void) { // /proc/net/route: a line whose destinatio
 static int network_ready(void) { return has_default_route(); } // by whatever interface: Wi-Fi, a USB tether, Ethernet
 static void start_wifictl(void) { // `wifictl enable` like the Wi-Fi tool does, in the background
 	const char* cmd = getenv("ROMULUS_WIFICTL");
-	if (!cmd || !*cmd) cmd = "wifictl";
+	if (!cmd || !*cmd) cmd = "wifiup"; // wifictl enable, then the other saved networks
 	pid_t pid = fork();
 	if (pid==0) {
 		int nul = open("/dev/null", O_RDWR);

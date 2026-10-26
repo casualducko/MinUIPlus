@@ -1,0 +1,54 @@
+#!/bin/sh
+# Like `wifictl enable`, but if the network that is set up doesn't connect (out of range: the unit is at work,
+# not at home) the other networks saved by Tools > Wi-Fi that are in range are tried in turn.
+# Used by the SSH tool, Romulus and the Clock tool. Exits 0 once there is a route.
+
+. /etc/profile >/dev/null 2>&1
+SAVED=${WIFIUP_SAVED:-/storage/roms/.userdata/rgb30/wifi-networks.txt}
+FIRST=${WIFIUP_FIRST_WAIT:-10}
+NEXT=${WIFIUP_NEXT_WAIT:-12}
+
+has_route() { ip route 2>/dev/null | grep -q '^default'; }
+wait_route() { # seconds
+	i=0
+	while [ "$i" -lt "$1" ]; do
+		has_route && return 0
+		sleep 1
+		i=$((i+1))
+	done
+	has_route
+}
+
+wifictl enable &
+wait_route "$FIRST" && exit 0
+[ -f "$SAVED" ] || exit 1
+
+PREV_SSID=$(get_setting wifi.ssid 2>/dev/null)
+PREV_KEY=$(get_setting wifi.key 2>/dev/null)
+TAB=$(printf '\t')
+BS=$(printf '\001')
+
+connmanctl scan wifi >/dev/null 2>&1
+sleep 3
+SEEN=$(iw dev wlan0 scan dump 2>/dev/null | sed -n 's/^[[:space:]]*SSID: //p')
+
+unescape() { printf '%s' "$1" | sed -e "s/\\\\\\\\/$BS/g" -e "s/\\\\t/$TAB/g" -e "s/$BS/\\\\/g"; }
+
+tried=0
+while IFS="$TAB" read -r NAME PASS; do
+	case "$NAME" in ''|'#'*) continue ;; esac
+	NAME=$(unescape "$NAME"); PASS=$(unescape "$PASS")
+	[ "$NAME" = "$PREV_SSID" ] && continue
+	# in range? (with no scan result at all, try them in order anyway)
+	if [ -n "$SEEN" ] && ! printf '%s\n' "$SEEN" | grep -qxF -- "$NAME"; then continue; fi
+	tried=1
+	set_setting wifi.ssid "$NAME" >/dev/null 2>&1
+	set_setting wifi.key "$PASS" >/dev/null 2>&1
+	if [ -n "$PASS" ]; then wifictl enable "$NAME" "$PASS" & else wifictl enable "$NAME" & fi
+	if wait_route "$NEXT"; then exit 0; fi
+done < "$SAVED"
+
+# nothing worked: the set-up network stays as it was
+set_setting wifi.ssid "$PREV_SSID" >/dev/null 2>&1
+set_setting wifi.key "$PREV_KEY" >/dev/null 2>&1
+exit 1

@@ -17,16 +17,16 @@ has_route() { ip route 2>/dev/null | grep -q '^default'; } # by whatever interfa
 		if [ "$(cat /sys/class/net/wlan0/operstate 2>/dev/null)" = "up" ]; then
 			echo "wifi: link is up, waiting for an address"   # on already, just no address yet: don't touch it
 		else
-			echo "wifi: enabling"
-			wifictl enable &
+			echo "wifi: enabling (the set-up network, then the other saved ones)"
+			wifiup &
 		fi
-		show.elf "$RES_PATH/enable.png" 30 &
-		for i in $(seq 1 30); do
+		show.elf "$RES_PATH/enable.png" 45 &
+		for i in $(seq 1 45); do
 			has_route && break
 			sleep 1
 		done
 		killall -s KILL show.elf 2>/dev/null
-		has_route && echo "wifi: connected after ${i}s" || echo "wifi: no connection after 30s"
+		has_route && echo "wifi: connected after ${i}s" || echo "wifi: no connection after 45s"
 	fi
 
 	if [ -f ./authorized_key.pub ]; then
