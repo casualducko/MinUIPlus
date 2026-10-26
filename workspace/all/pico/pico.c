@@ -32,7 +32,7 @@
 #define MAX_CARTS		(BBS_PAGE_SIZE * 4)
 #define MAX_PAGES		3 // pages of 30 fetched for one search
 
-typedef enum { SCR_LIST, SCR_OSK } Screen;
+typedef enum { SCR_HOME, SCR_TAGS, SCR_LIST, SCR_OSK } Screen;
 typedef enum { JOB_NONE, JOB_PAGE, JOB_THREAD, JOB_CART } JobKind;
 typedef enum { MODAL_NONE, MODAL_MESSAGE, MODAL_CONFIRM, MODAL_PLAY } ModalKind;
 
@@ -49,7 +49,14 @@ static int sel = 0, scroll = 0;
 static BbsSort sort_mode = BBS_SORT_BEST;
 static int pages_loaded = 0;
 static int exhausted = 0;
-static int searched = 0; // a search has been made (so "nothing found" can be said)
+static int fetch_seq = 0; // carts counted as they come in, for "as listed"
+// what the list shows: a search, or one of the BBS's own lists
+static int list_is_search = 1;
+static BbsBrowse browse_kind = BBS_BROWSE_FEATURED;
+static char browse_tag[32];
+static Screen list_back = SCR_HOME; // where B goes from a browse list
+static int home_sel = 0;
+static int tag_sel = 0, tag_scroll = 0;
 static int page_failed = 0;
 
 // on-screen keyboard
@@ -57,7 +64,7 @@ static const char* osk_rows[4] = { "abcdefghij", "klmnopqrst", "uvwxyz0123", "45
 static int osk_x = 0, osk_y = 0;
 static char osk_text[64];
 
-static Screen cur_screen = SCR_OSK;
+static Screen cur_screen = SCR_HOME;
 
 // background work
 static BbsJob job;
@@ -245,7 +252,8 @@ static char* slurp(const char* path, size_t* len) {
 
 static void load_next_page(void) {
 	char url[1024];
-	bbs_search_url(url, sizeof(url), query, pages_loaded+1);
+	if (list_is_search) bbs_search_url(url, sizeof(url), query, pages_loaded+1);
+	else bbs_browse_url(url, sizeof(url), browse_kind, browse_tag, pages_loaded+1);
 	if (bbs_job_start(&job, url, list_tmp, 0)) { page_failed = 1; say("Couldn't start curl", 0); return; }
 	job_kind = JOB_PAGE;
 	page_failed = 0;
@@ -258,7 +266,8 @@ static void new_search(void) {
 	pages_loaded = 0;
 	exhausted = 0;
 	page_failed = 0;
-	searched = 1;
+	fetch_seq = 0;
+	sort_mode = list_is_search ? BBS_SORT_BEST : BBS_SORT_LISTED;
 	cur_screen = SCR_LIST;
 	load_next_page();
 }
@@ -276,13 +285,14 @@ static void finish_page(void) {
 	for (int i=0; i<n && cart_count<MAX_CARTS; i++) {
 		int dup = 0;
 		for (int k=0; k<cart_count; k++) if (carts[k].tid==got[i].tid) { dup = 1; break; }
-		if (!dup) carts[cart_count++] = got[i];
+		if (!dup) { got[i].order = fetch_seq++; carts[cart_count++] = got[i]; }
 	}
 	free(got);
 	bbs_sort(carts, cart_count, query, sort_mode);
 	if (keep[0]) for (int i=0; i<cart_count; i++) if (!strcmp(carts[i].pid, keep)) { sel = i; break; }
 	pages_loaded++;
 	if (n<BBS_PAGE_SIZE || pages_loaded>=MAX_PAGES || cart_count>=MAX_CARTS) exhausted = 1;
+	if (!list_is_search && browse_kind==BBS_BROWSE_RANDOM) exhausted = 1; // a shuffle is one page; Y for another
 }
 
 static void start_cart_download(void) { // the thread page said where the cart is
@@ -426,8 +436,12 @@ static void keep_visible(int* s, int* top, int count) {
 
 static void draw_list(int ow) {
 	char title[256];
-	if (query[0]) snprintf(title, sizeof(title), "\"%s\" - %s", query, bbs_sort_name(sort_mode));
-	else snprintf(title, sizeof(title), "Popular - %s", bbs_sort_name(sort_mode));
+	if (list_is_search) {
+		if (query[0]) snprintf(title, sizeof(title), "\"%s\" - %s", query, bbs_sort_name(sort_mode));
+		else snprintf(title, sizeof(title), "Recent - %s", bbs_sort_name(sort_mode));
+	}
+	else if (sort_mode==BBS_SORT_LISTED) snprintf(title, sizeof(title), "%s", bbs_browse_name(browse_kind, browse_tag));
+	else snprintf(title, sizeof(title), "%s - %s", bbs_browse_name(browse_kind, browse_tag), bbs_sort_name(sort_mode));
 	draw_title(title, ow);
 	if (cart_count==0) {
 		if (net_state==NET_ENABLING) draw_note("Turning on Wi-Fi...");
@@ -450,8 +464,28 @@ static void draw_list(int ow) {
 			draw_row(j, i==sel, c->title, right, saved && i!=sel);
 		}
 	}
-	GFX_blitButtonGroup((char*[]){"X","SEARCH","Y","SORT",NULL}, 0, screen, 0);
+	if (!list_is_search && browse_kind==BBS_BROWSE_RANDOM) GFX_blitButtonGroup((char*[]){"X","SEARCH","Y","SHUFFLE",NULL}, 0, screen, 0);
+	else GFX_blitButtonGroup((char*[]){"X","SEARCH","Y","SORT",NULL}, 0, screen, 0);
 	GFX_blitButtonGroup((char*[]){"B","BACK","A","GET",NULL}, 1, screen, 1);
+}
+static const struct { const char* label; const char* hint; } home_rows[] = {
+	{"Search", "by name or word"}, {"Featured", "the BBS's picks"}, {"Popular now", "what is being played"},
+	{"New and updated", ""}, {"Random", "a fresh shuffle"}, {"Browse by tag", "platformer, puzzle..."},
+};
+#define HOME_ROWS ((int)(sizeof(home_rows)/sizeof(home_rows[0])))
+static void draw_home(int ow) {
+	draw_title("PicoSearch", ow);
+	for (int j=0; j<HOME_ROWS; j++) draw_row(j, j==home_sel, home_rows[j].label, home_rows[j].hint, 0);
+	GFX_blitButtonGroup((char*[]){"B","QUIT",NULL}, 0, screen, 0);
+	GFX_blitButtonGroup((char*[]){"A","OPEN",NULL}, 1, screen, 1);
+}
+static void draw_tags(int ow) {
+	int count = 0;
+	const char* const* tags = bbs_tag_list(&count);
+	draw_title("Browse by tag", ow);
+	for (int j=0; j<list_rows() && tag_scroll+j<count; j++) draw_row(j, tag_scroll+j==tag_sel, tags[tag_scroll+j], NULL, 0);
+	GFX_blitButtonGroup((char*[]){"B","BACK",NULL}, 0, screen, 0);
+	GFX_blitButtonGroup((char*[]){"A","OPEN",NULL}, 1, screen, 1);
 }
 static void draw_osk(void) {
 	int w = screen->w - SCALE1(PADDING*2);
@@ -526,10 +560,9 @@ static int moved(int* s, int count, int step) {
 }
 
 static int net_wait_pending = 0; // a search is waiting for the network
-static void begin_search(void) {
+static void begin_load(void) { // the list described by list_is_search, query, browse_kind and browse_tag (waits for the network if there is none yet)
 	if (!net_managed() || network_ready()) { net_wait_pending = 0; new_search(); return; }
 	cart_count = 0;
-	searched = 1;
 	cur_screen = SCR_LIST;
 	net_wait_pending = 1;
 	const char* t = getenv("PICO_WIFI_TIMEOUT_MS");
@@ -561,7 +594,8 @@ static void do_osk_press(void) {
 		const char* t = osk_text;
 		while (*t==' ') t++;
 		snprintf(query, sizeof(query), "%s", t);
-		begin_search();
+		list_is_search = 1;
+		begin_load();
 	}
 }
 
@@ -588,6 +622,38 @@ static void handle_input(void) {
 	}
 	if (modal!=MODAL_NONE) { handle_modal_input(); return; }
 
+	if (cur_screen==SCR_HOME) {
+		if (PAD_justPressed(BTN_B)) { quit = 1; return; }
+		if (PAD_justRepeated(BTN_DPAD_UP)) { moved(&home_sel, HOME_ROWS, -1); dirty = 1; }
+		else if (PAD_justRepeated(BTN_DPAD_DOWN)) { moved(&home_sel, HOME_ROWS, 1); dirty = 1; }
+		else if (PAD_justPressed(BTN_A)) {
+			static const BbsBrowse kinds[] = { BBS_BROWSE_FEATURED, BBS_BROWSE_FEATURED, BBS_BROWSE_POPULAR, BBS_BROWSE_NEWEST, BBS_BROWSE_RANDOM };
+			if (home_sel==0) { osk_x = osk_y = 0; cur_screen = SCR_OSK; }
+			else if (home_sel==HOME_ROWS-1) cur_screen = SCR_TAGS;
+			else { list_is_search = 0; browse_kind = kinds[home_sel]; browse_tag[0] = '\0'; list_back = SCR_HOME; begin_load(); }
+			dirty = 1;
+		}
+		return;
+	}
+	if (cur_screen==SCR_TAGS) {
+		int count = 0;
+		const char* const* tags = bbs_tag_list(&count);
+		if (PAD_justPressed(BTN_B)) { cur_screen = SCR_HOME; dirty = 1; return; }
+		if (PAD_justRepeated(BTN_DPAD_UP)) { moved(&tag_sel, count, -1); dirty = 1; }
+		else if (PAD_justRepeated(BTN_DPAD_DOWN)) { moved(&tag_sel, count, 1); dirty = 1; }
+		else if (PAD_justRepeated(BTN_L1)) { moved(&tag_sel, count, -list_rows()); dirty = 1; }
+		else if (PAD_justRepeated(BTN_R1)) { moved(&tag_sel, count, list_rows()); dirty = 1; }
+		keep_visible(&tag_sel, &tag_scroll, count);
+		if (PAD_justPressed(BTN_A)) {
+			list_is_search = 0;
+			browse_kind = BBS_BROWSE_TAG;
+			snprintf(browse_tag, sizeof(browse_tag), "%s", tags[tag_sel]);
+			list_back = SCR_TAGS;
+			begin_load();
+			dirty = 1;
+		}
+		return;
+	}
 	if (cur_screen==SCR_OSK) {
 		if (PAD_justPressed(BTN_DPAD_LEFT) || (osk_y<4 && PAD_justRepeated(BTN_DPAD_LEFT))) { osk_sideways(-1); dirty = 1; }
 		else if (PAD_justPressed(BTN_DPAD_RIGHT) || (osk_y<4 && PAD_justRepeated(BTN_DPAD_RIGHT))) { osk_sideways(1); dirty = 1; }
@@ -597,7 +663,7 @@ static void handle_input(void) {
 		else if (PAD_justRepeated(BTN_B)) {
 			size_t n = strlen(osk_text);
 			if (n) { osk_text[n-1] = '\0'; dirty = 1; }
-			else if (PAD_justPressed(BTN_B)) { if (searched) { cur_screen = SCR_LIST; dirty = 1; } else quit = 1; } // nothing left to delete: leave
+			else if (PAD_justPressed(BTN_B)) { cur_screen = SCR_HOME; dirty = 1; } // nothing left to delete: back to the start
 		}
 		else if (PAD_justPressed(BTN_Y)) { osk_text[0] = '\0'; dirty = 1; }
 		else if (PAD_justPressed(BTN_START)) { osk_y = 4; osk_x = 8; do_osk_press(); dirty = 1; }
@@ -605,7 +671,13 @@ static void handle_input(void) {
 	}
 
 	// the list
-	if (PAD_justPressed(BTN_B)) { stop_job(); net_state = NET_READY; net_wait_pending = 0; cur_screen = SCR_OSK; dirty = 1; return; }
+	if (PAD_justPressed(BTN_B)) { // back to where the list came from
+		stop_job(); net_state = NET_READY; net_wait_pending = 0;
+		if (list_is_search) { snprintf(osk_text, sizeof(osk_text), "%s", query); cur_screen = SCR_OSK; }
+		else cur_screen = list_back;
+		dirty = 1;
+		return;
+	}
 	if (PAD_justPressed(BTN_X) || PAD_justPressed(BTN_MENU)) { // MENU is the Fn button on this device
 		snprintf(osk_text, sizeof(osk_text), "%s", query);
 		osk_x = osk_y = 0;
@@ -613,14 +685,13 @@ static void handle_input(void) {
 		dirty = 1;
 		return;
 	}
+	if (PAD_justPressed(BTN_Y) && !list_is_search && browse_kind==BBS_BROWSE_RANDOM) { stop_job(); begin_load(); dirty = 1; return; } // another shuffle
 	if (PAD_justPressed(BTN_Y) && cart_count>1) {
-		char keep[16] = "";
-		if (sel>=0 && sel<cart_count) snprintf(keep, sizeof(keep), "%s", carts[sel].pid);
-		sort_mode = (BbsSort)((sort_mode + 1) % BBS_SORT_COUNT);
+		if (list_is_search) sort_mode = sort_mode==BBS_SORT_BEST ? BBS_SORT_STARS : sort_mode==BBS_SORT_STARS ? BBS_SORT_NEWEST : BBS_SORT_BEST;
+		else sort_mode = sort_mode==BBS_SORT_LISTED ? BBS_SORT_STARS : sort_mode==BBS_SORT_STARS ? BBS_SORT_NEWEST : BBS_SORT_LISTED;
 		bbs_sort(carts, cart_count, query, sort_mode);
-		sel = scroll = 0;
+		sel = scroll = 0; // the top of the new order is the point of changing it
 		dirty = 1;
-		(void)keep; // the top of the new order is the point of changing it
 	}
 	int extra = (!exhausted && !page_failed) ? 1 : 0;
 	int count = cart_count + extra;
@@ -703,6 +774,8 @@ int main(int argc, char* argv[]) {
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			if ((job_kind==JOB_CART || job_kind==JOB_THREAD) && modal==MODAL_NONE) draw_progress();
 			else if (modal!=MODAL_NONE) draw_modal();
+			else if (cur_screen==SCR_HOME) draw_home(ow);
+			else if (cur_screen==SCR_TAGS) draw_tags(ow);
 			else if (cur_screen==SCR_LIST) draw_list(ow);
 			else draw_osk();
 			GFX_flip(screen);

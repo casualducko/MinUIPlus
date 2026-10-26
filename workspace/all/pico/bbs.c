@@ -29,6 +29,41 @@ void bbs_search_url(char* out, size_t cap, const char* query, int page) {
 	if (page<1) page = 1;
 	snprintf(out, cap, "%s/bbs/?cat=7&carts_tab=1&page=%d&search=%s", base_url(), page, q);
 }
+void bbs_browse_url(char* out, size_t cap, BbsBrowse kind, const char* tag, int page) {
+	if (page<1) page = 1;
+	const char* order = "featured";
+	char extra[96] = "";
+	switch (kind) {
+		case BBS_BROWSE_POPULAR: order = "ts"; snprintf(extra, sizeof(extra), "&popular=1"); break; // popular right now
+		case BBS_BROWSE_NEWEST: order = "ts"; break;
+		case BBS_BROWSE_RANDOM: order = "lucky"; break;
+		case BBS_BROWSE_TAG: {
+			char t[64];
+			bbs_urlencode(tag ? tag : "", t, sizeof(t));
+			snprintf(extra, sizeof(extra), "&tag=%s", t);
+			break;
+		}
+		default: break;
+	}
+	snprintf(out, cap, "%s/bbs/lister.php?use_hurl=1&cat=7&sub=2&orderby=%s&page=%d%s", base_url(), order, page, extra);
+}
+const char* bbs_browse_name(BbsBrowse kind, const char* tag) {
+	static char name[64];
+	switch (kind) {
+		case BBS_BROWSE_POPULAR: return "Popular now";
+		case BBS_BROWSE_NEWEST: return "New and updated";
+		case BBS_BROWSE_RANDOM: return "Random";
+		case BBS_BROWSE_TAG: snprintf(name, sizeof(name), "#%s", tag ? tag : ""); return name;
+		default: return "Featured";
+	}
+}
+static const char* const tags[] = { // the common ones on the BBS, each seen to have a full page of carts
+	"platformer", "puzzle", "arcade", "adventure", "action", "shooter", "shmup", "roguelike", "metroidvania", "rpg",
+	"strategy", "racing", "fighting", "sports", "horror", "music", "tool", "3d", "fps", "sokoban", "demake", "mod",
+	"tetris", "snake", "cards", "bullet-hell", "maze", "retro", "simulation", "tutorial", "jam", "turn-based", "rts",
+	"story", "multiplayer", "cute", "space", "top-down", "2player",
+};
+const char* const* bbs_tag_list(int* count) { *count = (int)(sizeof(tags)/sizeof(tags[0])); return tags; }
 void bbs_thread_url(char* out, size_t cap, long tid) { snprintf(out, cap, "%s/bbs/?tid=%ld", base_url(), tid); }
 void bbs_cart_url(char* out, size_t cap, const char* cart_path) { snprintf(out, cap, "%s%s", base_url(), cart_path); }
 
@@ -209,7 +244,7 @@ int bbs_match_tier(const BbsCart* c, const char* query) {
 	return in_title ? 2 : in_any ? 1 : 0;
 }
 const char* bbs_sort_name(BbsSort s) {
-	return s==BBS_SORT_STARS ? "Most stars" : s==BBS_SORT_NEWEST ? "Newest" : "Best match";
+	return s==BBS_SORT_STARS ? "Most stars" : s==BBS_SORT_NEWEST ? "Newest" : s==BBS_SORT_LISTED ? "As listed" : "Best match";
 }
 typedef struct { BbsCart c; int tier; int order; } Ranked;
 static BbsSort sort_how;
@@ -218,6 +253,7 @@ static int cmp_ranked(const void* a, const void* b) {
 	int r = 0;
 	if (sort_how==BBS_SORT_BEST) r = y->tier - x->tier, r = r ? r : y->c.stars - x->c.stars;
 	else if (sort_how==BBS_SORT_STARS) r = y->c.stars - x->c.stars;
+	else if (sort_how==BBS_SORT_LISTED) r = x->c.order - y->c.order;
 	else r = strcmp(y->c.date, x->c.date);
 	return r ? r : x->order - y->order; // stable
 }

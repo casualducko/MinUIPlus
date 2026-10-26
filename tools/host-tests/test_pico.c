@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include "bbs.h"
@@ -68,6 +69,31 @@ int main(int argc, char** argv) {
 	bbs_search_url(url, sizeof(url), "", 1);
 	CHECK(!strcmp(url, "https://www.lexaloffle.com/bbs/?cat=7&carts_tab=1&page=1&search="), "the default is https and the real site");
 
+	// browsing
+	setenv("PICO_BBS_BASE", "http://127.0.0.1:1234", 1);
+	bbs_browse_url(url, sizeof(url), BBS_BROWSE_FEATURED, NULL, 1);
+	CHECK(!strcmp(url, "http://127.0.0.1:1234/bbs/lister.php?use_hurl=1&cat=7&sub=2&orderby=featured&page=1"), "featured");
+	bbs_browse_url(url, sizeof(url), BBS_BROWSE_POPULAR, NULL, 2);
+	CHECK(!strcmp(url, "http://127.0.0.1:1234/bbs/lister.php?use_hurl=1&cat=7&sub=2&orderby=ts&page=2&popular=1"), "popular now, page 2");
+	bbs_browse_url(url, sizeof(url), BBS_BROWSE_NEWEST, NULL, 1);
+	CHECK(strstr(url, "orderby=ts&page=1") && !strstr(url, "popular"), "new and updated");
+	bbs_browse_url(url, sizeof(url), BBS_BROWSE_RANDOM, NULL, 1);
+	CHECK(strstr(url, "orderby=lucky"), "random");
+	bbs_browse_url(url, sizeof(url), BBS_BROWSE_TAG, "bullet-hell", 3);
+	CHECK(strstr(url, "orderby=featured&page=3&tag=bullet-hell"), "a tag, page 3");
+	bbs_browse_url(url, sizeof(url), BBS_BROWSE_TAG, "a b&c", 1);
+	CHECK(strstr(url, "&tag=a%20b%26c") && !strchr(strstr(url, "tag="), ' '), "a tag is encoded");
+	CHECK(!strcmp(bbs_browse_name(BBS_BROWSE_TAG, "puzzle"), "#puzzle") && !strcmp(bbs_browse_name(BBS_BROWSE_FEATURED, NULL), "Featured"), "names for the title");
+	int ntags = 0;
+	const char* const* tl = bbs_tag_list(&ntags);
+	int tag_ok = ntags>20;
+	for (int i=0; i<ntags; i++) {
+		for (const char* p = tl[i]; *p; p++) if (!(islower((unsigned char)*p) || isdigit((unsigned char)*p) || *p=='-')) tag_ok = 0;
+		for (int k=0; k<i; k++) if (!strcmp(tl[k], tl[i])) tag_ok = 0;
+	}
+	CHECK(tag_ok, "the tag list has no duplicates and nothing odd in a name");
+	unsetenv("PICO_BBS_BASE");
+
 	// ranking
 	BbsCart a = {0}, b = {0}, d = {0}, e = {0};
 	snprintf(a.title, sizeof(a.title), "The Lost Night Release"); snprintf(a.tags, sizeof(a.tags), "rpg, earthbound, mario"); a.stars = 300;
@@ -85,6 +111,12 @@ int main(int argc, char** argv) {
 	bbs_sort(list, 4, "mario", BBS_SORT_NEWEST);
 	CHECK(!strcmp(list[0].date, "2024-05-05") && !strcmp(list[3].date, "2020-01-01"), "newest first");
 
+	BbsCart q[3] = { {0}, {0}, {0} };
+	snprintf(q[0].title, sizeof(q[0].title), "c"); q[0].order = 2; q[0].stars = 5;
+	snprintf(q[1].title, sizeof(q[1].title), "a"); q[1].order = 0; q[1].stars = 9;
+	snprintf(q[2].title, sizeof(q[2].title), "b"); q[2].order = 1; q[2].stars = 1;
+	bbs_sort(q, 3, "", BBS_SORT_LISTED);
+	CHECK(!strcmp(q[0].title, "a") && !strcmp(q[1].title, "b") && !strcmp(q[2].title, "c"), "as listed: the BBS's own order comes back");
 	// file names
 	char name[256];
 	bbs_file_name("Celeste Classic", NULL, name, sizeof(name));
@@ -121,6 +153,14 @@ int main(int argc, char** argv) {
 		char* body = NULL;
 		if (f) { fseek(f, 0, SEEK_END); flen = ftell(f); fseek(f, 0, SEEK_SET); body = malloc(flen+1); if (fread(body, 1, flen, f)!=flen) flen = 0; fclose(f); }
 		CHECK(body && bbs_parse_search(body, flen, c, 64)==5, "...and parses");
+		free(body);
+		bbs_job_cleanup(&job);
+		bbs_browse_url(url, sizeof(url), BBS_BROWSE_TAG, "platformer", 1);
+		bbs_job_start(&job, url, out, 0);
+		for (int i=0; i<200 && !bbs_job_poll(&job); i++) usleep(50000);
+		f = fopen(out, "rb"); body = NULL; flen = 0;
+		if (f) { fseek(f, 0, SEEK_END); flen = ftell(f); fseek(f, 0, SEEK_SET); body = malloc(flen+1); if (fread(body, 1, flen, f)!=flen) flen = 0; fclose(f); }
+		CHECK(!bbs_job_error(&job) && body && bbs_parse_search(body, flen, c, 64)==5, "a browse page comes back and parses like a search page");
 		free(body);
 		bbs_job_cleanup(&job);
 		bbs_thread_url(url, sizeof(url), 2145);

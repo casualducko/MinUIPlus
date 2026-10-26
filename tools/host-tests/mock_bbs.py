@@ -2,6 +2,7 @@
 """A tiny stand-in for the Lexaloffle BBS for the Pico Search tool's tests and the Mac harness.
    Prints "PORT n" once it is listening. Serves:
      /bbs/?cat=7&carts_tab=1&page=N&search=Q   the fixture listing on page 1 (more pages if MOCK_PAGES), nothing after
+     /bbs/lister.php?...&page=N                the same fixture listing (the browse lists)
      /bbs/?tid=T                               the fixture thread page (404 for tid 404)
      /bbs/cposts/1/15133.p8.png                a valid PNG, big enough to look like a cart
 """
@@ -26,6 +27,10 @@ class H(http.server.BaseHTTPRequestHandler):
         if u.path == "/bbs/" and "tid" in q:
             if q["tid"][0] == "404": return self.send(404, b"not found")
             return self.send(200, fixture("bbs_thread.html"))
+        if u.path == "/bbs/lister.php":
+            page = int(q.get("page", ["1"])[0])
+            if page == 1: return self.send(200, fixture("bbs_search.html"))
+            return self.send(200, b"<html><script>pdat=[\n\t];</script></html>")
         if u.path == "/bbs/" and "search" in q:
             page = int(q.get("page", ["1"])[0])
             if page == 1: return self.send(200, fixture("bbs_search.html"))

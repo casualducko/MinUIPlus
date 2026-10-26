@@ -16,11 +16,17 @@ typedef struct {
 	char date[24];		// "2021-02-27 17:33:02"
 	int stars;
 	char tags[128];		// "rpg, earthbound, shooter"
+	int order;			// where it came in the listing (set by the caller, for "as listed")
 } BbsCart;
 
 // The base is https://www.lexaloffle.com unless PICO_BBS_BASE says otherwise (tests). Both build into out.
 void bbs_search_url(char* out, size_t cap, const char* query, int page); // page from 1
 void bbs_thread_url(char* out, size_t cap, long tid);
+// Browsing the BBS's own lists (the site's lister.php, the same 30-cart pages the web page shows)
+typedef enum { BBS_BROWSE_FEATURED, BBS_BROWSE_POPULAR, BBS_BROWSE_NEWEST, BBS_BROWSE_RANDOM, BBS_BROWSE_TAG } BbsBrowse;
+void bbs_browse_url(char* out, size_t cap, BbsBrowse kind, const char* tag, int page); // tag only for BBS_BROWSE_TAG (featured carts with that tag)
+const char* bbs_browse_name(BbsBrowse kind, const char* tag); // for a title: "Featured", "#platformer"...
+const char* const* bbs_tag_list(int* count); // the tags worth offering (each checked to have carts)
 void bbs_cart_url(char* out, size_t cap, const char* cart_path); // "/bbs/cposts/1/15133.p8.png"
 void bbs_urlencode(const char* in, char* out, size_t cap);
 
@@ -31,7 +37,7 @@ int bbs_parse_cart_path(const char* html, size_t len, char* path, size_t cap);
 
 // Ranking for a query: 3 the whole query is in the title, 2 every word is, 1 every word is in the title or the tags, 0 the rest.
 int bbs_match_tier(const BbsCart* c, const char* query);
-typedef enum { BBS_SORT_BEST, BBS_SORT_STARS, BBS_SORT_NEWEST, BBS_SORT_COUNT } BbsSort;
+typedef enum { BBS_SORT_BEST, BBS_SORT_STARS, BBS_SORT_NEWEST, BBS_SORT_LISTED, BBS_SORT_COUNT } BbsSort; // LISTED: the order the BBS gave
 const char* bbs_sort_name(BbsSort s);
 void bbs_sort(BbsCart* carts, int count, const char* query, BbsSort how); // stable
 // "Celeste Classic" -> "Celeste Classic.p8.png": nothing a FAT card or the shell dislikes. suffix (may be NULL) goes before the extension.
