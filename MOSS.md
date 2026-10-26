@@ -25,7 +25,7 @@ Last updated 2026-10-25.
 - **Model name:** ship a device tree that names the unit RGB20SX, if wanted. Until then: `model.txt`. (Needs the same build as item 1.)
 
 ## 4. Optional
-- **Boot splash:** swap `splash.png` in a custom build.
+- **Boot splash:** it is `/splash/splash.png` inside the initramfs in `/flash/KERNEL` (not `/storage/.config/splash`, tried). `moss/splash-patch.py` builds a patched KERNEL on the Mac; flashing it needs a TF1 backup and a go-ahead.
 - **Trimmed Moss:** drop EmulationStation and the extra services; faster boot, less battery, fewer layers in the audio path (IDEAS.md item 21).
 - **Build pipeline:** `casualducko/rgb20pro-firmware` (GitHub Actions) and the ccache release in `casualducko/distribution-cache`; the 15-hour builds are the cost of every image.
 
