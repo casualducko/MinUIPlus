@@ -272,6 +272,7 @@ Test: `tools/package/release.sh ../test-package v2099.01.01.0000`, then `node do
 
 ## Add to collection
 - **Launcher:** START on a game opens a page of the collections (the `.txt` lists in `/Collections`, plus "Favorites" when there is none so a first game has somewhere to go). A puts the game in or takes it out; B or START closes. The folders on screen are read again afterwards, keeping the cursor on the same entry (the Collections folder appears at the root after the first game goes in). Code: `collectionPage`, `refreshStack` in `minui.c`.
+- **New collection:** the page has a "New collection..." row (above Delete game). A opens a small on-screen keyboard (X capitals/small, Y clear, B deletes a letter, START or ADD finishes); the game goes straight into the new collection. Code: `askCollectionName` in `minui.c`. Built and installed; not tried on the device.
 - **In a game:** Options > Collections lists the same collections with On/Off for this game (A or left/right). Code: `OptionCollections_*` in `minarch.c`.
 - **Files:** `Collection_*` in `utils.c` (tested by `test_collections.c`); a line is the game's path below the card, as MinUI reads them. Saved atomically; Windows line endings are understood.
 - **Note:** `MIN` and `MAX` in `defines.h` have no outer parentheses: never nest them or use them inside a larger expression (`clampTop` in `minui.c` exists for that reason).

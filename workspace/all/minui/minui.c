@@ -1472,6 +1472,81 @@ static int confirmDelete(Entry* entry, SDL_Surface* screen, int* show_setting) {
 	return answer;
 }
 
+// A name for a new collection, typed on a small on-screen keyboard (X: capitals/small, Y: clear). 1 if one was entered into name.
+static int askCollectionName(SDL_Surface* screen, int* show_setting, char* name, size_t cap) {
+	static const char* rows_lo[4] = { "abcdefghij", "klmnopqrst", "uvwxyz0123", "456789.-'&" };
+	static const char* rows_up[4] = { "ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789.-'&" };
+	char text[COLLECTION_NAME_MAX] = "";
+	int kx = 0, ky = 0, upper = 1, dirty = 1, result = 0, quit = 0;
+	int row_h = SCALE1(PILL_SIZE);
+	int w = screen->w - SCALE1(PADDING*2);
+	int cell_w = w / 10;
+	int top = SCALE1(PADDING) + row_h*2;
+	while (!quit) {
+		GFX_startFrame();
+		PAD_poll();
+		PWR_update(&dirty, show_setting, NULL, NULL);
+		int press = 0;
+		if (PAD_justRepeated(BTN_LEFT)) { if (ky==4) kx = kx<4 ? 8 : (kx<7 ? 1 : 5); else kx = (kx+9)%10; dirty = 1; }
+		else if (PAD_justRepeated(BTN_RIGHT)) { if (ky==4) kx = kx<4 ? 5 : (kx<7 ? 8 : 1); else kx = (kx+1)%10; dirty = 1; }
+		else if (PAD_justRepeated(BTN_UP)) { ky = (ky+4)%5; dirty = 1; }
+		else if (PAD_justRepeated(BTN_DOWN)) { ky = (ky+1)%5; dirty = 1; }
+		else if (PAD_justPressed(BTN_A)) press = 1;
+		else if (PAD_justPressed(BTN_X)) { upper = !upper; dirty = 1; }
+		else if (PAD_justPressed(BTN_Y)) { text[0] = '\0'; dirty = 1; }
+		else if (PAD_justPressed(BTN_START)) { ky = 4; kx = 8; press = 1; }
+		else if (PAD_justPressed(BTN_B)) { size_t n = strlen(text); if (n) { text[n-1] = '\0'; dirty = 1; } else quit = 1; }
+		if (press) {
+			size_t n = strlen(text);
+			dirty = 1;
+			if (ky<4) { if (n+1<sizeof(text)) { text[n] = (upper ? rows_up : rows_lo)[ky][kx]; text[n+1] = '\0'; } }
+			else {
+				int b = kx<4 ? 0 : (kx<7 ? 1 : 2);
+				if (b==0) { if (n+1<sizeof(text)) { text[n] = ' '; text[n+1] = '\0'; } }
+				else if (b==1) { if (n) text[n-1] = '\0'; }
+				else {
+					while (n && text[n-1]==' ') text[--n] = '\0';
+					const char* t = text;
+					while (*t==' ') t++;
+					if (*t) { snprintf(name, cap, "%s", t); result = 1; quit = 1; }
+				}
+			}
+		}
+		if (dirty && !quit) {
+			GFX_clearUI(screen);
+			GFX_blitPill(ASSET_DARK_GRAY_PILL, screen, &(SDL_Rect){SCALE1(PADDING), SCALE1(PADDING), w, row_h});
+			char shown[COLLECTION_NAME_MAX+2], out[256];
+			snprintf(shown, sizeof(shown), "%s_", text);
+			GFX_truncateText(font.large, shown, out, w - SCALE1(BUTTON_PADDING*2), 0);
+			SDL_Surface* t = GFX_renderText(font.large, out, COLOR_WHITE);
+			if (t) { SDL_BlitSurface(t, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), SCALE1(PADDING)+(row_h-t->h)/2}); SDL_FreeSurface(t); }
+			for (int r=0; r<4; r++) for (int c=0; c<10; c++) {
+				int x = SCALE1(PADDING) + c*cell_w, y = top + r*row_h;
+				int on = ky==r && kx==c;
+				if (on) GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){x+2, y, cell_w-4, row_h});
+				char ch[2] = { (upper ? rows_up : rows_lo)[r][c], 0 };
+				SDL_Surface* s = GFX_renderText(font.large, ch, on ? COLOR_BLACK : COLOR_WHITE);
+				if (s) { SDL_BlitSurface(s, NULL, screen, &(SDL_Rect){x+(cell_w-s->w)/2, y+(row_h-s->h)/2}); SDL_FreeSurface(s); }
+			}
+			const char* labels[3] = { "SPACE", "DELETE", "ADD" };
+			int starts[3] = { 0, 4, 7 }, widths[3] = { 4, 3, 3 };
+			int cur = kx<4 ? 0 : (kx<7 ? 1 : 2);
+			for (int b=0; b<3; b++) {
+				int x = SCALE1(PADDING) + starts[b]*cell_w, y = top + 4*row_h + row_h/2, ww = widths[b]*cell_w - 4;
+				int on = ky==4 && cur==b;
+				GFX_blitPill(on ? ASSET_WHITE_PILL : ASSET_DARK_GRAY_PILL, screen, &(SDL_Rect){x+2, y, ww, row_h});
+				SDL_Surface* s = GFX_renderText(font.medium, labels[b], on ? COLOR_BLACK : COLOR_WHITE);
+				if (s) { SDL_BlitSurface(s, NULL, screen, &(SDL_Rect){x+2+(ww-s->w)/2, y+(row_h-s->h)/2}); SDL_FreeSurface(s); }
+			}
+			GFX_blitButtonGroup((char*[]){"X","ABC/abc","Y","CLEAR",NULL}, 0, screen, 0);
+			GFX_blitButtonGroup((char*[]){"B","DELETE","A","TYPE",NULL}, 1, screen, 1);
+			GFX_flip(screen);
+			dirty = 0;
+		}
+		else GFX_sync();
+	}
+	return result;
+}
 // START on a game: the collections, A puts the game in one or takes it out; the last row deletes the game. 1 if anything changed.
 static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) {
 	const char* rel = Collection_rel(entry->path, SDCARD_PATH);
@@ -1489,7 +1564,7 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 	int visible = (screen->h - SCALE1(PADDING+PILL_SIZE) - SCALE1(8) - top_y) / row_h;
 	if (visible<1) visible = 1;
 	int sel = 0, first = 0, changed = 0, dirty = 1, quit = 0;
-	int rows = count + 1; // the collections, then Delete game
+	int rows = count + 2; // the collections, New collection, then Delete game
 	char message[64] = "";
 	while (!quit) {
 		GFX_startFrame();
@@ -1498,7 +1573,17 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 		if (PAD_justPressed(BTN_B) || PAD_justPressed(BTN_START)) quit = 1;
 		else if (PAD_justRepeated(BTN_UP)) { sel = (sel + rows - 1) % rows; dirty = 1; message[0] = '\0'; }
 		else if (PAD_justRepeated(BTN_DOWN)) { sel = (sel + 1) % rows; dirty = 1; message[0] = '\0'; }
-		else if (PAD_justPressed(BTN_A) && sel==count) { // Delete game
+		else if (PAD_justPressed(BTN_A) && sel==count) { // New collection: the game goes straight into it
+			char fresh[COLLECTION_NAME_MAX];
+			if (askCollectionName(screen, show_setting, fresh, sizeof(fresh)) && !strchr(fresh, '/')) {
+				char file[MAX_PATH];
+				snprintf(file, sizeof(file), "%s/%s.txt", COLLECTIONS_PATH, fresh);
+				if (Collection_set(file, rel, 1)==0) { changed = 1; quit = 1; }
+				else snprintf(message, sizeof(message), "Could not save %s", fresh);
+			}
+			dirty = 1;
+		}
+		else if (PAD_justPressed(BTN_A) && sel==count+1) { // Delete game
 			if (confirmDelete(entry, screen, show_setting)) { changed = 1; quit = 1; }
 			dirty = 1;
 		}
@@ -1527,8 +1612,8 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 				int y = top_y + i*row_h;
 				int selected = first+i==sel;
 				if (selected) GFX_blitPill(ASSET_WHITE_PILL, screen, &(SDL_Rect){SCALE1(PADDING), y, w, row_h});
-				if (first+i==count) { // the last row
-					SDL_Surface* d = GFX_renderText(font.large, "Delete game...", selected ? COLOR_BLACK : COLOR_LIGHT_TEXT);
+				if (first+i>=count) { // the last two rows
+					SDL_Surface* d = GFX_renderText(font.large, first+i==count ? "New collection..." : "Delete game...", selected ? COLOR_BLACK : COLOR_LIGHT_TEXT);
 					if (d) { SDL_BlitSurface(d, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), y+(row_h-d->h)/2}); SDL_FreeSurface(d); }
 					continue;
 				}
@@ -1543,7 +1628,7 @@ static int collectionPage(Entry* entry, SDL_Surface* screen, int* show_setting) 
 				SDL_Surface* m = GFX_renderText(font.small, message, COLOR_LIGHT_TEXT);
 				if (m) { SDL_BlitSurface(m, NULL, screen, &(SDL_Rect){SCALE1(PADDING+BUTTON_PADDING), top_y + (visible<rows ? visible : rows)*row_h + SCALE1(4)}); SDL_FreeSurface(m); }
 			}
-			GFX_blitButtonGroup((char*[]){"B","BACK","A", sel==count ? "DELETE" : in[sel] ? "REMOVE" : "ADD", NULL}, 1, screen, 1);
+			GFX_blitButtonGroup((char*[]){"B","BACK","A", sel==count ? "NEW" : sel==count+1 ? "DELETE" : in[sel] ? "REMOVE" : "ADD", NULL}, 1, screen, 1);
 			GFX_flip(screen);
 			dirty = 0;
 		}
