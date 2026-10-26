@@ -367,6 +367,9 @@ void PLAT_enableBacklight(int enable);
 void PLAT_powerOff(void);
 	
 void PLAT_setCPUSpeed(int speed); // enum
+#ifdef HAS_CPU_AUTO
+void PLAT_setCPUFreq(int khz); // a platform that can step its clock says so with HAS_CPU_AUTO
+#endif
 void PLAT_setRumble(int strength);
 int PLAT_pickSampleRate(int requested, int max);
 

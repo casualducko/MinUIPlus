@@ -747,6 +747,10 @@ void PLAT_setCPUSpeed(int speed) {
 	putInt(GOVERNOR_PATH, freq);
 }
 
+void PLAT_setCPUFreq(int khz) { // a clock of the steps in scaling_available_frequencies
+	putInt(GOVERNOR_PATH, khz);
+}
+
 void PLAT_setRumble(int strength) { // 0-65535, see SetRawRumble() in libmsettings
 	static int logged = 0;
 	SetRawRumble(strength);

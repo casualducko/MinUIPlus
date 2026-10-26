@@ -115,6 +115,7 @@
 #define FIXED_SIZE		(FIXED_PITCH * FIXED_HEIGHT)
 
 #define HAS_HDMI	1
+#define HAS_CPU_AUTO	1 // PLAT_setCPUFreq: minarch's Auto CPU speed steps the clock itself
 #define HDMI_WIDTH 	1280
 #define HDMI_HEIGHT 720
 #define HDMI_PITCH 	(HDMI_WIDTH * FIXED_BPP)

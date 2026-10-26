@@ -350,3 +350,13 @@ Open the in-game menu with Fn, then tap Fn again within 0.7 s (a double tap): mi
 
 ## Back to the game from the Switcher; Wi-Fi fallback everywhere (2026-10-26)
 Fn twice in a game now leaves the game and its slot in `/tmp/open-switcher`; the launcher opens the Switcher and keeps the game in `/tmp/switcher-back.txt`. If the launcher starts again and the Switcher chose nothing (B), the game is resumed from its auto-save (the same hook the Switcher uses: `/tmp/switch-to.txt`); if a game was chosen, the note is dropped. The Info tool's Wi-Fi switch, PicoSearch, and the cheat download in minarch now start `wifiup` (the SSH, Romulus and Clock tools already did) so they also fall back to the other saved networks; their waits are longer (45 to 60 s).
+
+
+## Auto CPU speed
+Options > Frontend > CPU Speed has a fourth choice, **Auto** (rgb30 only, where the clock can be set freely: 408 MHz to 1.99 GHz in eight steps). It starts at the speed it last found for the game (1.6 GHz the first time), and:
+- **Down:** after 30 s without a missed frame it tries the next step down for 8 s. A missed frame is a trip round the main loop longer than 1.5 frames. Two misses during the trial put it back at once.
+- **Up:** 3 misses in one second raise the clock a step, in the middle of a heavy scene too.
+- **Memory:** `.userdata/rgb30/cpu-auto/<game>.txt` holds `<step> <floor> <plays>`: the step to start at, the highest step that failed (it won't go below it) and the plays since then; after 10 plays the floor is forgotten so the game is looked at again. A trial still running at quit is not kept.
+- Fast-forward runs at full speed and is not counted; the menu, sleep and any trip over 250 ms start the clean count again. Set it as the console default with "Save changes for console" in the menu.
+- Log lines start with `cpu auto:` in `logs/<system>.txt`. Code: `Auto_*` in `minarch.c`, `PLAT_setCPUFreq` in the rgb30 platform.
+- Checked: the step logic against a simulated game (needs 816 MHz: settles there in 3 minutes, starts there the second time; needs full speed: climbs to 1992 in two seconds). Built and installed; not tried on the device (so not yet: whether the miss counting is a good enough sign on real games).

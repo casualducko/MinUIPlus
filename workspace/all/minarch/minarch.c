@@ -900,6 +900,9 @@ static char* overclock_labels[] = {
 	"Powersave",
 	"Normal",
 	"Performance",
+#ifdef HAS_CPU_AUTO
+	"Auto",
+#endif
 	NULL,
 };
 
@@ -992,10 +995,18 @@ static struct Config {
 			[FE_OPT_OVERCLOCK] = {
 				.key	= "minarch_cpu_speed",
 				.name	= "CPU Speed",
+#ifdef HAS_CPU_AUTO
+				.desc	= "Over- or underclock the CPU to prioritize\npure performance or power savings.\nAuto learns the lowest speed that\nruns this game smoothly.",
+#else
 				.desc	= "Over- or underclock the CPU to prioritize\npure performance or power savings.",
+#endif
 				.default_value = 1,
 				.value = 1,
+#ifdef HAS_CPU_AUTO
+				.count = 4,
+#else
 				.count = 3,
+#endif
 				.values = overclock_labels,
 				.labels = overclock_labels,
 			},
@@ -1142,13 +1153,110 @@ static int Config_getValue(char* cfg, const char* key, char* out_value, int* loc
 	return 1;
 }
 
+
+#ifdef HAS_CPU_AUTO
+// Auto CPU speed: the lowest clock that keeps this game smooth. It steps down while play stays clean and
+// back up when frames are missed; what it finds is kept per game in .userdata/<platform>/cpu-auto/<game>.txt as
+//   <step> <floor> <plays>
+// (the step to start at; the highest step that failed, below which it won't try again; plays since the floor was set,
+// after 10 the floor is forgotten so the game gets looked at again).
+static const int auto_khz[] = { 408000, 600000, 816000, 1104000, 1416000, 1608000, 1800000, 1992000 };
+#define AUTO_STEPS ((int)(sizeof(auto_khz)/sizeof(auto_khz[0])))
+#define AUTO_START_STEP 5		// 1.6 GHz, what Normal is, when nothing is known about the game
+#define AUTO_CLEAN_MS 30000		// this long without a missed frame before trying a lower clock
+#define AUTO_TRIAL_MS 8000		// a lower clock is on trial this long
+#define AUTO_FLOOR_PLAYS 10
+static int auto_on = 0;
+static int auto_step = AUTO_START_STEP, auto_floor = -1, auto_plays = 0;
+static int auto_trial = 0, auto_trial_misses = 0;
+static uint32_t auto_trial_end = 0, auto_clean_since = 0, auto_tick = 0;
+static int auto_tick_misses = 0, auto_total_misses = 0;
+
+static void Auto_path(char* out, size_t cap) { snprintf(out, cap, "%s/cpu-auto/%s.txt", USERDATA_PATH, game.name); }
+static void Auto_save(void) {
+	char path[MAX_PATH], text[64];
+	Auto_path(path, sizeof(path));
+	char dir[MAX_PATH];
+	snprintf(dir, sizeof(dir), "%s/cpu-auto", USERDATA_PATH);
+	mkdir(dir, 0755);
+	snprintf(text, sizeof(text), "%d %d %d\n", auto_step, auto_floor, auto_plays);
+	putFile(path, text);
+}
+static void Auto_load(void) {
+	auto_step = AUTO_START_STEP; auto_floor = -1; auto_plays = 0;
+	char path[MAX_PATH];
+	Auto_path(path, sizeof(path));
+	char* text = allocFile(path);
+	if (text) {
+		int a, b, c;
+		if (sscanf(text, "%d %d %d", &a, &b, &c)==3 && a>=0 && a<AUTO_STEPS && b>=-1 && b<AUTO_STEPS && c>=0) {
+			auto_step = a; auto_floor = b; auto_plays = c;
+			if (auto_floor>=0 && ++auto_plays>=AUTO_FLOOR_PLAYS) { auto_floor = -1; auto_plays = 0; }
+			if (auto_step<=auto_floor) auto_step = auto_floor + 1 < AUTO_STEPS ? auto_floor + 1 : AUTO_STEPS - 1;
+		}
+		free(text);
+	}
+	LOG_info("cpu auto: starting at %d MHz (floor %d)\n", auto_khz[auto_step]/1000, auto_floor>=0 ? auto_khz[auto_floor]/1000 : 0);
+}
+static void Auto_apply(void) { PLAT_setCPUFreq(auto_khz[fast_forward ? AUTO_STEPS-1 : auto_step]); }
+static void Auto_restart(uint32_t now) { // after the menu, sleep or a stretch that wasn't the game
+	auto_trial = 0; auto_trial_misses = 0; auto_tick = now; auto_tick_misses = 0; auto_clean_since = now;
+}
+// One trip round the main loop that took `period` ms, `budget` being a frame.
+static void Auto_frame(uint32_t period, uint32_t budget, uint32_t now) {
+	if (!auto_on || fast_forward) { auto_clean_since = now; return; }
+	if (period>250) { Auto_restart(now); return; } // not the game
+	int missed = period > budget + budget/2;
+	if (missed) { auto_tick_misses++; auto_trial_misses++; auto_total_misses++; auto_clean_since = now; }
+	int raise = 0;
+	if (auto_trial && auto_trial_misses>=2) raise = 1;
+	else if (now - auto_tick >= 1000) {
+		if (auto_tick_misses>=3) raise = 1;
+		auto_tick = now; auto_tick_misses = 0;
+	}
+	if (raise && auto_step<AUTO_STEPS-1) {
+		if (auto_floor<auto_step) { auto_floor = auto_step; auto_plays = 0; }
+		auto_step++;
+		LOG_info("cpu auto: frames missed, up to %d MHz\n", auto_khz[auto_step]/1000);
+		Auto_apply(); Auto_save();
+		auto_trial = 0; auto_trial_misses = 0; auto_clean_since = now; auto_tick = now; auto_tick_misses = 0;
+		return;
+	}
+	if (auto_trial && now>=auto_trial_end) { // it held: this is the speed now
+		auto_trial = 0;
+		LOG_info("cpu auto: %d MHz holds\n", auto_khz[auto_step]/1000);
+		Auto_save();
+		auto_clean_since = now;
+	}
+	else if (!auto_trial && auto_step>0 && auto_step-1>auto_floor && now - auto_clean_since >= AUTO_CLEAN_MS) {
+		auto_step--;
+		auto_trial = 1; auto_trial_misses = 0; auto_trial_end = now + AUTO_TRIAL_MS;
+		LOG_info("cpu auto: trying %d MHz\n", auto_khz[auto_step]/1000);
+		Auto_apply();
+	}
+}
+static void Auto_quit(void) { // keep the step that held (one still on trial is not known to)
+	if (!auto_on) return;
+	if (auto_trial) { auto_step++; Auto_apply(); }
+	Auto_save();
+}
+#endif
 static void setOverclock(int i) {
 	overclock = i;
 	switch (i) {
 		case 0: PWR_setCPUSpeed(CPU_SPEED_POWERSAVE); break;
 		case 1: PWR_setCPUSpeed(CPU_SPEED_NORMAL); break;
 		case 2: PWR_setCPUSpeed(CPU_SPEED_PERFORMANCE); break;
+#ifdef HAS_CPU_AUTO
+		case 3:
+			if (!auto_on) { auto_on = 1; Auto_load(); Auto_restart(SDL_GetTicks()); }
+			Auto_apply();
+			break;
+#endif
 	}
+#ifdef HAS_CPU_AUTO
+	if (i!=3) auto_on = 0;
+#endif
 }
 // Turbo: for the game's buttons set to On in Options > Frontend, holding the button presses and releases it
 // over and over. `half` is the frames of each press and each release (2: 15 presses a second at 60 fps).
@@ -1863,6 +1971,9 @@ static int setFastForward(int enable) {
 		toggle_thread = 1;
 	}
 	fast_forward = enable;
+#ifdef HAS_CPU_AUTO
+	if (auto_on) Auto_apply();
+#endif
 	return enable;
 }
 
@@ -5702,6 +5813,9 @@ int main(int argc , char* argv[]) {
 			if (period>25) ft_over25++;
 			if (period>50) ft_over50++;
 			if (period>100) ft_over100++;
+#ifdef HAS_CPU_AUTO
+			if (core.fps>1) Auto_frame(period, (uint32_t)(1000.0/core.fps + 0.5), ft_now);
+#endif
 		}
 		ft_skip = 0;
 		ft_last = ft_now;
@@ -5774,6 +5888,9 @@ int main(int argc , char* argv[]) {
 		hdmimon();
 	}
 	
+#ifdef HAS_CPU_AUTO
+	Auto_quit();
+#endif
 	Menu_quit();
 	QuitSettings();
 	
