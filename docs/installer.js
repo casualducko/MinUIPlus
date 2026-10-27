@@ -12,6 +12,8 @@ const NEW_FILE = [
 	/^\.system\/rgb30\/bin\/wifiup$/,
 	/^\.system\/res\/fallback(\.ttf|-OFL\.txt)$/,
 	/^Tools\/rgb30\/Wi-Fi\.pak\/(wifi\.elf|launch-old\.sh)$/,
+	/^Emus\/rgb30\//, // the emulator paks of the stock extras
+	/^(Roms|Saves|Bios)\/[^/]+\/\.keep$/, // their (empty) folders
 ];
 const NOT_ON_CARD = /^(install\.sh|revert\.sh|README\.txt|SHA256SUMS|VERSION)$/; // package files that are not copied
 
@@ -170,7 +172,7 @@ export async function installOnCard(root, pkg, log = () => {}, now = new Date())
 	const out = { replaced: 0, added: 0, skipped: 0, backup };
 	log('Backing up what it replaces to ' + backup);
 	for (const f of pkg.files) {
-		if (NOT_ON_CARD.test(f.path) || !/^(\.system|Tools|Emus)\//.test(f.path)) continue;
+		if (NOT_ON_CARD.test(f.path) || !/^(\.system|Tools|Emus|Roms|Saves|Bios)\//.test(f.path)) continue;
 		const old = await readBytes(root, f.path);
 		if (!old && !NEW_FILE.some(r => r.test(f.path))) { out.skipped++; log('  skip (not on the card): ' + f.path); continue; }
 		if (old) await writeBytes(root, backup + '/' + f.path, old);

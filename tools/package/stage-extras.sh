@@ -14,9 +14,11 @@ mgba=$src/Emus/rgb30/MGBA.pak/mgba_libretro.so
 [ -f "$mgba" ] || { echo "no pinned mGBA core at $mgba"; exit 1; }
 for pak in "$extras"/Emus/rgb30/*.pak; do
 	name=$(basename "$pak")
+	[ "$name" = SNX.pak ] && continue # (our own SNES core experiment, not part of the stock extras)
 	dest=$src/Emus/rgb30/$name
 	mkdir -p "$dest"
 	for f in "$pak"/*; do cp "$f" "$dest/"; done
+	chmod +x "$dest/launch.sh"
 	# a pak whose launch.sh looks in its own folder needs the core there (the others use the stock cores of the card)
 	if grep -q 'CORES_PATH=$(dirname "$0")' "$pak/launch.sh"; then
 		exe=$(sed -n 's/^EMU_EXE=//p' "$pak/launch.sh")

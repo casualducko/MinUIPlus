@@ -21,11 +21,26 @@ trap 'rm -rf "$stage"' EXIT
 mkdir -p "$out"
 parts=".system Tools Emus Roms Saves Bios SHA256SUMS"
 [ -d "$src/examples" ] && parts="$parts examples"
-(cd "$src" && tar -cf - --exclude=.DS_Store --exclude='._*' $parts) | (cd "$stage" && tar -xf -)
+for part in $parts; do rsync -a --exclude=.DS_Store --exclude='._*' "$src/$part" "$stage/"; done # (not tar: macOS tar decomposes accented names)
 cp "$here/install.sh" "$here/revert.sh" "$here/README.txt" "$stage/"
 printf '%s\n' "$tag" > "$stage/VERSION"
 name=MinUIPlus-$tag.tar.gz
-COPYFILE_DISABLE=1 tar --format ustar -czf "$out/$name" -C "$stage" .
+# (Python, not tar: macOS tar stores names like "Pokémon mini" decomposed, which no longer matches SHA256SUMS)
+python3 -I - "$out/$name" "$stage" <<'PY'
+import os, sys, tarfile
+out, stage = sys.argv[1], sys.argv[2]
+with tarfile.open(out, 'w:gz', format=tarfile.USTAR_FORMAT, encoding='utf-8') as t:
+    for root, dirs, files in os.walk(stage):
+        dirs.sort()
+        for n in sorted(dirs) + sorted(files):
+            full = os.path.join(root, n)
+            info = t.gettarinfo(full, arcname='./' + os.path.relpath(full, stage))
+            info.uid = info.gid = 0
+            info.uname = info.gname = ''
+            if info.isreg():
+                with open(full, 'rb') as f: t.addfile(info, f)
+            else: t.addfile(info)
+PY
 (cd "$out" && shasum -a 256 "$name" > "$name.sha256")
 # the web installer (docs/index.html) can't download release files from GitHub (CORS), so it reads its own copy
 pages=$(cd "$(dirname "$0")/../.." && pwd)/docs/latest
