@@ -1,7 +1,7 @@
 #!/bin/sh
 # Makes the update package that Tools > Update installs, and (with --publish) a GitHub release for it.
 #   ./release.sh <package folder> [tag] [--publish]
-# The package folder is a test-package (SHA256SUMS, .system, Tools, Emus, examples); install.sh, revert.sh and README.txt
+# The package folder is a test-package (SHA256SUMS, .system, Tools, Emus, Roms/Saves/Bios, examples; ./stage-extras.sh fills Emus and the three folders); install.sh, revert.sh and README.txt
 # are always taken from this folder (tools/package), so the package never carries an old copy. The tag defaults to
 # vYYYY.MM.DD.HHMM (the Update tool compares the numbers in it, so a later build has a bigger tag).
 # Output goes in ./release-out: MinUIPlus-<tag>.tar.gz and MinUIPlus-<tag>.tar.gz.sha256.
@@ -19,7 +19,7 @@ out=$(pwd)/release-out
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$out"
-parts=".system Tools Emus SHA256SUMS"
+parts=".system Tools Emus Roms Saves Bios SHA256SUMS"
 [ -d "$src/examples" ] && parts="$parts examples"
 (cd "$src" && tar -cf - --exclude=.DS_Store --exclude='._*' $parts) | (cd "$stage" && tar -xf -)
 cp "$here/install.sh" "$here/revert.sh" "$here/README.txt" "$stage/"
