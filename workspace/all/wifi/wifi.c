@@ -50,6 +50,7 @@ static pid_t bg_pid = 0; // started and left running (going back to the previous
 static char op_ssid[WIFI_SSID_MAX], op_pass[WIFI_PASS_MAX];
 static char prev_ssid[WIFI_SSID_MAX], prev_pass[WIFI_PASS_MAX];
 static int op_power_on = 0;
+static int pick_mode = 0, pick_done = 0, exit_code = EXIT_SUCCESS; // --pick: a tool's launcher asks which saved network to use; done = connected
 static int saved_pick = 0; // the saved list was opened from the Wi-Fi row: it is the choice of network to connect to
 
 // a message or a question over everything
@@ -258,6 +259,7 @@ static void step_connect(uint32_t now) {
 			snprintf(msg, sizeof(msg), "Connected to\n%s\n%s", op_ssid, ip);
 			op_finish();
 			say(msg, 3500);
+			pick_done = 1;
 		}
 	}
 }
@@ -634,6 +636,7 @@ static void handle_input(void) {
 	
 	if (PAD_justPressed(BTN_B)) {
 		if (cur_screen==SCR_MAIN) quit = 1;
+		else if (pick_mode) { quit = 1; exit_code = 1; } // cancelled: the tool is not started
 		else cur_screen = SCR_MAIN;
 		dirty = 1;
 	}
@@ -670,7 +673,7 @@ static void handle_input(void) {
 }
 
 int main(int argc, char* argv[]) {
-	(void)argc; (void)argv;
+	for (int i=1; i<argc; i++) if (!strcmp(argv[i], "--pick")) pick_mode = 1;
 	PWR_setCPUSpeed(CPU_SPEED_MENU);
 	
 	screen = GFX_init(MODE_MAIN);
@@ -682,6 +685,13 @@ int main(int argc, char* argv[]) {
 	load_saved();
 	refresh_status();
 	status_at = SDL_GetTicks();
+	
+	// --pick: before a tool that needs the network. With two or more saved networks and Wi-Fi off, ask which one;
+	// otherwise there is nothing to ask and the tool brings Wi-Fi up itself.
+	if (pick_mode) {
+		if (wifi_has_route() || radio_on || saved_count<2) quit = 1;
+		else { cur_screen = SCR_SAVED; sel_saved = top_saved = 0; saved_pick = 1; dirty = 1; }
+	}
 	
 	while (!quit) {
 		GFX_startFrame();
@@ -702,6 +712,7 @@ int main(int argc, char* argv[]) {
 		}
 		handle_input();
 		if (modal==MODAL_MESSAGE && modal_until && now>=modal_until) { modal = MODAL_NONE; dirty = 1; }
+		if (pick_mode && pick_done && modal==MODAL_NONE && op==OP_NONE) quit = 1;
 		
 		if (dirty) {
 			GFX_clearUI(screen);
@@ -723,5 +734,5 @@ int main(int argc, char* argv[]) {
 	PWR_quit();
 	PAD_quit();
 	GFX_quit();
-	return EXIT_SUCCESS;
+	return exit_code;
 }
