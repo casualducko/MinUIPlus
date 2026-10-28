@@ -171,7 +171,7 @@ void InfoView_gather(void) {
 	add("Build", "%s %s", BUILD_DATE, BUILD_HASH);
 	struct utsname un;
 	if (uname(&un)==0) add("Kernel", "%s", un.release);
-	add("Platform", "%s", PLATFORM);
+	add("Platform", "%s (Moss)", PLATFORM);
 	add("Model", "%s", PLAT_getModel());
 }
 
