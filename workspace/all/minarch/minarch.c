@@ -3636,7 +3636,7 @@ void Core_close(void) {
 
 ///////////////////////////////////////
 
-#define MENU_ITEM_COUNT 5
+#define MENU_ITEM_COUNT 6
 #define MENU_SLOT_COUNT 8
 
 enum {
@@ -3644,6 +3644,7 @@ enum {
 	ITEM_SAVE,
 	ITEM_LOAD,
 	ITEM_OPTS,
+	ITEM_RESTART,
 	ITEM_QUIT,
 };
 
@@ -3685,6 +3686,7 @@ static struct {
 		[ITEM_SAVE] = "Save",
 		[ITEM_LOAD] = "Load",
 		[ITEM_OPTS] = "Options",
+		[ITEM_RESTART] = "Restart",
 		[ITEM_QUIT] = "Quit",
 	}
 };
@@ -5351,6 +5353,14 @@ static void Menu_loop(void) {
 						dirty = 1;
 					}
 				}
+				break;
+				case ITEM_RESTART:
+					if (Menu_confirm("Restart the game?\nProgress since your last\nsave is lost.", (char*[]){ "B","CANCEL","A","RESTART", NULL })) {
+						core.reset();
+						status = STATUS_RESET;
+						show_menu = 0;
+					}
+					else dirty = 1;
 				break;
 				case ITEM_QUIT:
 					{ // Tools > Settings > "Auto-save on quit": leaving a game also saves a state (slot 9) for the Switcher
