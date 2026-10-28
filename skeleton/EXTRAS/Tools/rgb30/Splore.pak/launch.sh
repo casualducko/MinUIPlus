@@ -41,4 +41,9 @@ if [ "$?" -eq 1 ]; then
 	cp ./sdl_controllers.txt ./pico-8;
 fi
 
+# Wi-Fi off with two or more saved networks: ask which one to use. B skips it: Splore works offline too.
+if ! ip route 2>/dev/null | grep -q '^default' && [ -x ../Wi-Fi.pak/wifi.elf ]; then
+	( . /etc/profile; PATH=/storage/roms/.system/rgb30/bin:$PATH; cd ../Wi-Fi.pak && ./wifi.elf --pick >/dev/null 2>&1 )
+fi
+
 cd ./pico-8 && ./pico8_64 -splore -pixel_perfect 1 -joystick 0

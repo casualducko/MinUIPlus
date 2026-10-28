@@ -32,4 +32,6 @@ for d in Roms Saves Bios; do # (empty folders with a .keep file: a first install
 		mkdir -p "$src/$(dirname "$f")"; cp "$extras/$f" "$src/$f"
 	done
 done
+# Splore: only the launcher (it asks which Wi-Fi to use first). It replaces the card's own copy; a card without Splore skips it (PICO-8 itself is Lexaloffle's, bring your own)
+mkdir -p "$src/Tools/rgb30/Splore.pak"; cp "$extras/Tools/rgb30/Splore.pak/launch.sh" "$src/Tools/rgb30/Splore.pak/"; chmod +x "$src/Tools/rgb30/Splore.pak/launch.sh"
 echo "extras staged in $src: $(ls "$src/Emus/rgb30" | wc -l | tr -d ' ') emulator paks"
