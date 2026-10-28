@@ -4867,29 +4867,33 @@ static int Menu_options(MenuList* list) {
 				}
 			}
 			
-			if (count>max_visible_options) {
-				#define SCROLL_WIDTH 24
-				#define SCROLL_HEIGHT 4
-				int ox = (screen->w - SCALE1(SCROLL_WIDTH))/2;
-				int oy = SCALE1((PILL_SIZE - SCROLL_HEIGHT) / 2);
-				if (start>0) GFX_blitAsset(ASSET_SCROLL_UP,   NULL, screen, &(SDL_Rect){ox, SCALE1(PADDING) + oy});
-				if (end<count) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){ox, screen->h - SCALE1(PADDING + PILL_SIZE + BUTTON_SIZE) + oy});
-			}
-			
 			if (!desc && list->desc) desc = list->desc;
 			if (selected_cut) { // there is more of this name than fits
 				snprintf(cut_hint, sizeof(cut_hint), "Press Y to read the whole line");
 				desc = cut_hint;
 			}
 			
+			int desc_top = screen->h - SCALE1(PADDING); // where the description starts (nothing: the bottom edge)
 			if (desc) {
 				int w,h;
 				GFX_sizeText(font.small, desc, SCALE1(12), &w,&h);
+				desc_top -= h;
 				GFX_blitText(font.small, desc, SCALE1(12), COLOR_WHITE, screen, &(SDL_Rect){
 					(screen->w - w) / 2,
-					screen->h - SCALE1(PADDING) - h,
+					desc_top,
 					w,h
 				});
+			}
+			
+			if (count>max_visible_options) { // (after the description: a long one reaches up to where the down arrow sits, so the arrow goes above it)
+				#define SCROLL_WIDTH 24
+				#define SCROLL_HEIGHT 4
+				int ox = (screen->w - SCALE1(SCROLL_WIDTH))/2;
+				int oy = SCALE1((PILL_SIZE - SCROLL_HEIGHT) / 2);
+				int down_y = screen->h - SCALE1(PADDING + PILL_SIZE + BUTTON_SIZE) + oy;
+				down_y = MIN(down_y, desc_top - SCALE1(SCROLL_HEIGHT + 3));
+				if (start>0) GFX_blitAsset(ASSET_SCROLL_UP,   NULL, screen, &(SDL_Rect){ox, SCALE1(PADDING) + oy});
+				if (end<count) GFX_blitAsset(ASSET_SCROLL_DOWN, NULL, screen, &(SDL_Rect){ox, down_y});
 			}
 			
 			GFX_flip(screen);

@@ -50,6 +50,7 @@ static pid_t bg_pid = 0; // started and left running (going back to the previous
 static char op_ssid[WIFI_SSID_MAX], op_pass[WIFI_PASS_MAX];
 static char prev_ssid[WIFI_SSID_MAX], prev_pass[WIFI_PASS_MAX];
 static int op_power_on = 0;
+static int saved_pick = 0; // the saved list was opened from the Wi-Fi row: it is the choice of network to connect to
 
 // a message or a question over everything
 static ModalKind modal = MODAL_NONE;
@@ -139,10 +140,6 @@ static void op_finish(void) {
 }
 static void op_cancel(void) {
 	if (op_pid>0) { wifi_kill(op_pid); int st; wifi_reap(op_pid, &st); }
-	if (op==OP_POWER && op_power_on && op_phase>=5) { // stopped while trying another saved network: the set-up one stays as it was
-		set_setting_value("wifi.ssid", prev_ssid);
-		set_setting_value("wifi.key", prev_pass);
-	}
 	op_finish();
 }
 
@@ -265,31 +262,9 @@ static void step_connect(uint32_t now) {
 	}
 }
 
-// Wi-Fi on: wifictl brings up the one network that is set up. If that one doesn't connect (it is out of range, say,
-// because the unit is at work and not at home), the other saved networks that are in range are tried in turn.
+// Wi-Fi on: wifictl brings up the one network that is set up (A on the Wi-Fi row with two or more saved networks
+// shows the list instead: the person picks, nothing is tried in turn).
 #define POWER_FIRST_WAIT_MS 12000 // the set-up network gets this long
-#define POWER_NEXT_WAIT_MS 15000 // each other saved network gets this long
-static int cand[WIFI_MAX_NETS], cand_n = 0, cand_i = 0;
-
-static void power_try_next(uint32_t now) {
-	if (cand_i>=cand_n) { // none worked: put the settings back as they were
-		set_setting_value("wifi.ssid", prev_ssid);
-		set_setting_value("wifi.key", prev_pass);
-		op_finish();
-		say("Wi-Fi is on, but it hasn't\nconnected. Pick a network\nfrom Networks nearby.", 0);
-		return;
-	}
-	WifiSaved* w = &saved[cand[cand_i++]];
-	snprintf(op_ssid, sizeof(op_ssid), "%s", w->ssid);
-	snprintf(op_pass, sizeof(op_pass), "%s", w->pass);
-	snprintf(op_text, sizeof(op_text), "Trying %s...", op_ssid);
-	set_setting_value("wifi.ssid", op_ssid);
-	set_setting_value("wifi.key", op_pass);
-	char* with_pass[] = { "wifictl", "enable", op_ssid, op_pass, NULL };
-	char* open[] = { "wifictl", "enable", op_ssid, NULL };
-	op_pid = wifi_spawn(op_pass[0] ? with_pass : open);
-	op_phase = 5; op_phase_at = now;
-}
 
 static void step_power(uint32_t now) {
 	if (op_phase==0) {
@@ -308,56 +283,13 @@ static void step_power(uint32_t now) {
 	}
 	if (!op_power_on) { op_finish(); return; }
 	static uint32_t last_check = 0;
-	if (op_phase==2 || op_phase==7) { // waiting for a route
-		if (now-last_check>=1000) {
-			last_check = now;
-			if (wifi_has_route()) {
-				if (op_phase==7) { // one of the others: it is the set-up network now
-					saved_count = wifi_saved_put(saved, saved_count, WIFI_MAX_NETS, op_ssid, op_pass);
-					save_list();
-					char ip[48] = "", msg[320];
-					wifi_ip_address(ip, sizeof(ip));
-					snprintf(msg, sizeof(msg), "Connected to\n%s\n%s", op_ssid, ip);
-					op_finish();
-					say(msg, 3500);
-				}
-				else op_finish();
-				return;
-			}
-		}
-		if (op_phase==2 && now-op_phase_at>POWER_FIRST_WAIT_MS) {
-			if (saved_count<2) { op_finish(); say("Wi-Fi is on, but it hasn't\nconnected. Pick a network\nfrom Networks nearby.", 0); return; }
-			snprintf(op_text, sizeof(op_text), "Looking for your\nother networks...");
-			char* scan[] = { "connmanctl", "scan", "wifi", NULL };
-			op_pid = wifi_spawn(scan);
-			op_phase = 3; op_phase_at = now;
-		}
-		else if (op_phase==7 && now-op_phase_at>POWER_NEXT_WAIT_MS) power_try_next(now);
-		return;
+	if (now-last_check>=1000) { // waiting for a route
+		last_check = now;
+		if (wifi_has_route()) { op_finish(); return; }
 	}
-	if (op_phase==3) {
-		if (wifi_reap(op_pid, NULL) || now-op_phase_at>10000) { if (now-op_phase_at>10000) wifi_kill(op_pid); op_pid = 0; op_phase = 4; op_phase_at = now; }
-		return;
-	}
-	if (op_phase==4) {
-		if (now-op_phase_at<1500) return; // let the results come in
-		static char text[65536];
-		char* dump[] = { "iw", "dev", "wlan0", "scan", "dump", NULL };
-		net_count = 0;
-		if (wifi_run(dump, text, sizeof(text), 6000)==0) net_count = wifi_parse_scan(text, nets, WIFI_MAX_NETS);
-		cand_n = cand_i = 0;
-		for (int i=0; i<saved_count; i++) { // in range, and not the one that has just been tried
-			if (!strcmp(saved[i].ssid, prev_ssid)) continue;
-			for (int k=0; k<net_count; k++) if (!strcmp(nets[k].ssid, saved[i].ssid)) { cand[cand_n++] = i; break; }
-		}
-		power_try_next(now);
-		return;
-	}
-	if (op_phase==5) { // the command for this one is running
-		if (wifi_reap(op_pid, NULL) || now-op_phase_at>POWER_NEXT_WAIT_MS) {
-			if (op_pid>0 && now-op_phase_at>POWER_NEXT_WAIT_MS) wifi_kill(op_pid);
-			op_pid = 0; op_phase = 7; op_phase_at = now;
-		}
+	if (now-op_phase_at>POWER_FIRST_WAIT_MS) {
+		op_finish();
+		say("Wi-Fi is on, but it hasn't\nconnected. Pick a network\nfrom Saved networks\nor Networks nearby.", 0);
 	}
 }
 
@@ -504,7 +436,7 @@ static void draw_networks(int ow) {
 }
 
 static void draw_saved(int ow) {
-	draw_title("Saved networks", ow);
+	draw_title(saved_pick ? "Choose a network" : "Saved networks", ow);
 	if (!saved_count) {
 		draw_note("Nothing saved yet.\nConnect to a network from\nNetworks nearby to keep it here.");
 		GFX_blitButtonGroup((char*[]){"B","BACK",NULL}, 1, screen, 1);
@@ -713,11 +645,12 @@ static void handle_input(void) {
 					char ssid[WIFI_SSID_MAX];
 					get_setting_value("wifi.ssid", ssid, sizeof(ssid));
 					if (!ssid[0] && !saved_count) say("There's no network set up yet.\nChoose Networks nearby\nto connect to one.", 0);
+					else if (saved_count>=2) { cur_screen = SCR_SAVED; sel_saved = top_saved = 0; saved_pick = 1; } // pick one, nothing is tried in turn
 					else start_power(1);
 				}
 			}
 			else if (sel_main==1) start_scan();
-			else { cur_screen = SCR_SAVED; sel_saved = top_saved = 0; }
+			else { cur_screen = SCR_SAVED; sel_saved = top_saved = 0; saved_pick = 0; }
 		}
 		else if (cur_screen==SCR_NETWORKS) {
 			if (sel_net==net_count) open_keyboard(KB_NAME, "");
