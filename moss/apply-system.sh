@@ -15,7 +15,8 @@ if [ "$mode" = revert ]; then src=$dir/SYSTEM.orig; else src=$dir/SYSTEM; fi
 want=$(sum "$src")
 now=$(ssh -n $K root@$ip 'md5sum /flash/SYSTEM' | cut -d' ' -f1)
 [ "$now" = "$want" ] && { echo "already in place"; exit 0; }
-[ "$now" = "$(sum "$dir/SYSTEM")" ] || [ "$now" = "$(sum "$dir/SYSTEM.orig")" ] || { echo "the device's SYSTEM ($now) is neither the stock nor the repacked one: not touching it"; exit 1; }
+known=0; for f in "$dir"/SYSTEM "$dir"/SYSTEM.orig "$dir"/SYSTEM.v*; do [ -f "$f" ] && [ "$now" = "$(sum "$f")" ] && known=1; done # (an earlier repack counts too)
+[ "$known" = 1 ] || { echo "the device's SYSTEM ($now) is none of the stock or repacked images here: not touching it"; exit 1; }
 free=$(ssh -n $K root@$ip "df -k /flash | tail -1" | awk '{print $4}')
 [ "$free" -gt 400000 ] || { echo "not enough room on /flash ($free KB free)"; exit 1; }
 ssh -n $K root@$ip 'mount -o remount,rw /flash'
