@@ -1164,7 +1164,8 @@ static const int auto_khz[] = { 408000, 600000, 816000, 1104000, 1416000, 160800
 #define AUTO_STEPS ((int)(sizeof(auto_khz)/sizeof(auto_khz[0])))
 #define AUTO_START_STEP 5		// 1.6 GHz, what Normal is, when nothing is known about the game
 #define AUTO_CLEAN_MS 30000		// this long without a missed frame before trying a lower clock
-#define AUTO_TRIAL_MS 8000		// a lower clock is on trial this long
+#define AUTO_TRIAL_MS 15000		// a lower clock is on trial this long, and one missed frame in that time fails it
+#define AUTO_RATE_MS 20000		// in steady play two missed frames within this long (a stutter every so often, which shows) raise the clock
 #define AUTO_FLOOR_PLAYS 10
 static int auto_on = 0;
 static int auto_step = AUTO_START_STEP, auto_floor = -1, auto_plays = 0;
@@ -1172,6 +1173,8 @@ static int auto_hold = -1; // this session only: the step that stuttered in the 
 static int auto_trial = 0, auto_trial_misses = 0;
 static uint32_t auto_trial_end = 0, auto_clean_since = 0, auto_tick = 0;
 static int auto_tick_misses = 0, auto_total_misses = 0;
+static uint32_t auto_rate_start = 0;
+static int auto_rate_misses = 0;
 
 static void Auto_path(char* out, size_t cap) { snprintf(out, cap, "%s/cpu-auto/%s.txt", USERDATA_PATH, game.name); }
 static void Auto_save(void) {
@@ -1203,26 +1206,34 @@ static void Auto_apply(void) { PLAT_setCPUFreq(auto_khz[fast_forward ? AUTO_STEP
 static void Auto_restart(uint32_t now) { // after the menu, sleep or a stretch that wasn't the game
 	if (auto_trial) auto_trial_end = now + AUTO_TRIAL_MS; // a trial under way starts its time again: it is judged on play, not on the wait
 	auto_trial_misses = 0; auto_tick = now; auto_tick_misses = 0; auto_clean_since = now;
+	auto_rate_misses = 0; auto_rate_start = now;
 }
 // One trip round the main loop that took `period` ms, `budget` being a frame.
 static void Auto_frame(uint32_t period, uint32_t budget, uint32_t now) {
 	if (!auto_on || fast_forward) { auto_clean_since = now; if (auto_trial) auto_trial_end = now + AUTO_TRIAL_MS; return; }
 	if (period>250) { Auto_restart(now); return; } // not the game
 	int missed = period > budget + budget/2;
-	if (missed) { auto_tick_misses++; auto_trial_misses++; auto_total_misses++; auto_clean_since = now; }
-	int raise = 0;
-	if (auto_trial && auto_trial_misses>=2) raise = 1;
+	if (missed) {
+		auto_tick_misses++; auto_trial_misses++; auto_total_misses++; auto_clean_since = now;
+		if (now - auto_rate_start > AUTO_RATE_MS) { auto_rate_start = now; auto_rate_misses = 0; }
+		auto_rate_misses++;
+	}
+	int raise = 0, sustained = 0;
+	if (auto_trial && auto_trial_misses>=1) raise = 1;
+	else if (!auto_trial && auto_rate_misses>=2) raise = sustained = 1; // a stutter that keeps coming back: this clock is too low for the game
 	else if (now - auto_tick >= 1000) {
 		if (auto_tick_misses>=3) raise = 1;
 		auto_tick = now; auto_tick_misses = 0;
 	}
 	if (raise && auto_step<AUTO_STEPS-1) {
 		if (auto_trial) { if (auto_floor<auto_step) { auto_floor = auto_step; auto_plays = 0; } } // a failed trial: remembered for 10 plays
-		else if (auto_hold<auto_step) auto_hold = auto_step; // a stutter in steady play: not below this for now
+		else if (sustained) { if (auto_floor<auto_step) { auto_floor = auto_step; auto_plays = 0; } } // stuttering again and again: remembered for 10 plays too
+		else if (auto_hold<auto_step) auto_hold = auto_step; // a burst in steady play: not below this for now
 		auto_step++;
 		LOG_info("cpu auto: frames missed, up to %d MHz\n", auto_khz[auto_step]/1000);
 		Auto_apply(); Auto_save();
 		auto_trial = 0; auto_trial_misses = 0; auto_clean_since = now; auto_tick = now; auto_tick_misses = 0;
+		auto_rate_misses = 0; auto_rate_start = now;
 		return;
 	}
 	if (auto_trial && now>=auto_trial_end) { // it held: this is the speed now
