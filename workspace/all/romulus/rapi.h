@@ -74,6 +74,7 @@ typedef struct { RRom* items; int count, cap; } RRomList;
 int rapi_parse_platforms(const char* body, size_t len, RPlat* out, int max); // count or -1
 int rapi_parse_roms(const char* body, size_t len, RRomList* list, long* total, int* raw); // number appended or -1; raw = entries the server sent (to page by)
 void rromlist_free(RRomList* list);
+void rromlist_sort_newest(RRomList* list); // highest id first (the server numbers games in the order it got them; it has no date or sort of its own)
 
 // the ids of games already downloaded (so the list can say so even for zips)
 int ledger_has(const char* path, long long id);

@@ -418,6 +418,11 @@ int rapi_parse_roms(const char* body, size_t len, RRomList* list, long* total, i
 	json_free(root);
 	return added;
 }
+static int newest_first(const void* a, const void* b) {
+	long long x = ((const RRom*)a)->id, y = ((const RRom*)b)->id;
+	return (x<y) - (x>y);
+}
+void rromlist_sort_newest(RRomList* list) { if (list->count>1) qsort(list->items, list->count, sizeof(RRom), newest_first); }
 void rromlist_free(RRomList* list) {
 	free(list->items);
 	list->items = NULL;

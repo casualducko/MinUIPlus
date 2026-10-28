@@ -36,6 +36,8 @@
 #define PLAY_NEXT_PATH	"/tmp/romulus-play" // the launch script runs this after Romulus quits
 #define DOWNLOAD_TMP	USERDATA_PATH "/romulus-download.tmp"
 #define PAGE_LIMIT		50
+#define NEWEST_PAGE		100 // the server's largest page; newest-first needs every game, so fewer, bigger requests
+#define SORT_PATH		USERDATA_PATH "/romulus-sort.txt"
 #define MAX_PLATS		40
 #define PRELOAD_ROWS	6 // fetch the next page when the cursor is this close to the end
 
@@ -67,6 +69,7 @@ static int roms_offset = 0;		// entries the server has sent so far (what to ask 
 static int roms_exhausted = 0;
 static int roms_failed = 0;
 static int sel = 0, scroll = 0;
+static int sort_new = 0;		// SELECT: newest first (by id: the server has no dates) instead of A to Z. Loads the whole list, then sorts it.
 
 // on-screen keyboard
 static const char* osk_rows[4] = { "abcdefghij", "klmnopqrst", "uvwxyz0123", "456789.-'&" };
@@ -241,9 +244,10 @@ static void load_platforms(void) {
 	job_kind = JOB_PLATFORMS;
 	dirty = 1;
 }
+static int page_size(void) { return sort_new ? NEWEST_PAGE : PAGE_LIMIT; }
 static void load_page(void) {
 	char path[1024];
-	rapi_roms_path(path, sizeof(path), cur_slug[0] ? cur_slug : NULL, usable_csv, query, roms_offset, PAGE_LIMIT);
+	rapi_roms_path(path, sizeof(path), cur_slug[0] ? cur_slug : NULL, usable_csv, query, roms_offset, page_size());
 	if (rjob_start(&job, &cfg, path, list_tmp, 0)) { roms_failed = 1; say("Couldn't start curl", 0); return; }
 	job_kind = JOB_ROMS;
 	roms_failed = 0;
@@ -260,6 +264,19 @@ static void new_search(void) { // restart the list for the current platform and 
 	load_page();
 }
 
+static void load_sort(void) {
+	char s[16] = "";
+	FILE* f = fopen(SORT_PATH, "r");
+	if (!f) return;
+	if (fgets(s, sizeof(s), f)) sort_new = !strncmp(s, "new", 3);
+	fclose(f);
+}
+static void save_sort(void) {
+	FILE* f = fopen(SORT_PATH, "w");
+	if (!f) return;
+	fputs(sort_new ? "new\n" : "name\n", f);
+	fclose(f);
+}
 static void save_last(void) {
 	FILE* f = fopen(ROMULUS_LAST_PATH, "w");
 	if (!f) return;
@@ -350,8 +367,12 @@ static void finish_page(void) {
 	// The server leaves disc sets out after it has cut the page, so a page can come back short
 	// while more remain: page by the size asked for, not by what came back (no repeats, no gaps).
 	(void)raw;
-	roms_offset += PAGE_LIMIT;
+	roms_offset += page_size();
 	if (roms_offset>=roms_total) roms_exhausted = 1;
+	if (sort_new) { // newest first needs every game: keep asking, then sort (progress is shown meanwhile)
+		if (roms_exhausted) rromlist_sort_newest(&roms);
+		else load_page();
+	}
 	dirty = 1;
 }
 
@@ -634,10 +655,16 @@ static void draw_games(int ow) {
 	char title[256];
 	if (query[0]) snprintf(title, sizeof(title), "%s: \"%s\"", cur_label, query);
 	else snprintf(title, sizeof(title), "%s", cur_label);
+	if (sort_new) snprintf(title+strlen(title), sizeof(title)-strlen(title), " - newest");
 	draw_title(title, ow);
 
-	if (roms.count==0) {
-		if (job_kind==JOB_ROMS) draw_note("Loading...");
+	int gathering = sort_new && !roms_exhausted; // newest first: nothing to show until all of it is here
+	if (roms.count==0 || gathering) {
+		if (job_kind==JOB_ROMS || (gathering && !roms_failed)) {
+			char note[96] = "Loading...";
+			if (gathering && roms_total>0) snprintf(note, sizeof(note), "Loading the newest...\n%d of %ld", roms.count, roms_total);
+			draw_note(note);
+		}
 		else if (roms_failed) draw_note("Couldn't load the list.\nPress A to try again.");
 		else draw_note("No games found.");
 	}
@@ -658,7 +685,7 @@ static void draw_games(int ow) {
 			draw_row(j, i==sel, r->name, right, saved && i!=sel);
 		}
 	}
-	GFX_blitButtonGroup((char*[]){"FN","FIND","Y","RANDOM",NULL}, 0, screen, 0);
+	GFX_blitButtonGroup((char*[]){"FN","FIND","Y","RANDOM","SELECT",sort_new ? "A-Z" : "NEWEST",NULL}, 0, screen, 0);
 	GFX_blitButtonGroup((char*[]){"B","BACK","A","GET",NULL}, 1, screen, 1);
 }
 static void draw_random(int ow) {
@@ -883,8 +910,10 @@ static void handle_input(void) {
 		return;
 	}
 	if (PAD_justPressed(BTN_Y) && job_kind==JOB_NONE) { start_random(SCR_GAMES); return; }
-	int extra = (roms_failed || (!roms_exhausted && job_kind==JOB_ROMS)) ? 1 : 0;
-	int count = roms.count + extra;
+	if (PAD_justPressed(BTN_SELECT)) { sort_new = !sort_new; save_sort(); new_search(); dirty = 1; return; }
+	int gathering = sort_new && !roms_exhausted;
+	int extra = (!gathering && (roms_failed || (!roms_exhausted && job_kind==JOB_ROMS))) ? 1 : 0;
+	int count = gathering ? 0 : roms.count + extra;
 	if (count>0) {
 		if (PAD_justRepeated(BTN_DPAD_UP)) { moved(&sel, count, -1); dirty = 1; }
 		else if (PAD_justRepeated(BTN_DPAD_DOWN)) { moved(&sel, count, 1); dirty = 1; }
@@ -893,7 +922,7 @@ static void handle_input(void) {
 		keep_visible(&sel, &scroll, count);
 	}
 	if (PAD_justPressed(BTN_A)) {
-		if (roms.count==0 || sel>=roms.count) {
+		if (roms.count==0 || sel>=roms.count || gathering) {
 			if (job_kind==JOB_NONE && (roms_failed || roms.count==0)) { roms_failed = 0; load_page(); }
 		}
 		else if (is_saved(&roms.items[sel])) say("You already have this one.", 1800);
@@ -901,7 +930,7 @@ static void handle_input(void) {
 		dirty = 1;
 	}
 	// the next page, a little before the end of this one
-	if (job_kind==JOB_NONE && !roms_exhausted && !roms_failed && roms.count>0 && sel>=roms.count-PRELOAD_ROWS) load_page();
+	if (!sort_new && job_kind==JOB_NONE && !roms_exhausted && !roms_failed && roms.count>0 && sel>=roms.count-PRELOAD_ROWS) load_page();
 }
 
 ///////////////////////////////
@@ -921,6 +950,7 @@ int main(int argc, char* argv[]) {
 
 	unlink(DOWNLOAD_TMP); // left over if the device lost power in the middle of a download
 	
+	load_sort();
 	int cfg_state = rcfg_load(CFG_PATH, &cfg);
 	if (cfg_state==RCFG_MISSING) {
 		rcfg_write_template(CFG_PATH);

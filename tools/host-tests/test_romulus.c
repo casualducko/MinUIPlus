@@ -250,6 +250,9 @@ static void test_server(void) {
 	CHECK(added==23 && list.count==73, "second page appends the other 23");
 	int dup = 0; for (int i=0;i<list.count;i++) for (int j=i+1;j<list.count;j++) if (list.items[i].id==list.items[j].id) dup = 1;
 	CHECK(!dup, "no game twice across pages");
+	rromlist_sort_newest(&list);
+	int desc = 1; for (int i=1;i<list.count;i++) if (list.items[i-1].id<list.items[i].id) desc = 0;
+	CHECK(desc && list.count==73, "newest first: highest id on top, nothing lost");
 	rromlist_free(&list);
 
 	// disc sets are left out after the page is cut: 20 gb games, 4 of them dirs, pages of 10
