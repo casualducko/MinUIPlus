@@ -15,6 +15,12 @@ rm -f $R/usr/lib/systemd/system/sysinit.target.wants/debug-shell.service
 F=$R/usr/lib/autostart/common/007-rootpw
 grep -q 'RGB20SX' $F || sed -i '/^tocon "Setting root password..."/i # RGB20SX: set once, not at every boot (0.4 s)\n[ -n "$(get_setting root.password)" ] \&\& exit 0\n' $F
 sed -n 1,16p $F
+# 4. Moss picks its device quirks by the device tree's model string. The unit's tree will say "Powkiddy RGB20SX" (moss-src patch 0003,
+# rk3566-rgb30-rgb20sx-named.dtb): the RGB30 quirks (governors, gpios, suspend, display, audio path) are there under that name too, so the
+# image works with either tree. Without this folder the renamed tree would boot with no quirks applied.
+Q=$R/usr/lib/autostart/quirks/devices
+[ -d "$Q/Powkiddy RGB20SX" ] || cp -a "$Q/Powkiddy RGB30" "$Q/Powkiddy RGB20SX"
+ls "$Q/Powkiddy RGB20SX"
 rm -f /sq/SYSTEM.new
 mksquashfs $R /sq/SYSTEM.new -comp lzo -Xcompression-level 9 -b 524288 -no-xattrs -noappend -quiet
 unsquashfs -s /sq/SYSTEM.new | sed -n 1,12p
