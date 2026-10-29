@@ -1442,20 +1442,31 @@ static int deleteGame(Entry* entry) { // 1 if the file is gone
 	sync();
 	return 1;
 }
-// asks first; 1 if the game was deleted
+static int isCollectionEntry(Entry* entry) { // a collection is a .txt in Collections, listed as a folder
+	return entry->type==ENTRY_DIR && !exactMatch(entry->path, COLLECTIONS_PATH) && prefixMatch(COLLECTIONS_PATH, entry->path) && suffixMatch(".txt", entry->path);
+}
+static int deleteCollection(Entry* entry) { // 1 if it is gone; the games in it stay where they are
+	if (!isCollectionEntry(entry)) return 0;
+	if (unlink(entry->path)!=0 && exists(entry->path)) return 0;
+	sync();
+	return 1;
+}
+// asks first; 1 if the game (or the collection) was deleted
 static int confirmDelete(Entry* entry, SDL_Surface* screen, int* show_setting) {
 	int dirty = 1, answer = 0, done = 0;
 	char msg[MAX_PATH + 200];
-	if (canDelete(entry)) snprintf(msg, sizeof(msg), "Delete this game?\n%s\nSaves and save states are kept.", entry->name);
+	int is_collection = isCollectionEntry(entry);
+	if (is_collection) snprintf(msg, sizeof(msg), "Delete this collection?\n%s\nThe games stay on the card.", entry->name);
+	else if (canDelete(entry)) snprintf(msg, sizeof(msg), "Delete this game?\n%s\nSaves and save states are kept.", entry->name);
 	else snprintf(msg, sizeof(msg), "This one can't be deleted here.\nDelete multi-file games\non a computer.");
-	int can = canDelete(entry);
+	int can = is_collection || canDelete(entry);
 	while (!done) {
 		GFX_startFrame();
 		PAD_poll();
 		PWR_update(&dirty, show_setting, NULL, NULL);
 		if (PAD_justPressed(BTN_B) || (!can && PAD_justPressed(BTN_A))) done = 1;
 		else if (can && PAD_justPressed(BTN_A)) {
-			answer = deleteGame(entry);
+			answer = is_collection ? deleteCollection(entry) : deleteGame(entry);
 			if (answer) done = 1;
 			else { snprintf(msg, sizeof(msg), "Couldn't delete it.\nThe card may be read-only."); can = 0; dirty = 1; } // (stay: A or B closes it)
 		}
@@ -1928,6 +1939,12 @@ int main (int argc, char *argv[]) {
 				Entry* entry = top->entries->items[top->selected];
 				if (entry->type==ENTRY_ROM && collectionPage(entry, screen, &show_setting)) {
 					refreshStack();
+					total = top->entries->count;
+					selected = top->selected;
+				}
+				else if (isCollectionEntry(entry) && confirmDelete(entry, screen, &show_setting)) { // START on a collection: delete it
+					refreshStack();
+					if (top->entries->count==0 && stack->count>1) closeDirectory(); // (the last one: leave the empty list)
 					total = top->entries->count;
 					selected = top->selected;
 				}
