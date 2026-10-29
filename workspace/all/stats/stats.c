@@ -63,7 +63,7 @@ static int resetStats(SDL_Surface* screen, int* show_setting) {
 		if (dirty) {
 			GFX_clearUI(screen);
 			GFX_blitHardwareGroup(screen, *show_setting);
-			GFX_blitMessage(font.large, "Reset all play stats?\n\nThe play time and start count of\nevery game are erased.\nThis can't be undone.", screen, &(SDL_Rect){0,0,screen->w,screen->h-SCALE1(PADDING+PILL_SIZE)});
+			GFX_blitMessage(font.large, "Reset all play stats?\nPlay time and start counts\nare erased for every game.", screen, &(SDL_Rect){0,0,screen->w,screen->h-SCALE1(PADDING+PILL_SIZE)});
 			GFX_blitButtonGroup((char*[]){"B","CANCEL","A","RESET",NULL}, 1, screen, 1);
 			GFX_flip(screen);
 			dirty = 0;

@@ -245,12 +245,12 @@ int main(int argc, char* argv[]) {
 			GFX_clearUI(screen);
 			int ow = GFX_blitHardwareGroup(screen, show_setting);
 			if (card_count==0) {
-				GFX_blitMessage(font.large, "No recent games yet.\n\nGames you play show up here,\nwith their last save state.", screen, &(SDL_Rect){0, pad, screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
+				GFX_blitMessage(font.large, "No recent games yet.\nGames you play show up here.", screen, &(SDL_Rect){0, pad, screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
 				GFX_blitButtonGroup((char*[]){"B","BACK",NULL}, 1, screen, 1);
 			}
 			else if (confirm) {
 				char msg[400];
-				snprintf(msg, sizeof(msg), "Take this game off the list?\n\n%s\n\n(Its save state stays.)", cards[index].title);
+				snprintf(msg, sizeof(msg), "Take this game off the list?\n%s\n(Save state remains)", cards[index].title);
 				GFX_blitMessage(font.large, msg, screen, &(SDL_Rect){0, pad, screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
 				GFX_blitButtonGroup((char*[]){"B","NO","A","REMOVE",NULL}, 1, screen, 1);
 			}

@@ -1446,8 +1446,8 @@ static int deleteGame(Entry* entry) { // 1 if the file is gone
 static int confirmDelete(Entry* entry, SDL_Surface* screen, int* show_setting) {
 	int dirty = 1, answer = 0, done = 0;
 	char msg[MAX_PATH + 200];
-	if (canDelete(entry)) snprintf(msg, sizeof(msg), "Delete this game?\n\n%s\n\nThe file is removed from the card.\nSaves and save states are kept.", entry->name);
-	else snprintf(msg, sizeof(msg), "This one can't be deleted here.\n\nA game made of several files\n(discs, .cue, .m3u) is deleted\non a computer.");
+	if (canDelete(entry)) snprintf(msg, sizeof(msg), "Delete this game?\n%s\nSaves and save states are kept.", entry->name);
+	else snprintf(msg, sizeof(msg), "This one can't be deleted here.\nDelete multi-file games\non a computer.");
 	int can = canDelete(entry);
 	while (!done) {
 		GFX_startFrame();
@@ -1457,7 +1457,7 @@ static int confirmDelete(Entry* entry, SDL_Surface* screen, int* show_setting) {
 		else if (can && PAD_justPressed(BTN_A)) {
 			answer = deleteGame(entry);
 			if (answer) done = 1;
-			else { snprintf(msg, sizeof(msg), "Couldn't delete it.\n\nThe card may be read-only."); can = 0; dirty = 1; } // (stay: A or B closes it)
+			else { snprintf(msg, sizeof(msg), "Couldn't delete it.\nThe card may be read-only."); can = 0; dirty = 1; } // (stay: A or B closes it)
 		}
 		if (dirty) {
 			GFX_clearUI(screen);

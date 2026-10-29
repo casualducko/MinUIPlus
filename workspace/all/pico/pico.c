@@ -386,7 +386,7 @@ static void finish_cart(void) {
 	char* tag = strstr(place, " (");
 	if (tag) *tag = '\0';
 	char msg[400];
-	snprintf(msg, sizeof(msg), "Downloaded\n\n%s\n\nSaved to %s", dl_cart.title, place);
+	snprintf(msg, sizeof(msg), "Downloaded\n%s\nSaved to %s", dl_cart.title, place);
 	if (make_play_cmd(path)) {
 		snprintf(modal_msg, sizeof(modal_msg), "%s", msg);
 		modal = MODAL_PLAY;

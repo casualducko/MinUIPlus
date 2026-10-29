@@ -4469,7 +4469,7 @@ static int Cheats_download(void) { // 1 if a cheat file was saved and loaded; sa
 	snprintf(there, sizeof(there), SDCARD_PATH "/Cheats/%s/%s.cht", core.tag, game.name);
 	if (!exists(there)) snprintf(there, sizeof(there), SDCARD_PATH "/Cheats/%s/%s.cht", core.tag, base);
 	if (exists(there)) {
-		snprintf(message, sizeof(message), "There is a cheat file already\n(%s.cht)\nbut no cheats in it.\n\nFix or remove it first.", strrchr(there, '/') + 1);
+		snprintf(message, sizeof(message), "There is a cheat file already\n(%s.cht)\nbut no cheats in it.\nFix or remove it first.", strrchr(there, '/') + 1);
 		Menu_message(message, okay);
 		return 0;
 	}
@@ -4479,7 +4479,7 @@ static int Cheats_download(void) { // 1 if a cheat file was saved and loaded; sa
 		int r = Net_wait("Connecting to Wi-Fi", pid, 1, 50);
 		if (r==-2) return 0;
 		if (!Net_hasRoute()) {
-			Menu_message("Couldn't connect to Wi-Fi.\n\nSet it up in Tools > Wi-Fi\nand try again.", okay);
+			Menu_message("Couldn't connect to Wi-Fi.\nSet it up in Tools > Wi-Fi.", okay);
 			return 0;
 		}
 	}
@@ -4518,7 +4518,7 @@ static int Cheats_download(void) { // 1 if a cheat file was saved and loaded; sa
 		}
 		else if (r!=22) goto failed;
 		if (!found) {
-			snprintf(message, sizeof(message), "No cheats found for\n%s\n\nin the libretro database.", base);
+			snprintf(message, sizeof(message), "No cheats found for\n%s\nin the libretro database.", base);
 			Menu_message(message, okay);
 			return 0;
 		}
@@ -4559,12 +4559,12 @@ static int OptionCheats_openMenu(MenuList* list, int i) {
 	if (!cheat_count) {
 		char message[MAX_PATH + 256];
 		if (Cheatdb_folder(core.tag)) {
-			snprintf(message, sizeof(message), "No cheats for this game yet.\n\nDownload them from the\nlibretro cheat database?\n(needs Wi-Fi)\n\nOr put a .cht file at\nCheats/%s/%s.cht", core.tag, game.name);
+			snprintf(message, sizeof(message), "No cheats for this game yet.\nDownload them from the\nlibretro cheat database?\n(needs Wi-Fi)");
 			if (!Menu_confirm(message, (char*[]){ "B","BACK","A","DOWNLOAD", NULL })) return MENU_CALLBACK_NOP;
 			if (!Cheats_download()) return MENU_CALLBACK_NOP;
 		}
 		else {
-			snprintf(message, sizeof(message), "No cheats for this game.\n\nPut a .cht file at\nCheats/%s/%s.cht", core.tag, game.name);
+			snprintf(message, sizeof(message), "No cheats for this game.\nPut a .cht file at\nCheats/%s/%s.cht", core.tag, game.name);
 			Menu_message(message, (char*[]){ "B","BACK", NULL });
 			return MENU_CALLBACK_NOP;
 		}
@@ -5355,7 +5355,7 @@ static void Menu_loop(void) {
 				}
 				break;
 				case ITEM_RESTART:
-					if (Menu_confirm("Restart the game?\nProgress since your last\nsave is lost.", (char*[]){ "B","CANCEL","A","RESTART", NULL })) {
+					if (Menu_confirm("Restart the game?\nUnsaved progress is lost.", (char*[]){ "B","CANCEL","A","RESTART", NULL })) {
 						core.reset();
 						status = STATUS_RESET;
 						show_menu = 0;

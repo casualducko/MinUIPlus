@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
 		if (dirty) {
 			GFX_clearUI(screen);
 			if (count==0) {
-				GFX_blitMessage(font.large, "No screenshots yet.\n\nIn a game, press MENU + SELECT\nto take one.", screen, &(SDL_Rect){0, pad, screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
+				GFX_blitMessage(font.large, "No screenshots yet.\nIn a game, press MENU + SELECT.", screen, &(SDL_Rect){0, pad, screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
 				GFX_blitButtonGroup((char*[]){"B","BACK",NULL}, 1, screen, 1);
 			}
 			else {
@@ -195,7 +195,7 @@ int main(int argc, char* argv[]) {
 					if (confirm) {
 						GFX_clearUI(screen);
 						char msg[400];
-						snprintf(msg, sizeof(msg), "Delete this screenshot?\n\n%s", title);
+						snprintf(msg, sizeof(msg), "Delete this screenshot?\n%s", title);
 						GFX_blitMessage(font.large, msg, screen, &(SDL_Rect){0, pad, screen->w, screen->h - SCALE1(PILL_SIZE+PADDING)});
 						GFX_blitButtonGroup((char*[]){"B","NO","A","DELETE",NULL}, 1, screen, 1);
 					}

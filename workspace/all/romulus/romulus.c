@@ -535,7 +535,7 @@ static void finish_download(void) {
 	char* tag = strstr(place, " (");
 	if (tag) *tag = '\0'; // "Super Nintendo (SFC)" -> "Super Nintendo"
 	GFX_wrapText(font.large, title, screen->w - SCALE1(PADDING*2) - SCALE1(BUTTON_PADDING*2), 2);
-	snprintf(msg, sizeof(msg), already ? "Already on the card\n\n%s\n\nIn %s" : "Downloaded\n\n%s\n\nSaved to %s", title, place);
+	snprintf(msg, sizeof(msg), already ? "Already on the card\n%s\nIn %s" : "Downloaded\n%s\nSaved to %s", title, place);
 	if (make_play_cmd(final_path)) {
 		snprintf(modal_msg, sizeof(modal_msg), "%s", msg);
 		modal = MODAL_PLAY;
