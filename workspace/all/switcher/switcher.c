@@ -179,7 +179,7 @@ static const char* SW_systemName(const char* tag) {
 		{"FC","NES"}, {"NES","NES"}, {"FDS","FDS"}, {"GB","GB"}, {"GBC","GBC"}, {"GBA","GBA"},
 		{"MGBA","GBA"}, {"SGB","SGB"}, {"SFC","SNES"}, {"SNES","SNES"}, {"SUPER","SNES"}, {"SUPA","SNES"}, {"SNX","SNES"},
 		{"MD","Genesis"}, {"GEN","Genesis"}, {"SMS","SMS"}, {"GG","Game Gear"}, {"PS","PlayStation"}, {"PCE","TurboGrafx-16"},
-		{"NGP","Neo Geo Pocket"}, {"NGPC","Neo Geo Pocket Color"}, {"VB","Virtual Boy"}, {"PKM","Pokemon mini"},
+		{"NGP","NGP"}, {"NGPC","NGPC"}, {"VB","Virtual Boy"}, {"PKM","Pokemon mini"},
 		{"P8","PICO-8"}, {NULL,NULL}
 	};
 	for (int i=0; names[i].tag; i++) if (!strcasecmp(names[i].tag, tag)) return names[i].name;
@@ -300,18 +300,15 @@ int main(int argc, char* argv[]) {
 					else if (has_state) snprintf(when, sizeof(when), c->slot==AUTO_RESUME_SLOT ? "Saved" : "Slot %d", c->slot + 1);
 					else snprintf(when, sizeof(when), "No save yet");
 					snprintf(line, sizeof(line), "%s  -  %s", SW_systemName(c->tag), when);
+					if (show_time && (c->launches>0 || c->seconds>0)) { // (SELECT hides the play time)
+						char dur[32];
+						Playtime_duration(c->seconds, dur, sizeof(dur));
+						int n = strlen(line);
+						snprintf(line+n, sizeof(line)-n, "  -  Played %s", dur);
+					}
 					text(screen, font.small, line, COLOR_LIGHT_TEXT, pad + SCALE1(BUTTON_PADDING), ly, screen->w - pad*2 - SCALE1(80), 0);
 					snprintf(line, sizeof(line), "%i / %i", index+1, card_count);
 					text(screen, font.small, line, COLOR_LIGHT_TEXT, screen->w - pad - SCALE1(BUTTON_PADDING), ly, screen->w, 1);
-					if (show_time) {
-						if (c->launches>0 || c->seconds>0) {
-							char dur[32];
-							Playtime_duration(c->seconds, dur, sizeof(dur));
-							snprintf(line, sizeof(line), "Played %s", dur);
-						}
-						else snprintf(line, sizeof(line), "Not played yet");
-						text(screen, font.small, line, COLOR_GRAY, pad + SCALE1(BUTTON_PADDING), ly + SCALE1(15), screen->w - pad*2, 0);
-					}
 					GFX_blitButtonGroup((char*[]){"B","BACK","X","REMOVE",NULL}, 0, screen, 0);
 					GFX_blitButtonGroup((char*[]){"A",has_state ? "RESUME" : "PLAY","Y","FULL",NULL}, 1, screen, 1);
 				}
