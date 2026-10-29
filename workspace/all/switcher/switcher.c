@@ -173,6 +173,19 @@ static void text(SDL_Surface* screen, TTF_Font* f, const char* s, SDL_Color colo
 	SDL_FreeSurface(t);
 }
 
+// the name of a system for its folder tag (the tag itself when it is not one we know)
+static const char* SW_systemName(const char* tag) {
+	static const struct { const char* tag; const char* name; } names[] = {
+		{"FC","NES"}, {"NES","NES"}, {"FDS","Famicom Disk System"}, {"GB","Game Boy"}, {"GBC","Game Boy Color"}, {"GBA","Game Boy Advance"},
+		{"MGBA","Game Boy Advance"}, {"SGB","Super Game Boy"}, {"SFC","SNES"}, {"SNES","SNES"}, {"SUPER","SNES"}, {"SUPA","SNES"}, {"SNX","SNES"},
+		{"MD","Genesis"}, {"GEN","Genesis"}, {"SMS","Master System"}, {"GG","Game Gear"}, {"PS","PlayStation"}, {"PCE","TurboGrafx-16"},
+		{"NGP","Neo Geo Pocket"}, {"NGPC","Neo Geo Pocket Color"}, {"VB","Virtual Boy"}, {"PKM","Pokemon mini"},
+		{"P8","PICO-8"}, {NULL,NULL}
+	};
+	for (int i=0; names[i].tag; i++) if (!strcasecmp(names[i].tag, tag)) return names[i].name;
+	return tag;
+}
+
 int main(int argc, char* argv[]) {
 	(void)argc; (void)argv;
 	PWR_setCPUSpeed(CPU_SPEED_MENU);
@@ -281,12 +294,12 @@ int main(int argc, char* argv[]) {
 					if (has_picture && (view && !view_is_art)) {
 						char ago[48];
 						SW_ago((long)time(NULL) - c->saved_at, ago, sizeof(ago));
-						if (c->slot==AUTO_RESUME_SLOT) snprintf(when, sizeof(when), "Where you left off, %s", ago);
-						else snprintf(when, sizeof(when), "Slot %d, saved %s", c->slot + 1, ago);
+						if (c->slot==AUTO_RESUME_SLOT) snprintf(when, sizeof(when), "%s", ago);
+						else snprintf(when, sizeof(when), "Slot %d, %s", c->slot + 1, ago);
 					}
-					else if (has_state) snprintf(when, sizeof(when), c->slot==AUTO_RESUME_SLOT ? "Where you left off" : "Slot %d (no picture)", c->slot + 1);
-					else snprintf(when, sizeof(when), "No save state yet");
-					snprintf(line, sizeof(line), "[%s]  %s", c->tag, when);
+					else if (has_state) snprintf(when, sizeof(when), c->slot==AUTO_RESUME_SLOT ? "Saved" : "Slot %d", c->slot + 1);
+					else snprintf(when, sizeof(when), "No save yet");
+					snprintf(line, sizeof(line), "%s  -  %s", SW_systemName(c->tag), when);
 					text(screen, font.small, line, COLOR_LIGHT_TEXT, pad + SCALE1(BUTTON_PADDING), ly, screen->w - pad*2 - SCALE1(80), 0);
 					snprintf(line, sizeof(line), "%i / %i", index+1, card_count);
 					text(screen, font.small, line, COLOR_LIGHT_TEXT, screen->w - pad - SCALE1(BUTTON_PADDING), ly, screen->w, 1);
@@ -294,7 +307,7 @@ int main(int argc, char* argv[]) {
 						if (c->launches>0 || c->seconds>0) {
 							char dur[32];
 							Playtime_duration(c->seconds, dur, sizeof(dur));
-							snprintf(line, sizeof(line), "Played %s, started %d time%s", dur, c->launches, c->launches==1 ? "" : "s");
+							snprintf(line, sizeof(line), "Played %s", dur);
 						}
 						else snprintf(line, sizeof(line), "Not played yet");
 						text(screen, font.small, line, COLOR_GRAY, pad + SCALE1(BUTTON_PADDING), ly + SCALE1(15), screen->w - pad*2, 0);
