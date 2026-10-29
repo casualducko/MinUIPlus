@@ -176,9 +176,9 @@ static void text(SDL_Surface* screen, TTF_Font* f, const char* s, SDL_Color colo
 // the name of a system for its folder tag (the tag itself when it is not one we know)
 static const char* SW_systemName(const char* tag) {
 	static const struct { const char* tag; const char* name; } names[] = {
-		{"FC","NES"}, {"NES","NES"}, {"FDS","Famicom Disk System"}, {"GB","Game Boy"}, {"GBC","Game Boy Color"}, {"GBA","Game Boy Advance"},
-		{"MGBA","Game Boy Advance"}, {"SGB","Super Game Boy"}, {"SFC","SNES"}, {"SNES","SNES"}, {"SUPER","SNES"}, {"SUPA","SNES"}, {"SNX","SNES"},
-		{"MD","Genesis"}, {"GEN","Genesis"}, {"SMS","Master System"}, {"GG","Game Gear"}, {"PS","PlayStation"}, {"PCE","TurboGrafx-16"},
+		{"FC","NES"}, {"NES","NES"}, {"FDS","FDS"}, {"GB","GB"}, {"GBC","GBC"}, {"GBA","GBA"},
+		{"MGBA","GBA"}, {"SGB","SGB"}, {"SFC","SNES"}, {"SNES","SNES"}, {"SUPER","SNES"}, {"SUPA","SNES"}, {"SNX","SNES"},
+		{"MD","Genesis"}, {"GEN","Genesis"}, {"SMS","SMS"}, {"GG","Game Gear"}, {"PS","PlayStation"}, {"PCE","TurboGrafx-16"},
 		{"NGP","Neo Geo Pocket"}, {"NGPC","Neo Geo Pocket Color"}, {"VB","Virtual Boy"}, {"PKM","Pokemon mini"},
 		{"P8","PICO-8"}, {NULL,NULL}
 	};
