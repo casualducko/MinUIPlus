@@ -29,6 +29,8 @@ export LD_LIBRARY_PATH=$SYSTEM_PATH/lib:$LD_LIBRARY_PATH
 # required for sdl12-compat
 export SDL_VIDEODRIVER=kmsdrm
 export SDL_AUDIODRIVER=alsa
+# a better sample-rate conversion in the sound server (the default, 4, is cheaper): about 10% of a core more while a game plays
+export PIPEWIRE_PROPS="{ resample.quality=10 }"
 
 # required for sdl1 fbcon
 # export SDL_VIDEODRIVER=fbcon
