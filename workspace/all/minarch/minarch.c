@@ -3762,6 +3762,7 @@ static void Menu_saveAutoPreview(int live) { // live: the picture is the game on
 // the next quit or the rolling auto-save overwrites slot 9: the state, its picture, and for a multi-disc game the disc.
 #define QUIT_KEEP_SLOT 7
 static void Menu_keepQuitState(void) {
+	{ char flag[8] = ""; getFile(AUTOSAVE_QUIT_PATH, flag, sizeof(flag)); if (flag[0]=='0') return; } // ("Auto-save on quit" off: slot 8 is left alone)
 	char from[MAX_PATH], to[MAX_PATH];
 	int last_slot = state_slot;
 	state_slot = AUTO_RESUME_SLOT; State_getPath(from);
@@ -5308,6 +5309,7 @@ static void Menu_loop(void) {
 		if (fn_tapped && now-menu_opened_at<SWITCHER_DOUBLE_TAP_MS && Menu_switcherAvailable()) { // Fn twice: save and go to the game switcher
 			State_autosave(); // always (whatever "Auto-save on quit" says): the Switcher resumes from this
 			Menu_saveAutoPreview(0);
+			Menu_keepQuitState();
 			{ // the game and its slot, so that backing out of the Switcher comes back to it
 				char back[MAX_PATH+16];
 				snprintf(back, sizeof(back), "%s\t%d", game.path + strlen(SDCARD_PATH), AUTO_RESUME_SLOT);
