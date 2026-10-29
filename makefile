@@ -59,6 +59,7 @@ system:
 	cp ./workspace/all/power/build/$(PLATFORM)/power.elf ./build/EXTRAS/Tools/$(PLATFORM)/Settings.pak/settings.elf
 	cp ./workspace/all/wifi/build/$(PLATFORM)/wifi.elf ./build/EXTRAS/Tools/$(PLATFORM)/Wi-Fi.pak/
 	cp ./workspace/all/stats/build/$(PLATFORM)/stats.elf ./build/EXTRAS/Tools/$(PLATFORM)/Stats.pak/
+	cp ./workspace/all/controls/build/$(PLATFORM)/controls.elf ./build/EXTRAS/Tools/$(PLATFORM)/Controls.pak/
 	cp ./workspace/all/theme/build/$(PLATFORM)/theme.elf ./build/EXTRAS/Tools/$(PLATFORM)/Themes.pak/
 	cp ./workspace/all/titleart/build/$(PLATFORM)/titleart.elf ./build/EXTRAS/Tools/$(PLATFORM)/ASCIIArt.pak/
 	cp ./workspace/all/info/build/$(PLATFORM)/info.elf ./build/EXTRAS/Tools/$(PLATFORM)/Info.pak/

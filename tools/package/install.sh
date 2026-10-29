@@ -30,7 +30,7 @@ copy() { # file from the package, then in place in one step (a running program c
 }
 find .system Tools Emus Roms Saves Bios -type f 2>/dev/null | while IFS= read -r f; do
 	case "$f" in
-		Emus/rgb30/*|Roms/*/.keep|Saves/*/.keep|Bios/*/.keep|Tools/rgb30/Romulus.pak/*|Tools/rgb30/Switcher.pak/*|Tools/rgb30/PicoSearch.pak/*|.system/rgb30/bin/wifiup|.system/res/fallback.ttf|.system/res/fallback-OFL.txt|Tools/rgb30/Stats.pak/*|Tools/rgb30/Themes.pak/*|Tools/rgb30/ASCIIArt.pak/*|Tools/rgb30/Info.pak/*|Tools/rgb30/Update.pak/*|Tools/rgb30/Screenshots.pak/*|Tools/rgb30/Settings.pak/*|Tools/rgb30/SSH.pak/*|Tools/rgb30/Wi-Fi.pak/wifi.elf|Tools/rgb30/Wi-Fi.pak/launch-old.sh) # a new tool: added (and replaced next time), nothing to back up the first time
+		Emus/rgb30/*|Roms/*/.keep|Saves/*/.keep|Bios/*/.keep|Tools/rgb30/Romulus.pak/*|Tools/rgb30/Switcher.pak/*|Tools/rgb30/PicoSearch.pak/*|.system/rgb30/bin/wifiup|.system/res/fallback.ttf|.system/res/fallback-OFL.txt|Tools/rgb30/Stats.pak/*|Tools/rgb30/Controls.pak/*|Tools/rgb30/Themes.pak/*|Tools/rgb30/ASCIIArt.pak/*|Tools/rgb30/Info.pak/*|Tools/rgb30/Update.pak/*|Tools/rgb30/Screenshots.pak/*|Tools/rgb30/Settings.pak/*|Tools/rgb30/SSH.pak/*|Tools/rgb30/Wi-Fi.pak/wifi.elf|Tools/rgb30/Wi-Fi.pak/launch-old.sh) # a new tool: added (and replaced next time), nothing to back up the first time
 			mkdir -p "$card/$(dirname "$f")"
 			if [ -f "$card/$f" ]; then mkdir -p "$backup/$(dirname "$f")"; cp -p "$card/$f" "$backup/$f"; fi
 			copy "$f" && echo "  added/replaced: $f"

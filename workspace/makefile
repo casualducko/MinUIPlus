@@ -26,6 +26,7 @@ all:
 	cd ./all/pico/ && make
 	cd ./all/power/ && make
 	cd ./all/stats/ && make
+	cd ./all/controls/ && make
 	cd ./all/theme/ && make
 	cd ./all/titleart/ && make
 	cd ./all/info/ && make
@@ -49,6 +50,7 @@ clean:
 	cd ./all/pico/ && make clean
 	cd ./all/power/ && make clean
 	cd ./all/stats/ && make clean
+	cd ./all/controls/ && make clean
 	cd ./all/theme/ && make clean
 	cd ./all/titleart/ && make clean
 	cd ./all/info/ && make clean

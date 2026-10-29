@@ -14,7 +14,7 @@ By hand, with the games card (the one with the .system folder) in a Mac or Linux
     ./install.sh /Volumes/RGB20SX
 
 It replaces the files this package ships that the card already has, and it adds the new tools
-(Switcher, PicoSearch, Stats, Themes, ASCIIArt, Info, Update, Screenshots, Settings, SSH, Romulus,
+(Switcher, PicoSearch, Controls, Stats, Themes, ASCIIArt, Info, Update, Screenshots, Settings, SSH, Romulus,
 the fallback font) and the extra systems of MinUI's second ("extras") zip, so there is nothing else to download
 (see below). Before it replaces anything it copies the old file to
 .system/rgb30/backup-before-fork-<time>/ on the card. If a copy fails (a full or read-only card) it
@@ -36,7 +36,7 @@ What is in the package
 .system/rgb30/lib/        libmsettings.so
 .system/rgb30/paks/       MinUI.pak/launch.sh (the boot script)
 .system/res/              the Japanese fallback font and its license
-Tools/rgb30/              the tools: Info, Switcher, Screenshots, Stats, Themes, ASCIIArt, Clock, Wi-Fi, SSH,
+Tools/rgb30/              the tools: Info, Switcher, Screenshots, Controls, Stats, Themes, ASCIIArt, Clock, Wi-Fi, SSH,
                           Romulus, PicoSearch, Settings, Update, Input
 Emus/rgb30/               the emulator paks of the stock "extras" zip, each with its core: Game Gear, Master System,
                           PC Engine, Super Game Boy, Virtual Boy, Pokemon mini, Neo Geo Pocket (+ Color), SNES
