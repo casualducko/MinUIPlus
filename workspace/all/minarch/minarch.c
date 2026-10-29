@@ -3758,6 +3758,23 @@ static void Menu_saveAutoPreview(int live) { // live: the picture is the game on
 	if (out) SDL_SaveBMP_RW(bitmap, out, 1);
 	if (bitmap!=menu.bitmap) SDL_FreeSurface(bitmap);
 }
+// "Auto-save on quit" also keeps the state in slot 8 (the last one in the menu's picker), so a quit's state is not lost when
+// the next quit or the rolling auto-save overwrites slot 9: the state, its picture, and for a multi-disc game the disc.
+#define QUIT_KEEP_SLOT 7
+static void Menu_keepQuitState(void) {
+	char from[MAX_PATH], to[MAX_PATH];
+	int last_slot = state_slot;
+	state_slot = AUTO_RESUME_SLOT; State_getPath(from);
+	state_slot = QUIT_KEEP_SLOT; State_getPath(to);
+	state_slot = last_slot;
+	if (!exists(from) || copyFile(from, to)) return; // (nothing saved, or the copy failed: slot 8 keeps what it had)
+	char bmp_from[MAX_PATH], bmp_to[MAX_PATH], txt_to[MAX_PATH];
+	snprintf(bmp_from, sizeof(bmp_from), "%s/%s.%d.bmp", menu.minui_dir, game.name, AUTO_RESUME_SLOT);
+	snprintf(bmp_to, sizeof(bmp_to), "%s/%s.%d.bmp", menu.minui_dir, game.name, QUIT_KEEP_SLOT);
+	snprintf(txt_to, sizeof(txt_to), "%s/%s.%d.txt", menu.minui_dir, game.name, QUIT_KEEP_SLOT);
+	if (exists(bmp_from)) copyFile(bmp_from, bmp_to);
+	if (menu.total_discs) putFile(txt_to, menu.disc_paths[menu.disc] + strlen(menu.base_path));
+}
 void Menu_beforeSleep(void) {
 	// LOG_info("beforeSleep\n");
 	SRAM_write();
@@ -5363,10 +5380,10 @@ static void Menu_loop(void) {
 					else dirty = 1;
 				break;
 				case ITEM_QUIT:
-					{ // Tools > Settings > "Auto-save on quit": leaving a game also saves a state (slot 9) for the Switcher
+					{ // Tools > Settings > "Auto-save on quit": leaving a game also saves a state (slot 9) for the Switcher, and keeps it in slot 8
 						char flag[8] = "";
 						getFile(AUTOSAVE_QUIT_PATH, flag, sizeof(flag));
-						if (flag[0]!='0') { State_autosave(); Menu_saveAutoPreview(0); }
+						if (flag[0]!='0') { State_autosave(); Menu_saveAutoPreview(0); Menu_keepQuitState(); }
 					}
 					status = STATUS_QUIT;
 					show_menu = 0;
